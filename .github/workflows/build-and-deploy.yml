@@ -25,6 +25,7 @@ env:
   REF: "${{ github.event.inputs.ref }}"
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
   HOME: "${{ github.workspace }}\\home"
+  ACTOR: "${{ github.triggering_actor }}"
 
 jobs:
   build:
@@ -86,11 +87,26 @@ jobs:
               `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}`
             ))
 
+      - name: Identify actor
+        id: actor
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const githubApiRequest = require('./github-api-request')
+            const answer = await githubApiRequest(
+              console,
+              '${{ steps.setup.outputs.token }}',
+              'GET',
+              `/users/${process.env.ACTOR}`
+            )
+            core.setOutput('name', answer.name)
+            core.setOutput('email', answer.email)
+
       - name: Configure build
         shell: bash
         run: |
-          USER_NAME="$GITHUB_ACTOR" &&
-          USER_EMAIL="$GITHUB_ACTOR@users.noreply.github.com" &&
+          USER_NAME="${{ steps.actor.outputs.name }}" &&
+          USER_EMAIL="${{ steps.actor.outputs.email }}" &&
           mkdir -p "$HOME" &&
           git config --global user.name "$USER_NAME" &&
           git config --global user.email "$USER_EMAIL" &&
