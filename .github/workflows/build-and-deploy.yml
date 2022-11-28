@@ -125,8 +125,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p /usr/src &&
-          git init /usr/src/build-extra &&
-          git -C /usr/src/build-extra fetch --depth 1 "https://github.com/$OWNER/$REPO" $REF &&
+          git init -b main /usr/src/build-extra &&
+          git -C /usr/src/build-extra remote add origin "https://github.com/$OWNER/$REPO" &&
+          git -C /usr/src/build-extra fetch --depth 1 origin $REF &&
           git -C /usr/src/build-extra switch -d FETCH_HEAD
 
       - name: pacman -Syyu
