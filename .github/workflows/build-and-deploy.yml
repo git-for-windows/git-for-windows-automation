@@ -237,7 +237,8 @@ jobs:
         shell: bash
         run: rm -rf home
 
-      - name: mark check run as successful
+      - name: mark check run as completed
+        if: always()
         uses: actions/github-script@v6
         with:
           script: |
@@ -248,6 +249,6 @@ jobs:
               process.env.OWNER,
               process.env.REPO,
               '${{ steps.check-run.outputs.id }}',
-              'Done!',
-              'success'
+              '${{ job.status }}' == 'success' ? 'Done!' : `Completed: ${{ job.status }}.`,
+              '${{ job.status }}'
             )
