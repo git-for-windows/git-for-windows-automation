@@ -1,0 +1,3 @@
+This repository contains GitHub workflows plus support code to perform some of the day-to-day tasks in the Git for Windows project.
+
+Most prominently, [the `build-and-deploy.yml` workflow](https://github.com/git-for-windows/git-for-windows-automation/actions/workflows/build-and-deploy.yml) performs so-called "branch-deploys", i.e. deployments of the Pacman packages that are built from PRs in ['MINGW-packages'](https://github.com/git-for-windows/MINGW-packages), ['MSYS2-packages'](https://github.com/git-for-windows/MSYS2-packages), and [`build-extra`](https://github.com/git-for-windows/build-extra) before merging them.
