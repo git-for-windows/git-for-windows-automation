@@ -1,0 +1,125 @@
+name: check-run test
+
+on:
+  workflow_dispatch:
+    inputs:
+      owner:
+        description: 'The owner of the repository'
+        required: true
+      repo:
+        description: 'The name of the repository'
+        required: true
+      ref:
+        description: 'The ref to which to attach the check run'
+        required: true
+      name:
+        description: 'The name of the check run'
+        required: true
+
+env:
+  OWNER: "${{ github.event.inputs.owner }}"
+  REPO: "${{ github.event.inputs.repo }}"
+  REF: "${{ github.event.inputs.ref }}"
+  CHECK_RUN_NAME: "${{ github.event.inputs.name }}"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+        # Since we want to operate on _another_ repository, we sadly cannot use:
+        #
+        # permissions:
+        #  checks: write
+        #
+        # Therefore, we registered a GitHub App and stored the data required to
+        # act as that App in repository secrets `GH_APP_ID`, `GH_APP_PRIVATE_KEY`.
+      - name: Obtain installation token
+        id: setup
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const appId = ${{ secrets.GH_APP_ID }}
+            const privateKey = `${{ secrets.GH_APP_PRIVATE_KEY }}`
+
+            const getAppInstallationId = require('./get-app-installation-id')
+            const installationId = await getAppInstallationId(
+              console,
+              appId,
+              privateKey,
+              process.env.OWNER,
+              process.env.REPO
+            )
+
+            const getInstallationAccessToken = require('./get-installation-access-token')
+            const accessToken = await getInstallationAccessToken(
+              console,
+              appId,
+              privateKey,
+              installationId
+            )
+
+            core.setSecret(accessToken)
+            core.setOutput('token', accessToken)
+
+      - name: get check run id
+        id: check-run
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const getCheckRunId = require('./get-check-run-id')
+            core.setOutput('id', await getCheckRunId(
+              console,
+              '${{ steps.setup.outputs.token }}',
+              process.env.OWNER,
+              process.env.REPO,
+              process.env.REF,
+              process.env.CHECK_RUN_NAME,
+              'Here would be a title',
+              'Here would be some summary',
+              `For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}).`,
+              `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}`
+            ))
+
+      - name: update check-run
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const updateCheckRun = require('./update-check-run')
+
+            const sleep = async (milliseconds) => {
+              return new Promise((resolve) => {
+                setTimeout(resolve, milliseconds)
+              })
+            }
+
+            for (i = 0; i < 10; i++) {
+              console.log(`i: ${i}`)
+
+              await updateCheckRun(
+                console,
+                '${{ steps.setup.outputs.token }}',
+                process.env.OWNER,
+                process.env.REPO,
+                '${{ steps.check-run.outputs.id }}',
+                `Counter: ${i}`
+              )
+
+              await sleep(10 * 1000)
+            }
+
+      - name: mark check run as successful
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const updateCheckRun = require('./update-check-run')
+            await updateCheckRun(
+              console,
+              '${{ steps.setup.outputs.token }}',
+              process.env.OWNER,
+              process.env.REPO,
+              '${{ steps.check-run.outputs.id }}',
+              'Done!',
+              'success'
+            )
