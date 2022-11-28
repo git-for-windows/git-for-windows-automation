@@ -17,8 +17,7 @@ module.exports = async (context, token, owner, repo, checkRunId, appendText, con
     token,
     'PATCH',
     `/repos/${owner}/${repo}/check-runs/${checkRunId}`, {
-      // output: { title, summary, text },
-      output: { title, summary, text, details_url: 'https://github.com/dscho/images' },
+      output: { title, summary, text },
       ...statusUpdate
     }
   )
