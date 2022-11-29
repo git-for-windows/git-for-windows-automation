@@ -122,7 +122,7 @@ jobs:
       - name: Download Git for Windows SDK
         uses: git-for-windows/setup-git-for-windows-sdk@v1
         with:
-          flavor: full
+          flavor: ${{ env.PACKAGE_TO_BUILD == 'mingw-w64-git' && 'build-installers' || 'full' }}
 
       - name: Clone ${{ env.REPO }}
         shell: bash
@@ -189,6 +189,12 @@ jobs:
         run: |
           dir="$(cygpath -au artifacts)" &&
           mkdir -p "$dir" &&
+
+          {
+            test -f /usr/bin/git ||
+            printf '#!/bin/sh\n\nexec /mingw64/bin/git.exe "$@"\n' >/usr/bin/git
+          } &&
+
           cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
           MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH="mingw32 mingw64" makepkg-mingw -s --noconfirm &&
           cp *.pkg.tar* "$dir/" &&
