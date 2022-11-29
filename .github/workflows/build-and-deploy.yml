@@ -182,8 +182,11 @@ jobs:
           dir="$(cygpath -au artifacts)" &&
           mkdir -p "$dir" &&
           cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
-          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' makepkg-mingw -s --noconfirm &&
+          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH="mingw32 mingw64" makepkg-mingw -s --noconfirm &&
           cp *.pkg.tar* "$dir/" &&
+
+          MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=mingw64 makepkg-mingw --allsource &&
+          cp *.src.tar* "$dir/" &&
 
           # Ensure that the Git worktree is still clean
           ls -la &&
