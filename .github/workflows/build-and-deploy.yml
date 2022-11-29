@@ -1,5 +1,5 @@
 name: build-and-deploy
-run-name: Build${{ inputs.build_only == '' && ' and deploy' || '' }} ${{ inputs.package }}
+run-name: Build${{ inputs.build_only == '' && ' and deploy' || '' }} ${{ !startsWith(inputs.package, 'mingw-w64-') && inputs.repo != 'MSYS2-packages' && inputs.package != 'git-extra' && inputs.package != 'git-for-windows-keyring' && 'mingw-w64-' || '' }}${{ inputs.package }}
 
 on:
   workflow_dispatch:
@@ -124,14 +124,19 @@ jobs:
         with:
           flavor: full
 
-      - name: Clone build-extra
+      - name: Clone ${{ env.REPO }}
         shell: bash
         run: |
           mkdir -p /usr/src &&
-          git init -b main /usr/src/build-extra &&
-          git -C /usr/src/build-extra remote add origin "https://github.com/$OWNER/$REPO" &&
-          git -C /usr/src/build-extra fetch --depth 1 origin $REF &&
-          git -C /usr/src/build-extra switch -d FETCH_HEAD
+          git init -b main /usr/src/${{ env.REPO }} &&
+          git -C /usr/src/${{ env.REPO }} remote add origin "https://github.com/$OWNER/$REPO" &&
+          git -C /usr/src/${{ env.REPO }} fetch --depth 1 origin $REF &&
+          git -C /usr/src/${{ env.REPO }} reset --hard FETCH_HEAD
+
+      - name: Clone build-extra (unless cloned already)
+        if: env.REPO != 'build-extra'
+        shell: bash
+        run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra /usr/src/build-extra
 
       - name: pacman -Syyu
         shell: bash
