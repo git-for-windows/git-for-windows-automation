@@ -1,5 +1,5 @@
 name: build-and-deploy
-run-name: Build${{ inputs.build_only == '' && ' and deploy' || '' }} ${{ !startsWith(inputs.package, 'mingw-w64-') && inputs.repo != 'MSYS2-packages' && inputs.package != 'git-extra' && inputs.package != 'git-for-windows-keyring' && 'mingw-w64-' || '' }}${{ inputs.package }}
+run-name: Build${{ inputs.build_only == '' && ' and deploy' || '' }} ${{ !startsWith(inputs.package, 'mingw-w64-') && inputs.repo != 'MSYS2-packages' && inputs.package != 'git-extra' && inputs.package != 'git-for-windows-keyring' && 'mingw-w64-' || '' }}${{ inputs.package }}${{ inputs.architecture && ' (${{ inputs.architecture }})' || '' }}
 
 on:
   workflow_dispatch:
@@ -16,6 +16,9 @@ on:
       ref:
         description: 'The ref containing the package definition'
         required: true
+      architecture:
+        description: 'The architecture to build for (only for MSYS packages)'
+        required: false
       actor:
         description: The GitHub user on whose behalf this workflow is run
         required: false
@@ -26,6 +29,7 @@ env:
   OWNER: "git-for-windows"
   REPO: "${{ github.event.inputs.repo }}"
   REF: "${{ github.event.inputs.ref }}"
+  ARCHITECTURE: "${{ github.event.inputs.architecture }}"
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
   HOME: "${{ github.workspace }}\\home"
   ACTOR: "${{ github.event.inputs.actor || github.triggering_actor }}"
@@ -114,7 +118,10 @@ jobs:
           git config --global user.name "$USER_NAME" &&
           git config --global user.email "$USER_EMAIL" &&
           echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >>$GITHUB_ENV &&
-          if test git-extra != "$PACKAGE_TO_BUILD" && test "z${PACKAGE_TO_BUILD#mingw-w64-}" = "z$PACKAGE_TO_BUILD"
+          if test MSYS2-packages != "$REPO" &&
+            test git-extra != "$PACKAGE_TO_BUILD" &&
+            test git-for-windows-keyring != "$PACKAGE_TO_BUILD" &&
+            test "z${PACKAGE_TO_BUILD#mingw-w64-}" = "z$PACKAGE_TO_BUILD"
           then
             echo "PACKAGE_TO_BUILD=mingw-w64-$PACKAGE_TO_BUILD" >>$GITHUB_ENV
           fi
@@ -123,6 +130,8 @@ jobs:
         uses: git-for-windows/setup-git-for-windows-sdk@v1
         with:
           flavor: ${{ env.PACKAGE_TO_BUILD == 'mingw-w64-git' && 'build-installers' || 'full' }}
+          architecture: ${{ env.ARCHITECTURE || 'x86_64' }}
+          msys: ${{ env.REPO == 'MSYS2-packages' || env.PACKAGE_TO_BUILD == 'git-for-windows-keyring' }}
 
       - name: Clone ${{ env.REPO }}
         shell: bash
@@ -186,6 +195,7 @@ jobs:
       - name: Build ${{env.PACKAGE_TO_BUILD}}
         env:
           GPGKEY: ${{secrets.GPGKEY}}
+          MAKEPKG: ${{ env.REPO != 'MSYS2-packages' && env.PACKAGE_TO_BUILD != 'git-for-windows-keyring' && 'makepkg-mingw' || 'makepkg' }}
         shell: bash
         run: |
           dir="$(cygpath -au artifacts)" &&
@@ -197,10 +207,10 @@ jobs:
           } &&
 
           cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
-          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH="mingw32 mingw64" makepkg-mingw -s --noconfirm &&
+          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH="mingw32 mingw64" $MAKEPKG -s --noconfirm &&
           cp *.pkg.tar* "$dir/" &&
 
-          MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=mingw64 makepkg-mingw --allsource &&
+          MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=mingw64 $MAKEPKG --allsource &&
           cp *.src.tar* "$dir/" &&
 
           # Ensure that the Git worktree is still clean
