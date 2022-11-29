@@ -231,6 +231,7 @@ jobs:
         env:
           GPGKEY: ${{secrets.GPGKEY}}
           PACMANDRYRUN: ${{env.BUILD_ONLY}}
+          AZURE_BLOBS_TOKEN: ${{secrets.AZURE_BLOBS_TOKEN}}
         run: /usr/src/build-extra/pacman-helper.sh quick_add artifacts/*
 
       - name: Clean up temporary files
