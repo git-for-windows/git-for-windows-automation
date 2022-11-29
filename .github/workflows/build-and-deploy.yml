@@ -181,6 +181,7 @@ jobs:
           echo "$CODESIGN_P12" | tr % '\n' | base64 -d >home/.sig/codesign.p12 &&
           echo "$CODESIGN_PASS" >home/.sig/codesign.pass
           git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
+          echo "SIGNTOOL=git signtool" >>$GITHUB_ENV
 
       - name: Build ${{env.PACKAGE_TO_BUILD}}
         env:
