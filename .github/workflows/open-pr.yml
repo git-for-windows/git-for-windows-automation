@@ -126,7 +126,7 @@ jobs:
             )
             core.setOutput('login', answer.login)
             core.setOutput('name', answer.name)
-            core.setOutput('email', answer.email)
+            core.setOutput('email', answer.email || `${process.env.ACTOR}@users.noreply.github.com`)
       - name: Configure build
         shell: bash
         run: |
