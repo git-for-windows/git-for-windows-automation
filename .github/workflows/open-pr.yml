@@ -12,12 +12,15 @@ on:
         description: The new version of the package
         type: string
         required: true
+      actor:
+        description: The GitHub user on whose behalf this workflow is run
+        required: false
 
 env:
   PACKAGE_TO_UPGRADE: ${{ github.event.inputs.package }}
   UPGRADE_TO_VERSION: ${{ github.event.inputs.version }}
   OWNER: 'git-for-windows'
-  ACTOR: "${{ github.triggering_actor }}"
+  ACTOR: "${{ github.event.inputs.actor || github.triggering_actor }}"
 
 jobs:
   open-pr:
