@@ -1,0 +1,199 @@
+name: Upgrade a package version and open a PR
+run-name: Upgrade ${{ inputs.package }} to ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: The package to update
+        type: string
+        required: true
+      version:
+        description: The new version of the package
+        type: string
+        required: true
+
+env:
+  PACKAGE_TO_UPGRADE: ${{ github.event.inputs.package }}
+  UPGRADE_TO_VERSION: ${{ github.event.inputs.version }}
+  OWNER: 'git-for-windows'
+  ACTOR: "${{ github.triggering_actor }}"
+
+jobs:
+  open-pr:
+    runs-on: windows-latest
+    steps:
+      - name: Determine REPO
+        id: repo
+        shell: bash
+        run: |
+          case "$PACKAGE_TO_UPGRADE" in
+          mingw-w64-cv2pdb|mingw-w64-git-credential-manager|\
+          mingw-w64-git-lfs|mingw-w64-git-sizer|mingw-w64-wintoast|\
+          git-extra|git-for-windows-keyring) repo=build-extra;;
+          mingw-w64-*) repo=MINGW-packages;;
+          *) repo=MSYS2-packages;;
+          esac &&
+          echo "REPO=$repo" >>$GITHUB_ENV &&
+          echo "repo=$repo" >>$GITHUB_OUTPUT
+      - uses: actions/checkout@v3
+        # Since we want to operate on _another_ repository, we sadly cannot use:
+        #
+        # permissions:
+        #  checks: write
+        #
+        # Therefore, we registered a GitHub App and stored the data required to
+        # act as that App in repository secrets `GH_APP_ID`, `GH_APP_PRIVATE_KEY`.
+      - name: Obtain installation token
+        id: setup
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const appId = ${{ secrets.GH_APP_ID }}
+            const privateKey = `${{ secrets.GH_APP_PRIVATE_KEY }}`
+
+            const getAppInstallationId = require('./get-app-installation-id')
+            const installationId = await getAppInstallationId(
+              console,
+              appId,
+              privateKey,
+              process.env.OWNER,
+              process.env.REPO
+            )
+
+            const getInstallationAccessToken = require('./get-installation-access-token')
+            const accessToken = await getInstallationAccessToken(
+              console,
+              appId,
+              privateKey,
+              installationId
+            )
+
+            core.setSecret(accessToken)
+            core.setOutput('token', accessToken)
+      - name: set up partial Git for Windows SDK
+        uses: git-for-windows/setup-git-for-windows-sdk@v1
+        with:
+          flavor: minimal
+      - name: download files necessary for `updpkgsums` to work
+        shell: bash
+        run: |
+          for p in \
+            /etc/makepkg.conf \
+            /usr/bin/gettext.exe \
+            /usr/bin/makepkg \
+            /usr/bin/nproc.exe \
+            /usr/bin/pacman.exe \
+            /usr/bin/sha256sum.exe \
+            /usr/bin/updpkgsums
+          do
+            curl -sLo $p https://github.com/git-for-windows/git-sdk-64/raw/HEAD$p || exit 1
+          done &&
+          for p in /usr/share/makepkg
+          do
+            b=${p##*/} &&
+            d=${p%/$b} &&
+            if test "z$b" = "z$d"
+            then
+              d=
+            fi &&
+            tree=$(curl -s https://api.github.com/repos/git-for-windows/git-sdk-64/git/trees/main:${d#/} |
+              jq -r '.tree[] | select(.path | test("^'$b'$")) | .sha') &&
+            mkdir -p $p &&
+            curl -sL https://github.com/git-for-windows/git-sdk-64/tarball/$tree |
+            tar --strip-components=1 -C $p -xzvf - || exit 1
+          done &&
+          ln -s "${COMSPEC%cmd.exe}curl.exe" /usr/bin/
+      - name: Clone ${{ env.REPO }}
+        shell: bash
+        run: |
+          mkdir -p /usr/src &&
+          git clone --depth 1 --single-branch -b main "https://github.com/$OWNER/$REPO" "/usr/src/$REPO"
+      - name: Identify actor
+        id: actor
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const githubApiRequest = require('./github-api-request')
+            const answer = await githubApiRequest(
+              console,
+              '${{ steps.setup.outputs.token }}',
+              'GET',
+              `/users/${process.env.ACTOR}`
+            )
+            core.setOutput('login', answer.login)
+            core.setOutput('name', answer.name)
+            core.setOutput('email', answer.email)
+      - name: Configure build
+        shell: bash
+        run: |
+          USER_NAME="${{ steps.actor.outputs.name }}" &&
+          USER_EMAIL="${{ steps.actor.outputs.email }}" &&
+          mkdir -p "$HOME" &&
+          git config --global user.name "$USER_NAME" &&
+          git config --global user.email "$USER_EMAIL" &&
+          echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >>$GITHUB_ENV
+      - name: update PKGBUILD
+        id: update
+        shell: bash
+        run: |
+          cd "/usr/src/$REPO/$PACKAGE_TO_UPGRADE" &&
+          sed -i \
+            -e "s/^\\(pkgver=\\).*/\\1$UPGRADE_TO_VERSION/" \
+            -e 's/^pkgrel=.*/pkgrel=1/' \
+            PKGBUILD &&
+          git update-index -q --refresh &&
+          if git diff-files --exit-code
+          then
+            echo "::notice::$PACKAGE_TO_UPGRADE already at $UPGRADE_TO_VERSION"
+            exit 0
+          fi &&
+
+          updpkgsums &&
+          msg="$PACKAGE_TO_UPGRADE: update to $UPGRADE_TO_VERSION" &&
+          git commit -sm "$msg" PKGBUILD &&
+          echo "msg=$msg" >>$GITHUB_OUTPUT &&
+          echo "modified=true" >>$GITHUB_OUTPUT
+      - name: push
+        if: steps.update.outputs.modified == 'true'
+        shell: bash
+        run: |
+          auth="$(printf '%s:%s' '${{ steps.actor.outputs.login }}' '${{ steps.setup.outputs.token }}' | base64)" &&
+          echo "::add-mask::$auth" &&
+          cd "/usr/src/$REPO/$PACKAGE_TO_UPGRADE" &&
+          git -c http.extraHeader="Authorization: Basic $auth" push --force origin HEAD:refs/heads/$PACKAGE_TO_UPGRADE-$UPGRADE_TO_VERSION
+      - name: open PR
+        if: steps.update.outputs.modified == 'true'
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ steps.setup.outputs.token }}
+          script: |
+            let body = undefined
+            try {
+              const name = process.env.PACKAGE_TO_UPGRADE
+              const version = `${name.match(/git-lfs/) ? 'v' : ''}${process.env.UPGRADE_TO_VERSION}`
+
+              if (name === 'mintty') body = `See https://github.com/mintty/mintty/releases/tag/${version} for details.`
+              else if (name === 'mingw-w64-git-lfs') body = `See https://github.com/git-lfs/git-lfs/releases/tag/${version} for details.`
+
+              const terms = 'type:issue repo:git-for-windows/git state:open author:app/github-actions label:component-update'
+              const { data } = await github.rest.search.issuesAndPullRequests({
+                q: `"[New ${name.replace(/^mingw-w64-/, '')} version]" ${version} in:title ${terms}`,
+              })
+              if (data.total_count) body = `${body && `${body}\n\n`}This closes ${data.items[0].html_url}`
+            } catch (e) {
+              console.log(e)
+            }
+
+            const pr = await github.rest.pulls.create({
+              owner: process.env.OWNER,
+              repo: process.env.REPO,
+              base: 'main',
+              draft: true,
+              head: `${process.env.PACKAGE_TO_UPGRADE}-${process.env.UPGRADE_TO_VERSION}`,
+              maintainer_can_modify: true,
+              title: '${{ steps.update.outputs.msg }}',
+              body
+            })
+            if (pr.status === 201) console.log(`::notice::${pr.data.html_url}`)
+            else console.log(pr)
