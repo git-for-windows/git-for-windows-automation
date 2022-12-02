@@ -17,18 +17,29 @@
         `/repos/git-lfs/git-lfs/releases/tags/v${version}`
     )
 
-    const getSHA256 = (architecture) =>
-        releaseNotes.match(new RegExp(`git-lfs-windows-${architecture}-\\S+\\.zip.*\r?\n([0-9a-f]{64})\r?\n`))[1]
-    
-    const fs = require('fs')
-    let PKGBUILD = fs.readFileSync('PKGBUILD').toString('utf-8')
-    for (const architecture of [
-        { lfs: '386', msys2: 'i686' },
-        { lfs: 'amd64', msys2: 'x86_64' },
-        { lfs: 'arm64', msys2: 'aarch64' }
-    ]) {
-        const match = PKGBUILD.match(new RegExp(`^([^]*\\r?\\n${architecture.msys2}\\)[^]*? sha256sum=)[0-9a-f]{64}([^]*)$`))
-        PKGBUILD = `${match[1]}${getSHA256(architecture.lfs)}${match[2]}`
+    const sha256sums = {}
+    let architecture
+    let match
+    for (const line of releaseNotes.split(/\r?\n/)) {
+        if (line.match(/^[0-9a-f]{64}$/)) sha256sums[architecture] = line
+        else if ((match = line.match(/git-lfs-windows-(\S+)-v\S+\.zip/))) architecture = match[1]
+        else architecture = undefined
     }
-    fs.writeFileSync('PKGBUILD', PKGBUILD)
+
+    const msys2lfsArchitecture = {
+        'i686': '386',
+        'x86_64': 'amd64',
+        'aarch64': 'arm64',
+    }
+
+    const fs = require('fs')
+    const lines = fs.readFileSync('PKGBUILD').toString('utf-8').split(/\r?\n/)
+    lines.forEach((line, i) => {
+        if ((match = line.match(/^(\S+)\)$/))) {
+            architecture = msys2lfsArchitecture[match[1]]
+        } else if ((match = line.match(/^(\s*sha256sum=)[0-9a-f]{64}$/))) {
+            lines[i] = `${match[1]}${sha256sums[architecture]}`
+        }
+    })
+    fs.writeFileSync('PKGBUILD', lines.join('\n'))
 })().catch(console.log)
