@@ -16,6 +16,9 @@ on:
       ref:
         description: 'The ref containing the package definition'
         required: true
+      actor:
+        description: The GitHub user on whose behalf this workflow is run
+        required: false
 
 env:
   PACKAGE_TO_BUILD: "${{ github.event.inputs.package }}"
@@ -25,7 +28,7 @@ env:
   REF: "${{ github.event.inputs.ref }}"
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
   HOME: "${{ github.workspace }}\\home"
-  ACTOR: "${{ github.triggering_actor }}"
+  ACTOR: "${{ github.event.inputs.actor || github.triggering_actor }}"
 
 jobs:
   build:
@@ -100,7 +103,7 @@ jobs:
               `/users/${process.env.ACTOR}`
             )
             core.setOutput('name', answer.name)
-            core.setOutput('email', answer.email)
+            core.setOutput('email', answer.email || `${process.env.ACTOR}@users.noreply.github.com`)
 
       - name: Configure build
         shell: bash
