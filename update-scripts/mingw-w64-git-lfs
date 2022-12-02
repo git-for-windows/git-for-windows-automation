@@ -1,0 +1,34 @@
+#!/usr/bin/env node
+
+// The `PKGBUILD` file of `mingw-w64-git-lfs` is a bit complicated, as it has
+// separate `case` arms for the different architectures.
+
+// Therefore we need to be a bit more careful when updating than just running
+// `updpkgsums`.
+
+(async () => {
+    const version = process.argv[2]
+
+    const githubApiRequest = require('../github-api-request')
+    const { body: releaseNotes } = await githubApiRequest(
+        console,
+        null,
+        'GET',
+        `/repos/git-lfs/git-lfs/releases/tags/v${version}`
+    )
+
+    const getSHA256 = (architecture) =>
+        releaseNotes.match(new RegExp(`git-lfs-windows-${architecture}-\\S+\\.zip.*\r?\n([0-9a-f]{64})\r?\n`))[1]
+    
+    const fs = require('fs')
+    let PKGBUILD = fs.readFileSync('PKGBUILD').toString('utf-8')
+    for (const architecture of [
+        { lfs: '386', msys2: 'i686' },
+        { lfs: 'amd64', msys2: 'x86_64' },
+        { lfs: 'arm64', msys2: 'aarch64' }
+    ]) {
+        const match = PKGBUILD.match(new RegExp(`^([^]*\\r?\\n${architecture.msys2}\\)[^]*? sha256sum=)[0-9a-f]{64}([^]*)$`))
+        PKGBUILD = `${match[1]}${getSHA256(architecture.lfs)}${match[2]}`
+    }
+    fs.writeFileSync('PKGBUILD', PKGBUILD)
+})().catch(console.log)
