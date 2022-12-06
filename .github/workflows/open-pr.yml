@@ -177,7 +177,7 @@ jobs:
         with:
           github-token: ${{ steps.setup.outputs.token }}
           script: |
-            let body = undefined
+            let body = ''
             try {
               const name = process.env.PACKAGE_TO_UPGRADE
               const version = `${name.match(/git-lfs/) ? 'v' : ''}${process.env.UPGRADE_TO_VERSION}`
@@ -189,7 +189,7 @@ jobs:
               const { data } = await github.rest.search.issuesAndPullRequests({
                 q: `"[New ${name.replace(/^mingw-w64-/, '')} version]" ${version} in:title ${terms}`,
               })
-              if (data.total_count) body = `${body && `${body}\n\n`}This closes ${data.items[0].html_url}`
+              if (data.total_count) body = `${body ? `${body}\n\n` : ''}This closes ${data.items[0].html_url}`
             } catch (e) {
               console.log(e)
             }
