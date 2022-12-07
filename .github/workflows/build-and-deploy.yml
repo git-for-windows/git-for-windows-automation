@@ -257,7 +257,7 @@ jobs:
           echo "::add-mask::$(echo "$AZURE_BLOBS_TOKEN" | base64 -w 0)" &&
           echo "$AZURE_BLOBS_TOKEN" >"$HOME"/.azure-blobs-token
 
-      - name: Deploy Pacman packages
+      - name: ${{ env.BUILD_ONLY == 'true' && 'Test-deploy' || 'Deploy' }} Pacman packages
         if: env.BUILD_ONLY == 'true' || env.AZURE_BLOBS_TOKEN != ''
         shell: bash
         env:
