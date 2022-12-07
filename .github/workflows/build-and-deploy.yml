@@ -33,6 +33,7 @@ env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
   HOME: "${{ github.workspace }}\\home"
   ACTOR: "${{ github.event.inputs.actor || github.triggering_actor }}"
+  CREATE_CHECK_RUN: true
 
 jobs:
   build:
@@ -48,6 +49,7 @@ jobs:
         # Therefore, we registered a GitHub App and stored the data required to
         # act as that App in repository secrets `GH_APP_ID`, `GH_APP_PRIVATE_KEY`.
       - name: Obtain installation token
+        if: env.CREATE_CHECK_RUN != 'false'
         id: setup
         uses: actions/github-script@v6
         with:
@@ -76,6 +78,7 @@ jobs:
             core.setOutput('token', accessToken)
 
       - name: get check run id
+        if: env.CREATE_CHECK_RUN != 'false'
         id: check-run
         uses: actions/github-script@v6
         with:
@@ -225,6 +228,7 @@ jobs:
           fi
 
       - name: update check-run
+        if: env.CREATE_CHECK_RUN != 'false'
         uses: actions/github-script@v6
         with:
           script: |
@@ -268,7 +272,7 @@ jobs:
         run: rm -rf home
 
       - name: mark check run as completed
-        if: always()
+        if: env.CREATE_CHECK_RUN != 'false' && always()
         uses: actions/github-script@v6
         with:
           script: |
