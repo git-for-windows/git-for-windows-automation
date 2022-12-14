@@ -141,10 +141,16 @@ jobs:
         shell: bash
         run: |
           cd "/usr/src/$REPO/$PACKAGE_TO_UPGRADE" &&
-          sed -i \
-            -e "s/^\\(pkgver=\\).*/\\1$UPGRADE_TO_VERSION/" \
-            -e 's/^pkgrel=.*/pkgrel=1/' \
-            PKGBUILD &&
+          update_script="$GITHUB_WORKSPACE/version/checksums/$PACKAGE_TO_UPGRADE"
+          if test -f "$update_script"
+          then
+            $update_script "$UPGRADE_TO_VERSION"
+          else
+            sed -i \
+              -e "s/^\\(pkgver=\\).*/\\1$UPGRADE_TO_VERSION/" \
+              -e 's/^pkgrel=.*/pkgrel=1/' \
+              PKGBUILD
+          fi &&
           git update-index -q --refresh &&
           if git diff-files --exit-code
           then

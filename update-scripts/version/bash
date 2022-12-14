@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+
+// The `PKGBUILD` file of `bash` is sligtly different from most other packages
+// as it sets pkgver through a _basever part and a _patchlevel part.
+
+// Therefore we need to be a bit more careful when updating than just replacing
+// the value of pkgver.
+
+(async () => {
+    const version = process.argv[2]
+
+    let [ , basever, patchlevel ] = version.match(/^(\d+\.\d+)\.(\d+)/)
+    let match
+    
+    const fs = require('fs')
+    const lines = fs.readFileSync('PKGBUILD').toString('utf-8').split(/\r?\n/)
+    lines.forEach((line, i) => {
+        if ((match = line.match(/^(\s*_basever=)\S+/))) {
+            lines[i] = `${match[1]}${basever}`
+        } else if ((match = line.match(/^(\s*_patchlevel=)\S+\s(.*)/))) {
+            lines[i] = `${match[1]}${patchlevel.toString().padStart(3, "0")} ${match[2]}`
+        } else if ((match = line.match(/^(\s*pkgrel=)\S+/))) {
+            lines[i] = `${match[1]}${1}`
+        }
+    })
+    fs.writeFileSync('PKGBUILD', lines.join('\n'))
+})().catch(console.log)
