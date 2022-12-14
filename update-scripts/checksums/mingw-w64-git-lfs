@@ -9,7 +9,7 @@
 (async () => {
     const version = process.argv[2]
 
-    const githubApiRequest = require('../github-api-request')
+    const githubApiRequest = require('../../github-api-request')
     const { body: releaseNotes } = await githubApiRequest(
         console,
         null,

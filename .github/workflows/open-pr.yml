@@ -152,7 +152,7 @@ jobs:
             exit 0
           fi &&
 
-          update_script="$GITHUB_WORKSPACE/update-scripts/$PACKAGE_TO_UPGRADE"
+          update_script="$GITHUB_WORKSPACE/update-scripts/checksums/$PACKAGE_TO_UPGRADE"
           if test -f "$update_script"
           then
             $update_script "$UPGRADE_TO_VERSION"
