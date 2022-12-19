@@ -17,7 +17,7 @@ on:
         description: 'The ref containing the package definition'
         required: true
       architecture:
-        description: 'The architecture to build for (only for MSYS packages)'
+        description: 'The architecture to build for (only for MSYS packages and all arm64 builds)'
         required: false
       actor:
         description: The GitHub user on whose behalf this workflow is run
@@ -37,7 +37,7 @@ env:
 
 jobs:
   build:
-    runs-on: windows-latest
+    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
     steps:
       - uses: actions/checkout@v3
 
@@ -135,6 +135,8 @@ jobs:
           flavor: ${{ env.PACKAGE_TO_BUILD == 'mingw-w64-git' && 'build-installers' || 'full' }}
           architecture: ${{ env.ARCHITECTURE || 'x86_64' }}
           msys: ${{ env.REPO == 'MSYS2-packages' || env.PACKAGE_TO_BUILD == 'git-for-windows-keyring' }}
+          # We only have to clean up on self-hosted runners
+          cleanup: ${{ runner.arch == 'ARM64' && true || false }}
 
       - name: Clone ${{ env.REPO }}
         shell: bash
@@ -209,8 +211,10 @@ jobs:
             printf '#!/bin/sh\n\nexec /mingw64/bin/git.exe "$@"\n' >/usr/bin/git
           } &&
 
+          MINGW_ARCHS_TO_BUILD=$(test "$ARCHITECTURE" == "aarch64" && echo "clangarm64" || echo "mingw32 mingw64")
+
           cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
-          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH="mingw32 mingw64" $MAKEPKG -s --noconfirm &&
+          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH=$MINGW_ARCHS_TO_BUILD $MAKEPKG -s --noconfirm &&
           cp *.pkg.tar* "$dir/" &&
 
           MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=mingw64 $MAKEPKG --allsource &&
