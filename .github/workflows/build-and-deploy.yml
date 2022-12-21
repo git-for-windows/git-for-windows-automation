@@ -154,6 +154,35 @@ jobs:
         shell: bash
         run: pacman -Syyu --noconfirm
 
+      - name: rebase `.dll` base addresses
+        if: env.ARCHITECTURE == 'i686' && !contains('msys2-runtime gnupg', env.PACKAGE_TO_BUILD)
+        shell: powershell
+        run: |
+          cd C:\git-sdk-32-full
+          if (!$?) { exit(1); }
+
+          $env:MSYSTEM = "MINGW32"
+          $env:PATH = "$(Get-Location)\usr\bin;" + $env:PATH
+          $env:MSYS2_PATH_TYPE = "minimal"
+
+          # Disable pacman's post-transaction hook that would mess everything up, if it exists
+          sh.exe -lc "set -x && rm -f /usr/share/libalpm/hooks/rebase.hook"
+
+          sh.exe -lc "set -x && find /usr/lib/perl5/*_perl -name \*.dll >perl-dlls.txt"
+          type perl-dlls.txt
+          dash -x /usr/bin/rebaseall -p -T perl-dlls.txt
+
+          # Work around for:
+          # - address space needed by 'Cwd.dll' is already occupied
+          # - address space needed by 'Dumper.dll' is already occupied
+          # etc
+          bash -lc "set -x && rebase -b 0x61500000 /usr/lib/perl5/core_perl/auto/*/{*,*/*}.dll"
+          # Work around for:
+          # - address space needed by 'Cwd.dll' is already occupied
+          bash -lc "set -x && rebase -v -b 0x63f00000 /usr/lib/perl5/core_perl/auto/Cwd/Cwd.dll"
+          # verify the base address
+          bash -lc "set -x && rebase -v -i /usr/lib/perl5/core_perl/auto/Cwd/Cwd.dll"
+
       - name: Get GPG key(s)
         shell: bash
         env:
