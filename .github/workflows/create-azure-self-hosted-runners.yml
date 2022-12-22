@@ -6,6 +6,7 @@ on:
       amount_of_runners:
         description: 'Amount of runners to set up'
         required: true
+        default: 1
       runner_scope:
         type: choice
         required: true
@@ -13,18 +14,19 @@ on:
         options:
         - org-level
         - repo-level
+        default: repo-level
       runner_org:
         type: string
-        required: true
-        description: Organization or personal account to deploy the runner to
+        required: false
+        description: Organization or personal account to deploy the runner to (defaults to the repository owner)
       runner_repo:
         type: string
         required: false
-        description: Repo to deploy the runner to. Only needed if runner_scope is set to "repo-level"
+        description: Repo to deploy the runner to. Only needed if runner_scope is set to "repo-level" (defaults to current repository)
 
 env:
-  ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org }}"
-  ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo }}"
+  ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org || github.repository_owner }}"
+  ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo || github.event.repository.name }}"
   # This has to be a public URL that the VM can access after creation
   POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/azure-self-hosted-runners/post-deployment-script.ps1
 
