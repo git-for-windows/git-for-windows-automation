@@ -26,7 +26,7 @@ env:
   ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org }}"
   ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo }}"
   # This has to be a public URL that the VM can access after creation
-  POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/git-for-windows/git-for-windows-automation/main/azure-self-hosted-runners/post-deployment-script.ps1
+  POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/azure-self-hosted-runners/post-deployment-script.ps1
 
 # The following secrets are required for this workflow to run:
 # GH_API_PAT - PAT to create a runner registration token using GitHub's API
