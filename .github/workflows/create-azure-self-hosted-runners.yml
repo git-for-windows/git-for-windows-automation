@@ -25,6 +25,8 @@ on:
         description: Repo to deploy the runner to. Only needed if runner_scope is set to "repo-level" (defaults to current repository)
 
 env:
+  AMOUNT_OF_RUNNERS: ${{ github.event.inputs.amount_of_runners }}
+  ACTIONS_RUNNER_SCOPE: ${{ github.event.inputs.runner_scope }}
   ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org || github.repository_owner }}"
   ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo || github.event.repository.name }}"
   # This has to be a public URL that the VM can access after creation
@@ -49,7 +51,6 @@ jobs:
     - name: Create matrix for setting up runners in parallel
       id: create-matrix
       run: |
-        AMOUNT_OF_RUNNERS="${{ inputs.amount_of_runners }}"
         echo "Going to create $AMOUNT_OF_RUNNERS runners"
         MATRIX="matrix={\"runner_index\":[$(seq -s "," 1 $AMOUNT_OF_RUNNERS)]}"
         echo "Going to use this matrix: $MATRIX"
@@ -74,7 +75,7 @@ jobs:
     # https://github.com/actions/runner/issues/475
     - name: Generate Actions Runner token and registration URL
       run: |
-        case "${{ inputs.runner_scope }}" in
+        case "$ACTIONS_RUNNER_SCOPE" in
           "org-level")
             ACTIONS_API_URL="https://api.github.com/repos/${{ env.ACTIONS_RUNNER_ORG }}/actions/runners/registration-token"
             echo ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/${{ env.ACTIONS_RUNNER_ORG }}" >> $GITHUB_ENV
@@ -84,7 +85,7 @@ jobs:
             echo ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/${{ env.ACTIONS_RUNNER_ORG }}/${{ env.ACTIONS_RUNNER_REPO }}" >> $GITHUB_ENV
             ;;
           *)
-            echo "Unsupported runner scope: ${{ inputs.runner_scope }}"
+            echo "Unsupported runner scope: $ACTIONS_RUNNER_SCOPE"
             exit 1
             ;;
         esac
