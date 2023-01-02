@@ -29,7 +29,7 @@ $GithubActionsRunnerArch = "arm64"
 $GithubActionsRunnerHash = "9409e50d9ad33d8031355ed079b8f56cf3699f35cf5d0ca51e54deed432758ef"
 $GithubActionsRunnerLabels = "self-hosted,Windows,ARM64"
 # Keep this path short to prevent Long Path issues
-$GitHubActionsRunnerPath = "C:\actions-runner"
+$GitHubActionsRunnerPath = "C:\a"
 
 # ======================
 # WINDOWS DEVELOPER MODE
