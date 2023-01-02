@@ -180,7 +180,7 @@ jobs:
             let body = ''
             try {
               const name = process.env.PACKAGE_TO_UPGRADE
-              const version = `${name.match(/git-lfs/) ? 'v' : ''}${process.env.UPGRADE_TO_VERSION}`
+              const version = process.env.UPGRADE_TO_VERSION
 
               if (name === 'mintty') body = `See https://github.com/mintty/mintty/releases/tag/${version} for details.`
               else if (name === 'mingw-w64-git-lfs') body = `See https://github.com/git-lfs/git-lfs/releases/tag/${version} for details.`
@@ -188,7 +188,7 @@ jobs:
 
               const terms = 'type:issue repo:git-for-windows/git state:open author:app/github-actions label:component-update'
               const { data } = await github.rest.search.issuesAndPullRequests({
-                q: `"[New ${name.replace(/^mingw-w64-/, '')} version]" ${version} in:title ${terms}`,
+                q: `"[New ${name.replace(/^mingw-w64-/, '')} version]" (${version} OR v${version}) in:title ${terms}`,
               })
               if (data.total_count) body = `${body ? `${body}\n\n` : ''}This closes ${data.items[0].html_url}`
             } catch (e) {
