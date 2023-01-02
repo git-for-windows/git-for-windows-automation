@@ -11,7 +11,12 @@ param (
 
     # Actions Runner name. Needs to be unique in the org/repo
     [Parameter(Mandatory=$true)]
-    [string]$GithubActionsRunnerName
+    [string]$GithubActionsRunnerName,
+
+    # Stop Service immediately (useful for spinning up runners preemptively)
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('true', 'false')]
+    [string]$StopService = 'true'
 )
 
 Write-Output "Starting post-deployment script."
@@ -116,6 +121,8 @@ if ($MatchedServices.count -eq 0) {
 }
 
 # Immediately stop the service as we want to leave the VM in a deallocated state for later use. The service will automatically be started when Windows starts.
-Stop-Service -Name "actions.runner.*" -Verbose
+if (${StopService} -eq 'true') {
+    Stop-Service -Name "actions.runner.*" -Verbose
+}
 
 Write-Output "Finished installing GitHub Actions runner."

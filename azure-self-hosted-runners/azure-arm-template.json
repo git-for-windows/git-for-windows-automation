@@ -30,6 +30,12 @@
                 "description": "Windows Computer Name. Can be maximum 15 characters."
             }
         },
+        "stopService": {
+            "type": "string",
+            "metadata": {
+                "description": "(optional) Whether to stop the service immediately. Useful for spinning up runners preemptively."
+            }
+        },
         "location": {
             "type": "string"
         },
@@ -250,7 +256,7 @@
                         "value": "[parameters('location')]"
                     },
                     "arguments": {
-                        "value": "[concat('-GitHubActionsRunnerToken ', parameters('githubActionsRunnerToken'), ' -GithubActionsRunnerRegistrationUrl ', parameters('githubActionsRunnerRegistrationUrl'), ' -GithubActionsRunnerName ', parameters('virtualMachineName'))]"
+                        "value": "[concat('-GitHubActionsRunnerToken ', parameters('githubActionsRunnerToken'), ' -GithubActionsRunnerRegistrationUrl ', parameters('githubActionsRunnerRegistrationUrl'), ' -GithubActionsRunnerName ', parameters('virtualMachineName'), ' -StopService ', parameters('stopService'))]"
                     }
                 }
             },

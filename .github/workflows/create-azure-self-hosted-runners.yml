@@ -23,12 +23,18 @@ on:
         type: string
         required: false
         description: Repo to deploy the runner to. Only needed if runner_scope is set to "repo-level" (defaults to current repository)
+      deallocate_immediately:
+        type: string
+        required: true
+        description: Deallocate the runner immediately after creating it (useful for spinning up runners preemptively)
+        default: true
 
 env:
   AMOUNT_OF_RUNNERS: ${{ github.event.inputs.amount_of_runners }}
   ACTIONS_RUNNER_SCOPE: ${{ github.event.inputs.runner_scope }}
   ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org || github.repository_owner }}"
   ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo || github.event.repository.name }}"
+  DEALLOCATE_IMMEDIATELY: ${{ github.event.inputs.deallocate_immediately }}
   # This has to be a public URL that the VM can access after creation
   POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/azure-self-hosted-runners/post-deployment-script.ps1
 
@@ -135,9 +141,10 @@ jobs:
       with:
         resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
         template: ./azure-self-hosted-runners/azure-arm-template.json
-        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize=Standard_D8pls_v5 publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }}
+        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize=Standard_D8pls_v5 publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }} stopService=${{ env.DEALLOCATE_IMMEDIATELY }}
 
     - name: Deallocate the VM for later use
+      if: env.DEALLOCATE_IMMEDIATELY == 'true'
       uses: azure/CLI@v1
       with:
         azcliversion: 2.43.0
