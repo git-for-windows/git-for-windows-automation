@@ -134,6 +134,15 @@ jobs:
           | jq --raw-output .token)
         echo "::add-mask::$ACTIONS_RUNNER_TOKEN"
         echo ACTIONS_RUNNER_TOKEN=$ACTIONS_RUNNER_TOKEN >> $GITHUB_ENV
+
+        # The Azure VM type we use has blazing-fast local, temporary storage available as the D:\ drive.
+        # The only downside is that, after dellocation, the contents of this disk (including the Actions Runner),
+        # are destroyed. Let's only use it when we don't immediately deallocate the VM.
+        if [[ "${{ env.DEALLOCATE_IMMEDIATELY }}" == "true" ]]; then
+          echo "ACTIONS_RUNNER_PATH=C:\a" >> $GITHUB_ENV
+        else
+          echo "ACTIONS_RUNNER_PATH=D:\a" >> $GITHUB_ENV
+        fi
         
     - name: Azure Login
       uses: azure/login@v1
@@ -144,7 +153,7 @@ jobs:
       with:
         resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
         template: ./azure-self-hosted-runners/azure-arm-template.json
-        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize="${{ env.AZURE_VM_TYPE }}" publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }} stopService=${{ env.DEALLOCATE_IMMEDIATELY }}
+        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize="${{ env.AZURE_VM_TYPE }}" publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }} stopService=${{ env.DEALLOCATE_IMMEDIATELY }} githubActionsRunnerPath="${{ env.ACTIONS_RUNNER_PATH }}"
 
     - name: Deallocate the VM for later use
       if: env.DEALLOCATE_IMMEDIATELY == 'true'

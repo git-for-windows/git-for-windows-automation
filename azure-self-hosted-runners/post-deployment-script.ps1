@@ -16,7 +16,11 @@ param (
     # Stop Service immediately (useful for spinning up runners preemptively)
     [Parameter(Mandatory=$false)]
     [ValidateSet('true', 'false')]
-    [string]$StopService = 'true'
+    [string]$StopService = 'true',
+
+    # Path to the Actions Runner. Keep this path short to prevent Long Path issues, e.g. D:\a
+    [Parameter(Mandatory=$true)]
+    [string]$GitHubActionsRunnerPath
 )
 
 Write-Output "Starting post-deployment script."
@@ -33,8 +37,6 @@ $GitHubActionsRunnerVersion = "2.300.2"
 $GithubActionsRunnerArch = "arm64"
 $GithubActionsRunnerHash = "9409e50d9ad33d8031355ed079b8f56cf3699f35cf5d0ca51e54deed432758ef"
 $GithubActionsRunnerLabels = "self-hosted,Windows,ARM64"
-# Keep this path short to prevent Long Path issues
-$GitHubActionsRunnerPath = "C:\a"
 
 # ======================
 # WINDOWS DEVELOPER MODE
