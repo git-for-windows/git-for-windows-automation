@@ -113,6 +113,12 @@ if((Get-FileHash -Path ${GitHubActionsRunnerPath}\actions-runner-win-${GithubAct
 Write-Output "Installing GitHub Actions runner ${GitHubActionsRunnerVersion} as a Windows service with labels ${GithubActionsRunnerLabels}..."
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory("${GitHubActionsRunnerPath}\actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip", $GitHubActionsRunnerPath)
+
+Write-Output "Configuring the runner to shut down automatically after running"
+Set-Content -Path "${GitHubActionsRunnerPath}\shut-down.ps1" -Value "shutdown -s -t 60 -d p:4:0 -c `"workflow job is done`""
+[System.Environment]::SetEnvironmentVariable("ACTIONS_RUNNER_HOOK_JOB_COMPLETED", "${GitHubActionsRunnerPath}\shut-down.ps1", [System.EnvironmentVariableTarget]::Machine)
+
+Write-Output "Configuring the runner"
 cmd.exe /c "${GitHubActionsRunnerPath}\config.cmd" --unattended --ephemeral --name ${GithubActionsRunnerName} --runasservice --labels ${GithubActionsRunnerLabels} --url ${GithubActionsRunnerRegistrationUrl} --token ${GitHubActionsRunnerToken}
 
 # Ensure that the service was created. If not, exit with error code.
