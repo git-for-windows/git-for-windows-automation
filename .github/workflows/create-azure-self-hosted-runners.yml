@@ -27,7 +27,7 @@ on:
         type: string
         required: true
         description: Deallocate the runner immediately after creating it (useful for spinning up runners preemptively)
-        default: true
+        default: false
 
 env:
   AMOUNT_OF_RUNNERS: ${{ github.event.inputs.amount_of_runners }}
