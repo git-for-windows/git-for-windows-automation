@@ -37,6 +37,9 @@ env:
   DEALLOCATE_IMMEDIATELY: ${{ github.event.inputs.deallocate_immediately }}
   # This has to be a public URL that the VM can access after creation
   POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/azure-self-hosted-runners/post-deployment-script.ps1
+  # Note that you'll need "p" (arm64 processor) and ideally "d" (local temp disk). The number 8 stands for 8 CPU-cores.
+  # For a convenient overview of all arm64 VM types, see e.g. https://azureprice.net/?_cpuArchitecture=Arm64
+  AZURE_VM_TYPE: Standard_D8plds_v5
 
 # The following secrets are required for this workflow to run:
 # AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
@@ -141,7 +144,7 @@ jobs:
       with:
         resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
         template: ./azure-self-hosted-runners/azure-arm-template.json
-        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize=Standard_D8pls_v5 publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }} stopService=${{ env.DEALLOCATE_IMMEDIATELY }}
+        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize="${{ env.AZURE_VM_TYPE }}" publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }} stopService=${{ env.DEALLOCATE_IMMEDIATELY }}
 
     - name: Deallocate the VM for later use
       if: env.DEALLOCATE_IMMEDIATELY == 'true'
