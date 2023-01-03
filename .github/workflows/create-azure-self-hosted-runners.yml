@@ -40,6 +40,10 @@ env:
   # Note that you'll need "p" (arm64 processor) and ideally "d" (local temp disk). The number 8 stands for 8 CPU-cores.
   # For a convenient overview of all arm64 VM types, see e.g. https://azureprice.net/?_cpuArchitecture=Arm64
   AZURE_VM_TYPE: Standard_D8plds_v5
+  # At the time of writing, "eastus", "eastus2" and "westus2" were among the cheapest region for the VM type we're using.
+  # For more information, see https://learn.microsoft.com/en-us/azure/virtual-machines/dplsv5-dpldsv5-series (which
+  # unfortunately does not have more information about price by region)
+  AZURE_VM_REGION: westus2
 
 # The following secrets are required for this workflow to run:
 # AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
@@ -153,7 +157,7 @@ jobs:
       with:
         resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
         template: ./azure-self-hosted-runners/azure-arm-template.json
-        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize="${{ env.AZURE_VM_TYPE }}" publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }} stopService=${{ env.DEALLOCATE_IMMEDIATELY }} githubActionsRunnerPath="${{ env.ACTIONS_RUNNER_PATH }}"
+        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize="${{ env.AZURE_VM_TYPE }}" publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }} stopService=${{ env.DEALLOCATE_IMMEDIATELY }} githubActionsRunnerPath="${{ env.ACTIONS_RUNNER_PATH }}" location="${{ env.AZURE_VM_REGION }}"
 
     - name: Deallocate the VM for later use
       if: env.DEALLOCATE_IMMEDIATELY == 'true'
