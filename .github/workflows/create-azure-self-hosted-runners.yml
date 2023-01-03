@@ -116,12 +116,12 @@ jobs:
       run: |
         case "$ACTIONS_RUNNER_SCOPE" in
           "org-level")
-            ACTIONS_API_URL="https://api.github.com/repos/${{ env.ACTIONS_RUNNER_ORG }}/actions/runners/registration-token"
-            echo ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/${{ env.ACTIONS_RUNNER_ORG }}" >> $GITHUB_ENV
+            ACTIONS_API_URL="https://api.github.com/repos/$ACTIONS_RUNNER_ORG/actions/runners/registration-token"
+            ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/$ACTIONS_RUNNER_ORG"
             ;;
           "repo-level")
-            ACTIONS_API_URL="https://api.github.com/repos/${{ env.ACTIONS_RUNNER_ORG }}/${{ env.ACTIONS_RUNNER_REPO }}/actions/runners/registration-token"
-            echo ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/${{ env.ACTIONS_RUNNER_ORG }}/${{ env.ACTIONS_RUNNER_REPO }}" >> $GITHUB_ENV
+            ACTIONS_API_URL="https://api.github.com/repos/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO/actions/runners/registration-token"
+            ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO"
             ;;
           *)
             echo "Unsupported runner scope: $ACTIONS_RUNNER_SCOPE"
@@ -137,16 +137,32 @@ jobs:
           $ACTIONS_API_URL \
           | jq --raw-output .token)
         echo "::add-mask::$ACTIONS_RUNNER_TOKEN"
-        echo ACTIONS_RUNNER_TOKEN=$ACTIONS_RUNNER_TOKEN >> $GITHUB_ENV
 
         # The Azure VM type we use has blazing-fast local, temporary storage available as the D:\ drive.
         # The only downside is that, after dellocation, the contents of this disk (including the Actions Runner),
         # are destroyed. Let's only use it when we don't immediately deallocate the VM.
-        if [[ "${{ env.DEALLOCATE_IMMEDIATELY }}" == "true" ]]; then
-          echo "ACTIONS_RUNNER_PATH=C:\a" >> $GITHUB_ENV
+        if [[ "$DEALLOCATE_IMMEDIATELY" == "true" ]]; then
+          ACTIONS_RUNNER_PATH="C:\a"
         else
-          echo "ACTIONS_RUNNER_PATH=D:\a" >> $GITHUB_ENV
+          ACTIONS_RUNNER_PATH="D:\a"
         fi
+
+        AZURE_ARM_PARAMETERS=$(tr '\n' ' ' <<-END
+          githubActionsRunnerRegistrationUrl="$ACTIONS_RUNNER_REGISTRATION_URL"
+          githubActionsRunnerToken="$ACTIONS_RUNNER_TOKEN"
+          postDeploymentPsScriptUrl="$POST_DEPLOYMENT_SCRIPT_URL"
+          virtualMachineName="${{ steps.generate-vm-name.outputs.vm_name }}"
+          virtualMachineSize="$AZURE_VM_TYPE"
+          publicIpAddressName1="${{ steps.generate-vm-name.outputs.vm_name }}-ip"
+          adminUsername="${{ secrets.AZURE_VM_USERNAME }}"
+          adminPassword="${{ secrets.AZURE_VM_PASSWORD }}"
+          stopService="$DEALLOCATE_IMMEDIATELY"
+          githubActionsRunnerPath="$ACTIONS_RUNNER_PATH"
+          location="$AZURE_VM_REGION"
+        END
+        )
+
+        echo "AZURE_ARM_PARAMETERS=$AZURE_ARM_PARAMETERS" >> $GITHUB_ENV
         
     - name: Azure Login
       uses: azure/login@v1
@@ -157,7 +173,7 @@ jobs:
       with:
         resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
         template: ./azure-self-hosted-runners/azure-arm-template.json
-        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize="${{ env.AZURE_VM_TYPE }}" publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }} stopService=${{ env.DEALLOCATE_IMMEDIATELY }} githubActionsRunnerPath="${{ env.ACTIONS_RUNNER_PATH }}" location="${{ env.AZURE_VM_REGION }}"
+        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json ${{ env.AZURE_ARM_PARAMETERS }}
 
     - name: Deallocate the VM for later use
       if: env.DEALLOCATE_IMMEDIATELY == 'true'
