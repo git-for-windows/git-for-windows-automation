@@ -250,6 +250,12 @@ jobs:
                     esac
           )
 
+          # No need to rebuild i686/x86_64 flavors when building the initial
+          # arm64 versions of the wintoast/GCM packages
+          test ebe6c944c573ee4d8900f0e015365468606c9e1e != "$REF" ||
+          test "mingw32 mingw64 clangarm64" != "$MINGW_ARCHS_TO_BUILD" ||
+          MINGW_ARCHS_TO_BUILD=clangarm64
+
           cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
           MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH=$MINGW_ARCHS_TO_BUILD $MAKEPKG -s --noconfirm &&
           cp *.pkg.tar* "$dir/" &&
