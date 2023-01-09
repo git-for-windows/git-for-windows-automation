@@ -241,7 +241,14 @@ jobs:
             printf '#!/bin/sh\n\nexec /mingw64/bin/git.exe "$@"\n' >/usr/bin/git
           } &&
 
-          MINGW_ARCHS_TO_BUILD=$(test "$ARCHITECTURE" == "aarch64" && echo "clangarm64" || echo "mingw32 mingw64")
+          MINGW_ARCHS_TO_BUILD=$(
+                    case "$ARCHITECTURE,$PACKAGE_TO_BUILD" in
+                    aarch64,*) echo "clangarm64";;
+                    *,mingw-w64-wintoast) echo "mingw32 mingw64 clangarm64";; # We're (cross-)compiling via Visual Studio
+                    *,mingw-w64-git-credential-manager) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built x86 artifacts and using them for all three platforms
+                    *) echo "mingw32 mingw64";;
+                    esac
+          )
 
           cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
           MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH=$MINGW_ARCHS_TO_BUILD $MAKEPKG -s --noconfirm &&
