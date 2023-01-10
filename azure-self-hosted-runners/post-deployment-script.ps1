@@ -11,7 +11,16 @@ param (
 
     # Actions Runner name. Needs to be unique in the org/repo
     [Parameter(Mandatory=$true)]
-    [string]$GithubActionsRunnerName
+    [string]$GithubActionsRunnerName,
+
+    # Stop Service immediately (useful for spinning up runners preemptively)
+    [Parameter(Mandatory=$false)]
+    [ValidateSet('true', 'false')]
+    [string]$StopService = 'true',
+
+    # Path to the Actions Runner. Keep this path short to prevent Long Path issues, e.g. D:\a
+    [Parameter(Mandatory=$true)]
+    [string]$GitHubActionsRunnerPath
 )
 
 Write-Output "Starting post-deployment script."
@@ -28,8 +37,6 @@ $GitHubActionsRunnerVersion = "2.300.2"
 $GithubActionsRunnerArch = "arm64"
 $GithubActionsRunnerHash = "9409e50d9ad33d8031355ed079b8f56cf3699f35cf5d0ca51e54deed432758ef"
 $GithubActionsRunnerLabels = "self-hosted,Windows,ARM64"
-# Keep this path short to prevent Long Path issues
-$GitHubActionsRunnerPath = "C:\a"
 
 # ======================
 # WINDOWS DEVELOPER MODE
@@ -106,6 +113,12 @@ if((Get-FileHash -Path ${GitHubActionsRunnerPath}\actions-runner-win-${GithubAct
 Write-Output "Installing GitHub Actions runner ${GitHubActionsRunnerVersion} as a Windows service with labels ${GithubActionsRunnerLabels}..."
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory("${GitHubActionsRunnerPath}\actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip", $GitHubActionsRunnerPath)
+
+Write-Output "Configuring the runner to shut down automatically after running"
+Set-Content -Path "${GitHubActionsRunnerPath}\shut-down.ps1" -Value "shutdown -s -t 60 -d p:4:0 -c `"workflow job is done`""
+[System.Environment]::SetEnvironmentVariable("ACTIONS_RUNNER_HOOK_JOB_COMPLETED", "${GitHubActionsRunnerPath}\shut-down.ps1", [System.EnvironmentVariableTarget]::Machine)
+
+Write-Output "Configuring the runner"
 cmd.exe /c "${GitHubActionsRunnerPath}\config.cmd" --unattended --ephemeral --name ${GithubActionsRunnerName} --runasservice --labels ${GithubActionsRunnerLabels} --url ${GithubActionsRunnerRegistrationUrl} --token ${GitHubActionsRunnerToken}
 
 # Ensure that the service was created. If not, exit with error code.
@@ -116,6 +129,8 @@ if ($MatchedServices.count -eq 0) {
 }
 
 # Immediately stop the service as we want to leave the VM in a deallocated state for later use. The service will automatically be started when Windows starts.
-Stop-Service -Name "actions.runner.*" -Verbose
+if (${StopService} -eq 'true') {
+    Stop-Service -Name "actions.runner.*" -Verbose
+}
 
 Write-Output "Finished installing GitHub Actions runner."

@@ -16,6 +16,12 @@
                 "description": "GitHub Actions Runner registration token for the org/repo. Note that these tokens are only valid for one hour after creation!"
             }
         },
+        "githubActionsRunnerPath": {
+            "type": "string",
+            "metadata": {
+                "description": "Path to the Actions Runner. Keep this path short to prevent Long Path issues, e.g. D:\\a"
+            }
+        },
         "postDeploymentPsScriptUrl": {
             "type": "string",
             "minLength": 6,
@@ -28,6 +34,12 @@
             "maxLength": 15,
             "metadata": {
                 "description": "Windows Computer Name. Can be maximum 15 characters."
+            }
+        },
+        "stopService": {
+            "type": "string",
+            "metadata": {
+                "description": "(optional) Whether to stop the service immediately. Useful for spinning up runners preemptively."
             }
         },
         "location": {
@@ -250,7 +262,7 @@
                         "value": "[parameters('location')]"
                     },
                     "arguments": {
-                        "value": "[concat('-GitHubActionsRunnerToken ', parameters('githubActionsRunnerToken'), ' -GithubActionsRunnerRegistrationUrl ', parameters('githubActionsRunnerRegistrationUrl'), ' -GithubActionsRunnerName ', parameters('virtualMachineName'))]"
+                        "value": "[concat('-GitHubActionsRunnerToken ', parameters('githubActionsRunnerToken'), ' -GithubActionsRunnerRegistrationUrl ', parameters('githubActionsRunnerRegistrationUrl'), ' -GithubActionsRunnerName ', parameters('virtualMachineName'), ' -StopService ', parameters('stopService'), ' -GitHubActionsRunnerPath ', parameters('githubActionsRunnerPath'))]"
                     }
                 }
             },

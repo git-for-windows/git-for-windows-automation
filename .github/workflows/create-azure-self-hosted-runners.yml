@@ -3,10 +3,6 @@ name: create-azure-self-hosted-runners
 on:
   workflow_dispatch:
     inputs:
-      amount_of_runners:
-        description: 'Amount of runners to set up'
-        required: true
-        default: 1
       runner_scope:
         type: choice
         required: true
@@ -23,14 +19,26 @@ on:
         type: string
         required: false
         description: Repo to deploy the runner to. Only needed if runner_scope is set to "repo-level" (defaults to current repository)
+      deallocate_immediately:
+        type: string
+        required: true
+        description: Deallocate the runner immediately after creating it (useful for spinning up runners preemptively)
+        default: false
 
 env:
-  AMOUNT_OF_RUNNERS: ${{ github.event.inputs.amount_of_runners }}
   ACTIONS_RUNNER_SCOPE: ${{ github.event.inputs.runner_scope }}
   ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org || github.repository_owner }}"
   ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo || github.event.repository.name }}"
+  DEALLOCATE_IMMEDIATELY: ${{ github.event.inputs.deallocate_immediately }}
   # This has to be a public URL that the VM can access after creation
-  POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/azure-self-hosted-runners/post-deployment-script.ps1
+  POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/azure-self-hosted-runners/post-deployment-script.ps1
+  # Note that you'll need "p" (arm64 processor) and ideally "d" (local temp disk). The number 8 stands for 8 CPU-cores.
+  # For a convenient overview of all arm64 VM types, see e.g. https://azureprice.net/?_cpuArchitecture=Arm64
+  AZURE_VM_TYPE: Standard_D8plds_v5
+  # At the time of writing, "eastus", "eastus2" and "westus2" were among the cheapest region for the VM type we're using.
+  # For more information, see https://learn.microsoft.com/en-us/azure/virtual-machines/dplsv5-dpldsv5-series (which
+  # unfortunately does not have more information about price by region)
+  AZURE_VM_REGION: westus2
 
 # The following secrets are required for this workflow to run:
 # AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
@@ -42,24 +50,8 @@ env:
 # AZURE_VM_USERNAME - Username of the VM so you can RDP into it
 # AZURE_VM_PASSWORD - Password of the VM so you can RDP into it
 jobs:
-  create-matrix:
+  create-runner:
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.create-matrix.outputs.matrix }}
-    steps:
-    - name: Create matrix for setting up runners in parallel
-      id: create-matrix
-      run: |
-        echo "Going to create $AMOUNT_OF_RUNNERS runners"
-        MATRIX="matrix={\"runner_index\":[$(seq -s "," 1 $AMOUNT_OF_RUNNERS)]}"
-        echo "Going to use this matrix: $MATRIX"
-        echo $MATRIX >> $GITHUB_OUTPUT
-  create-runners:
-    name: create-runner-${{ matrix.runner_index }}
-    needs: create-matrix
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{ fromJSON(needs.create-matrix.outputs.matrix) }}
     outputs:
       vm_name: ${{ steps.generate-vm-name.outputs.vm_name }}
     steps:
@@ -103,12 +95,12 @@ jobs:
       run: |
         case "$ACTIONS_RUNNER_SCOPE" in
           "org-level")
-            ACTIONS_API_URL="https://api.github.com/repos/${{ env.ACTIONS_RUNNER_ORG }}/actions/runners/registration-token"
-            echo ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/${{ env.ACTIONS_RUNNER_ORG }}" >> $GITHUB_ENV
+            ACTIONS_API_URL="https://api.github.com/repos/$ACTIONS_RUNNER_ORG/actions/runners/registration-token"
+            ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/$ACTIONS_RUNNER_ORG"
             ;;
           "repo-level")
-            ACTIONS_API_URL="https://api.github.com/repos/${{ env.ACTIONS_RUNNER_ORG }}/${{ env.ACTIONS_RUNNER_REPO }}/actions/runners/registration-token"
-            echo ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/${{ env.ACTIONS_RUNNER_ORG }}/${{ env.ACTIONS_RUNNER_REPO }}" >> $GITHUB_ENV
+            ACTIONS_API_URL="https://api.github.com/repos/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO/actions/runners/registration-token"
+            ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO"
             ;;
           *)
             echo "Unsupported runner scope: $ACTIONS_RUNNER_SCOPE"
@@ -124,7 +116,32 @@ jobs:
           $ACTIONS_API_URL \
           | jq --raw-output .token)
         echo "::add-mask::$ACTIONS_RUNNER_TOKEN"
-        echo ACTIONS_RUNNER_TOKEN=$ACTIONS_RUNNER_TOKEN >> $GITHUB_ENV
+
+        # The Azure VM type we use has blazing-fast local, temporary storage available as the D:\ drive.
+        # The only downside is that, after dellocation, the contents of this disk (including the Actions Runner),
+        # are destroyed. Let's only use it when we don't immediately deallocate the VM.
+        if [[ "$DEALLOCATE_IMMEDIATELY" == "true" ]]; then
+          ACTIONS_RUNNER_PATH="C:\a"
+        else
+          ACTIONS_RUNNER_PATH="D:\a"
+        fi
+
+        AZURE_ARM_PARAMETERS=$(tr '\n' ' ' <<-END
+          githubActionsRunnerRegistrationUrl="$ACTIONS_RUNNER_REGISTRATION_URL"
+          githubActionsRunnerToken="$ACTIONS_RUNNER_TOKEN"
+          postDeploymentPsScriptUrl="$POST_DEPLOYMENT_SCRIPT_URL"
+          virtualMachineName="${{ steps.generate-vm-name.outputs.vm_name }}"
+          virtualMachineSize="$AZURE_VM_TYPE"
+          publicIpAddressName1="${{ steps.generate-vm-name.outputs.vm_name }}-ip"
+          adminUsername="${{ secrets.AZURE_VM_USERNAME }}"
+          adminPassword="${{ secrets.AZURE_VM_PASSWORD }}"
+          stopService="$DEALLOCATE_IMMEDIATELY"
+          githubActionsRunnerPath="$ACTIONS_RUNNER_PATH"
+          location="$AZURE_VM_REGION"
+        END
+        )
+
+        echo "AZURE_ARM_PARAMETERS=$AZURE_ARM_PARAMETERS" >> $GITHUB_ENV
         
     - name: Azure Login
       uses: azure/login@v1
@@ -135,9 +152,10 @@ jobs:
       with:
         resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
         template: ./azure-self-hosted-runners/azure-arm-template.json
-        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json githubActionsRunnerRegistrationUrl="${{ env.ACTIONS_RUNNER_REGISTRATION_URL }}" githubActionsRunnerToken="${{ env.ACTIONS_RUNNER_TOKEN }}" postDeploymentPsScriptUrl="${{ env.POST_DEPLOYMENT_SCRIPT_URL }}" virtualMachineName=${{ steps.generate-vm-name.outputs.vm_name }} virtualMachineSize=Standard_D8pls_v5 publicIpAddressName1=${{ steps.generate-vm-name.outputs.vm_name }}-ip adminUsername=${{ secrets.AZURE_VM_USERNAME }} adminPassword=${{ secrets.AZURE_VM_PASSWORD }}
+        parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json ${{ env.AZURE_ARM_PARAMETERS }}
 
     - name: Deallocate the VM for later use
+      if: env.DEALLOCATE_IMMEDIATELY == 'true'
       uses: azure/CLI@v1
       with:
         azcliversion: 2.43.0

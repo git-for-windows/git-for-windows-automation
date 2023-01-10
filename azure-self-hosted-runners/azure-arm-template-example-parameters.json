@@ -2,9 +2,6 @@
     "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
     "contentVersion": "1.0.0.0",
     "parameters": {
-        "location": {
-            "value": "westeurope"
-        },
         "enableAcceleratedNetworking": {
             "value": true
         },
@@ -50,7 +47,7 @@
             "value": "Standard"
         },
         "pipDeleteOption": {
-            "value": "Detach"
+            "value": "Delete"
         },
         "osDiskType": {
             "value": "Premium_LRS"
@@ -59,7 +56,7 @@
             "value": "Delete"
         },
         "nicDeleteOption": {
-            "value": "Detach"
+            "value": "Delete"
         },
         "patchMode": {
             "value": "AutomaticByOS"
