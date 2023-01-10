@@ -3,10 +3,6 @@ name: create-azure-self-hosted-runners
 on:
   workflow_dispatch:
     inputs:
-      amount_of_runners:
-        description: 'Amount of runners to set up'
-        required: true
-        default: 1
       runner_scope:
         type: choice
         required: true
@@ -30,7 +26,6 @@ on:
         default: false
 
 env:
-  AMOUNT_OF_RUNNERS: ${{ github.event.inputs.amount_of_runners }}
   ACTIONS_RUNNER_SCOPE: ${{ github.event.inputs.runner_scope }}
   ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org || github.repository_owner }}"
   ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo || github.event.repository.name }}"
@@ -55,24 +50,8 @@ env:
 # AZURE_VM_USERNAME - Username of the VM so you can RDP into it
 # AZURE_VM_PASSWORD - Password of the VM so you can RDP into it
 jobs:
-  create-matrix:
+  create-runner:
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.create-matrix.outputs.matrix }}
-    steps:
-    - name: Create matrix for setting up runners in parallel
-      id: create-matrix
-      run: |
-        echo "Going to create $AMOUNT_OF_RUNNERS runners"
-        MATRIX="matrix={\"runner_index\":[$(seq -s "," 1 $AMOUNT_OF_RUNNERS)]}"
-        echo "Going to use this matrix: $MATRIX"
-        echo $MATRIX >> $GITHUB_OUTPUT
-  create-runners:
-    name: create-runner-${{ matrix.runner_index }}
-    needs: create-matrix
-    runs-on: ubuntu-latest
-    strategy:
-      matrix: ${{ fromJSON(needs.create-matrix.outputs.matrix) }}
     outputs:
       vm_name: ${{ steps.generate-vm-name.outputs.vm_name }}
     steps:
