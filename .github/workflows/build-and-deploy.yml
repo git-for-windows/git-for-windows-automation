@@ -89,7 +89,11 @@ jobs:
               process.env.OWNER,
               process.env.REPO,
               process.env.REF,
-              process.env.BUILD_ONLY ? 'build' : 'deploy',
+              `${
+                process.env.BUILD_ONLY ? 'build' : 'deploy'
+              }${
+                process.env.ARCHITECTURE ? `_${process.env.ARCHITECTURE}` : ''
+              }`,
               `Build${process.env.BUILD_ONLY ? '' : ' and deploy'} ${process.env.PACKAGE_TO_BUILD}`,
               `${process.env.BUILD_ONLY ? 'Building' : 'Deploying'} ${process.env.PACKAGE_TO_BUILD}`,
               `For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}).`,
