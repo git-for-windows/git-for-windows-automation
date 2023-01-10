@@ -30,7 +30,7 @@ env:
   ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org || github.repository_owner }}"
   ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo || github.event.repository.name }}"
   # This has to be a public URL that the VM can access after creation
-  POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/azure-self-hosted-runners/post-deployment-script.ps1
+  POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/azure-self-hosted-runners/post-deployment-script.ps1
 
 # The following secrets are required for this workflow to run:
 # AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
