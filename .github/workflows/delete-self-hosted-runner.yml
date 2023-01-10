@@ -1,0 +1,38 @@
+name: delete azure-self-hosted-runner
+run-name: Delete ${{ inputs.runner_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner_name:
+        type: string
+        required: true
+        description: The name of the runner that needs to be deleted
+
+env:
+  ACTIONS_RUNNER_NAME: ${{ github.event.inputs.runner_name }}
+
+# The following secrets are required for this workflow to run:
+# AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
+#                     group specifically for self-hosted Actions Runners.
+#   az ad sp create-for-rbac --name "{YOUR_DESCRIPTIVE_NAME_HERE}" --role contributor \
+#     --scopes /subscriptions/{SUBSCRIPTION_ID_HERE}/resourceGroups/{RESOURCE_GROUP_HERE} \
+#     --sdk-auth
+# AZURE_RESOURCE_GROUP - Resource group to create the runner(s) in
+jobs:
+  delete-runner:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    - name: Delete VM '${{ env.ACTIONS_RUNNER_NAME }}'
+      uses: azure/CLI@v1
+      with:
+        azcliversion: 2.43.0
+        inlineScript: |
+          az vm delete -n "$ACTIONS_RUNNER_NAME" -g ${{ secrets.AZURE_RESOURCE_GROUP }} --yes
+          az network nsg delete -n "$ACTIONS_RUNNER_NAME"-nsg -g ${{ secrets.AZURE_RESOURCE_GROUP }}
+          az network vnet delete -n "$ACTIONS_RUNNER_NAME"-vnet -g ${{ secrets.AZURE_RESOURCE_GROUP }}
+          az network public-ip delete -n "$ACTIONS_RUNNER_NAME"-ip -g ${{ secrets.AZURE_RESOURCE_GROUP }}
