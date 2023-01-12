@@ -41,10 +41,17 @@ $GitForWindowsTagData = Invoke-WebRequest -UseBasicParsing -Uri "https://api.git
 $GitForWindowsTagData = ConvertFrom-Json $GitForWindowsTagData.Content
 $GitForWindowsHash = $GitForWindowsTagData.object.sha
 
-# Note that the GitHub Actions Runner auto-updates itself by default, but do try to reference a relatively new version here.
-$GitHubActionsRunnerVersion = "2.300.2"
+# Obtain the latest GitHub Actions Runner release
+$GitHubActionsRunnerReleaseData = Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/actions/runner/releases/latest"
+$GitHubActionsRunnerReleaseData = ConvertFrom-Json $GitHubActionsRunnerReleaseData.Content
+$GitHubActionsRunnerTag = $GitHubActionsRunnerReleaseData.tag_name
+$GitHubActionsRunnerVersion = $GitHubActionsRunnerTag.Substring(1)
+
+$GitHubActionsRunnerTagData = Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/actions/runner/git/ref/tags/${GitHubActionsRunnerTag}"
+$GitHubActionsRunnerTagData = ConvertFrom-Json $GitHubActionsRunnerTagData.Content
+$GithubActionsRunnerHash = $GitHubActionsRunnerTagData.object.sha
+
 $GithubActionsRunnerArch = "arm64"
-$GithubActionsRunnerHash = "9409e50d9ad33d8031355ed079b8f56cf3699f35cf5d0ca51e54deed432758ef"
 $GithubActionsRunnerLabels = "self-hosted,Windows,ARM64"
 
 $ProgressPreference = 'Continue'
