@@ -29,14 +29,25 @@ Write-Output "Starting post-deployment script."
 # TOOL VERSIONS AND OTHER VARIABLES
 # =================================
 
-$GitForWindowsVersion = "2.39.0"
-$GitForWindowsTag = "2.39.0.windows.1"
-$GitForWindowsHash = "2eaba567e17784654be77ba997329742d87845c6f15e33c9620f9a331c69a976"
+$ProgressPreference = 'SilentlyContinue'
+
+# Obtain the latest Git for Windows release
+$GitForWindowsReleaseData = Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/git-for-windows/git/releases/latest"
+$GitForWindowsReleaseData = ConvertFrom-Json $GitForWindowsReleaseData.Content
+$GitForWindowsTag = $GitForWindowsReleaseData.tag_name
+$GitForWindowsReleaseAsset = $GitForWindowsReleaseData.assets | Where-Object {$_.name -match "Git-.*-64-bit.exe" }
+
+$GitForWindowsTagData = Invoke-WebRequest -UseBasicParsing -Uri "https://api.github.com/repos/git-for-windows/git/git/ref/tags/${GitForWindowsTag}"
+$GitForWindowsTagData = ConvertFrom-Json $GitForWindowsTagData.Content
+$GitForWindowsHash = $GitForWindowsTagData.object.sha
+
 # Note that the GitHub Actions Runner auto-updates itself by default, but do try to reference a relatively new version here.
 $GitHubActionsRunnerVersion = "2.300.2"
 $GithubActionsRunnerArch = "arm64"
 $GithubActionsRunnerHash = "9409e50d9ad33d8031355ed079b8f56cf3699f35cf5d0ca51e54deed432758ef"
 $GithubActionsRunnerLabels = "self-hosted,Windows,ARM64"
+
+$ProgressPreference = 'Continue'
 
 # ======================
 # WINDOWS DEVELOPER MODE
@@ -62,7 +73,7 @@ Write-Output "Finished adding Microsoft Defender Exclusions."
 Write-Output "Downloading Git for Windows..."
 $GitForWindowsOutputFile = "./git-for-windows-installer.exe"
 $ProgressPreference = 'SilentlyContinue'
-Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/git-for-windows/git/releases/download/v${GitForWindowsTag}/Git-${GitForWindowsVersion}-64-bit.exe" -OutFile $GitForWindowsOutputFile
+Invoke-WebRequest -UseBasicParsing -Uri $GitForWindowsReleaseAsset.browser_download_url -OutFile $GitForWindowsOutputFile
 $ProgressPreference = 'Continue'
 
 if((Get-FileHash -Path $GitForWindowsOutputFile -Algorithm SHA256).Hash.ToUpper() -ne $GitForWindowsHash.ToUpper()){ throw 'Computed checksum did not match' }
