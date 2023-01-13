@@ -209,8 +209,32 @@ if ($MatchedServices.count -eq 0) {
 }
 
 # Immediately stop the service as we want to leave the VM in a deallocated state for later use. The service will automatically be started when Windows starts.
-if (${StopService} -eq 'true') {
-    Stop-Service -Name "actions.runner.*" -Verbose
+if ($StopService -eq 'true') {
+    #Collects all running services named actions.runner.*
+    $GetActionRunnerServices = Get-Service -Name "actions.runner.*" | Where-Object { $_.Status -eq 'Running' } | Select-Object -ExpandProperty Name
+
+    # Loops trough all services and stopping them one by one
+    foreach ($Service in $GetActionRunnerServices) {
+        Write-Output "Stopping service $Service"
+        Stop-Service -Name $Service
+
+        # Making sure that all of the services has been stopped before moving forward
+        [int]$RetryCount = 0
+        do {
+            Write-Output "Waiting for service $Service to stop..."
+            $RetryCount++
+            Start-Sleep -Seconds 5
+        }
+        while ((Get-Service -Name $Service).Status -eq 'running' -or $RetryCount -gt 5)
+
+        if ($RetryCount -gt 5) {
+            Write-Error "Service $Service failed to stop"
+            exit 1
+        }
+        else {
+            Write-Output "Service $Service has been stopped"
+        }
+    }
 }
 
 Write-Output "Finished installing GitHub Actions runner."
