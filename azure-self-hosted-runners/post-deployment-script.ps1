@@ -59,17 +59,17 @@ try {
         }
     }
     else {
-        throw "Could not find hash for $GithubExeName"
-        break;
+        Write-Error "Could not find hash for $GithubExeName"
+        exit 1
     }
 }
 catch {
-    Write-Output @"
+    Write-Error @"
    "Message: "$($_.Exception.Message)`n
    "Error Line: "$($_.InvocationInfo.Line)`n
    "Line Number: "$($_.InvocationInfo.ScriptLineNumber)`n
 "@
-    break;
+    exit 1
 }
 
 # =================================
@@ -99,17 +99,17 @@ try {
         }
     }
     else {
-        throw "Error: Could not find hash for Github Actions Runner"
-        break;
+        Write-Error "Error: Could not find hash for Github Actions Runner"
+        exit 1
     }
 }
 catch {
-    Write-Output @"
+    Write-Error @"
    "Message: "$($_.Exception.Message)`n
    "Error Line: "$($_.InvocationInfo.Line)`n
    "Line Number: "$($_.InvocationInfo.ScriptLineNumber)`n
 "@
-    break;
+    exit 1
 }
 
 # ======================
@@ -139,8 +139,8 @@ Invoke-WebRequest -UseBasicParsing -Uri $GitHubGit.DownloadUrl -OutFile $GitHubG
 $ProgressPreference = 'Continue'
 
 if ((Get-FileHash -Path $GitHubGit.OutFile -Algorithm SHA256).Hash.ToUpper() -ne $GitHubGit.Hash) {
-    throw "Computed checksum for $($GitHubGit.OutFile) did not match $($GitHubGit.Hash)"
-    break;
+    Write-Error "Computed checksum for $($GitHubGit.OutFile) did not match $($GitHubGit.Hash)"
+    exit 1
 }
 
 Write-Output "Installing Git for Windows..."
@@ -186,8 +186,8 @@ Invoke-WebRequest -UseBasicParsing -Uri $GitHubAction.DownloadUrl -OutFile $GitH
 $ProgressPreference = 'Continue'
 
 if ((Get-FileHash -Path $GitHubAction.OutFile -Algorithm SHA256).Hash.ToUpper() -ne $GitHubAction.hash) {
-    throw "Computed checksum for $($GitHubAction.OutFile) did not match $($GitHubAction.hash)"
-    break;
+    Write-Error "Computed checksum for $($GitHubAction.OutFile) did not match $($GitHubAction.hash)"
+    exit 1
 }
 
 Write-Output "Installing GitHub Actions runner $($GitHubAction.Tag) as a Windows service with labels $($GitHubAction.RunnerLabels)..."
