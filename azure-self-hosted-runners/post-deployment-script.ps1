@@ -1,25 +1,25 @@
 param (
     # GitHub Actions Runner registration token. Note that these tokens are only valid for one hour after creation, so we always expect the user to provide one.
     # https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$GitHubActionsRunnerToken,
 
     # GitHub Actions Runner repository. E.g. "https://github.com/MY_ORG" (org-level) or "https://github.com/MY_ORG/MY_REPO" (repo-level)
     # https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$GithubActionsRunnerRegistrationUrl,
 
     # Actions Runner name. Needs to be unique in the org/repo
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$GithubActionsRunnerName,
 
     # Stop Service immediately (useful for spinning up runners preemptively)
-    [Parameter(Mandatory=$false)]
+    [Parameter(Mandatory = $false)]
     [ValidateSet('true', 'false')]
     [string]$StopService = 'true',
 
     # Path to the Actions Runner. Keep this path short to prevent Long Path issues, e.g. D:\a
-    [Parameter(Mandatory=$true)]
+    [Parameter(Mandatory = $true)]
     [string]$GitHubActionsRunnerPath
 )
 
@@ -28,10 +28,51 @@ Write-Output "Starting post-deployment script."
 # =================================
 # TOOL VERSIONS AND OTHER VARIABLES
 # =================================
+#
+# This header is used for both Git for Windows and GitHub Actions Runner
+[hashtable]$GithubHeaders = @{
+    "Accept"               = "application/vnd.github.v3+json"
+    "X-GitHub-Api-Version" = "2022-11-28"
+}
 
-$GitForWindowsVersion = "2.39.0"
-$GitForWindowsTag = "2.39.0.windows.1"
-$GitForWindowsHash = "2eaba567e17784654be77ba997329742d87845c6f15e33c9620f9a331c69a976"
+# =================================
+# Get download and hash information for the latest release of Git for Windows
+# =================================
+#
+# This will return the latest release of Git for Windows download link, hash and the name of the outfile
+# Everything will be saved in the object $GitHubGit
+#
+# url for Github API to get the latest release
+[string]$GitHubUrl = "https://api.github.com/repos/git-for-windows/git/releases/latest"
+#
+# Name of the exe file that should be verified and downloaded
+[string]$GithubExeName = "Git-.*-64-bit.exe"
+
+try {
+    [System.Object]$GithubRestData = Invoke-RestMethod -Uri $GitHubUrl -Method Get -Headers $GithubHeaders -TimeoutSec 10 | Select-Object -Property assets, body
+    [System.Object]$GitHubAsset = $GithubRestData.assets | Where-Object { $_.name -match $GithubExeName }
+    if ($GithubRestData.body -match "\b${[Regex]::Escape($GitHubAsset.name)}.*?\|.*?([a-zA-Z0-9]{64})" -eq $True) {
+        [System.Object]$GitHubGit = [PSCustomObject]@{
+            DownloadUrl = [string]$GitHubAsset.browser_download_url
+            Hash        = [string]$Matches[1].ToUpper()
+            OutFile     = "./git-for-windows-installer.exe"
+        }
+    }
+    else {
+        throw "Could not find hash for $GithubExeName"
+        break;
+    }
+}
+catch {
+    Write-Output @"
+   "Message: "$($_.Exception.Message)`n
+   "Error Line: "$($_.InvocationInfo.Line)`n
+   "Line Number: "$($_.InvocationInfo.ScriptLineNumber)`n
+"@
+    break;
+}
+
+#
 # Note that the GitHub Actions Runner auto-updates itself by default, but do try to reference a relatively new version here.
 $GitHubActionsRunnerVersion = "2.300.2"
 $GithubActionsRunnerArch = "arm64"
@@ -60,12 +101,13 @@ Write-Output "Finished adding Microsoft Defender Exclusions."
 # ======================
 
 Write-Output "Downloading Git for Windows..."
-$GitForWindowsOutputFile = "./git-for-windows-installer.exe"
 $ProgressPreference = 'SilentlyContinue'
-Invoke-WebRequest -UseBasicParsing -Uri "https://github.com/git-for-windows/git/releases/download/v${GitForWindowsTag}/Git-${GitForWindowsVersion}-64-bit.exe" -OutFile $GitForWindowsOutputFile
+Invoke-WebRequest -UseBasicParsing -Uri $GitHubGit.DownloadUrl -OutFile $GitHubGit.OutFile
 $ProgressPreference = 'Continue'
 
-if((Get-FileHash -Path $GitForWindowsOutputFile -Algorithm SHA256).Hash.ToUpper() -ne $GitForWindowsHash.ToUpper()){ throw 'Computed checksum did not match' }
+if ((Get-FileHash -Path $GitHubGit.OutFile -Algorithm SHA256).Hash.ToUpper() -ne $GitHubGit.Hash) {
+    throw 'Computed checksum did not match'
+}
 
 Write-Output "Installing Git for Windows..."
 @"
@@ -94,7 +136,7 @@ EnablePseudoConsoleSupport=Disabled
 EnableFSMonitor=Disabled
 "@ | Out-File -FilePath "./git-installer-config.inf"
 
-Start-Process -Wait $GitForWindowsOutputFile '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /LOADINF="./git-installer-config.inf"'
+Start-Process -Wait $GitHubGit.OutFile '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /LOADINF="./git-installer-config.inf"'
 
 Write-Output "Finished installing Git for Windows."
 
@@ -108,7 +150,7 @@ mkdir $GitHubActionsRunnerPath | Out-Null
 $ProgressPreference = 'SilentlyContinue'
 Invoke-WebRequest -UseBasicParsing -Uri https://github.com/actions/runner/releases/download/v${GitHubActionsRunnerVersion}/actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip -OutFile ${GitHubActionsRunnerPath}\actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip
 $ProgressPreference = 'Continue'
-if((Get-FileHash -Path ${GitHubActionsRunnerPath}\actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip -Algorithm SHA256).Hash.ToUpper() -ne $GithubActionsRunnerHash.ToUpper()){ throw 'Computed checksum did not match' }
+if ((Get-FileHash -Path ${GitHubActionsRunnerPath}\actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip -Algorithm SHA256).Hash.ToUpper() -ne $GithubActionsRunnerHash.ToUpper()) { throw 'Computed checksum did not match' }
 
 Write-Output "Installing GitHub Actions runner ${GitHubActionsRunnerVersion} as a Windows service with labels ${GithubActionsRunnerLabels}..."
 
