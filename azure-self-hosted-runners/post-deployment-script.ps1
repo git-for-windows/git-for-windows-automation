@@ -202,10 +202,24 @@ Write-Output "Configuring the runner"
 cmd.exe /c "${GitHubActionsRunnerPath}\config.cmd" --unattended --ephemeral --name ${GithubActionsRunnerName} --runasservice --labels $($GitHubAction.RunnerLabels) --url ${GithubActionsRunnerRegistrationUrl} --token ${GitHubActionsRunnerToken}
 
 # Ensure that the service was created. If not, exit with error code.
-$MatchedServices = Get-Service -Name "actions.runner.*"
-if ($MatchedServices.count -eq 0) {
-    Write-Error "GitHub Actions service not found (should start with actions.runner). Check the logs in ${GitHubActionsRunnerPath}\_diag for more details."
-    exit 1
+if ($null -eq (Get-Service -Name "actions.runner.*")) {
+    Write-Output "Could not find service actions.runner.*, making three more attempts with a 3 second delay in between each attempt..."
+
+    [int]$RetryCountService = 0
+    do {
+        Write-Output "Attempt $($RetryCountService): Looking for service actions.runner.*..."
+        $RetryCountService++
+        Start-Sleep -Seconds 3
+    }
+    while ($null -eq (Get-Service -Name "actions.runner.*") -or $RetryCountService -gt 3)
+
+    if ($RetryCountService -gt 3) {
+        Write-Error "GitHub Actions service not found (should start with actions.runner). Check the logs in ${GitHubActionsRunnerPath}\_diag for more details."
+        exit 1
+    }
+    else {
+        Write-Output "Found service actions.runner.*"
+    }
 }
 
 # Immediately stop the service as we want to leave the VM in a deallocated state for later use. The service will automatically be started when Windows starts.
