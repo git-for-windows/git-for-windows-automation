@@ -207,7 +207,7 @@ if ($null -eq (Get-Service -Name "actions.runner.*")) {
 
     [int]$RetryCountService = 0
     do {
-        Write-Output "Attempt $($RetryCountService): Looking for service actions.runner.*..."
+        Write-Output "Attempt $($RetryCountService) of 3: Looking for service actions.runner.*..."
         $RetryCountService++
         Start-Sleep -Seconds 3
     }
@@ -235,7 +235,7 @@ if ($StopService -eq 'true') {
         # Making sure that all of the services has been stopped before moving forward
         [int]$RetryCount = 0
         do {
-            Write-Output "Waiting for service $Service to stop..."
+            Write-Output "Attempt: $($RetryCount) of 5: Waiting for service $Service to stop..."
             $RetryCount++
             Start-Sleep -Seconds 5
         }
