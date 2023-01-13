@@ -1,25 +1,24 @@
 param (
-    # GitHub Actions Runner registration token. Note that these tokens are only valid for one hour after creation, so we always expect the user to provide one.
     # https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, HelpMessage = "GitHub Actions Runner registration token. Note that these tokens are only valid for one hour after creation, so we always expect the user to provide one.")]
     [string]$GitHubActionsRunnerToken,
 
     # GitHub Actions Runner repository. E.g. "https://github.com/MY_ORG" (org-level) or "https://github.com/MY_ORG/MY_REPO" (repo-level)
     # https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners
     [Parameter(Mandatory = $true)]
+    [ValidateScript({ $_ -notlike "https://*" })]
     [string]$GithubActionsRunnerRegistrationUrl,
 
-    # Actions Runner name. Needs to be unique in the org/repo
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, HelpMessage = "Name of the runner. Needs to be unique in the org/repo")]
+    [ValidateNotNullOrEmpty()]
     [string]$GithubActionsRunnerName,
 
-    # Stop Service immediately (useful for spinning up runners preemptively)
-    [Parameter(Mandatory = $false)]
+    [Parameter(Mandatory = $false, HelpMessage = "Stop Service immediately (useful for spinning up runners preemptively)")]
     [ValidateSet('true', 'false')]
     [string]$StopService = 'true',
 
-    # Path to the Actions Runner. Keep this path short to prevent Long Path issues, e.g. D:\a
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, HelpMessage = "Path to the Actions Runner. Keep this path short to prevent Long Path issues, e.g. D:\a")]
+    [ValidateNotNullOrEmpty()]
     [string]$GitHubActionsRunnerPath
 )
 
