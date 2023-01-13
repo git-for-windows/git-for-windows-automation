@@ -139,7 +139,8 @@ Invoke-WebRequest -UseBasicParsing -Uri $GitHubGit.DownloadUrl -OutFile $GitHubG
 $ProgressPreference = 'Continue'
 
 if ((Get-FileHash -Path $GitHubGit.OutFile -Algorithm SHA256).Hash.ToUpper() -ne $GitHubGit.Hash) {
-    throw 'Computed checksum did not match'
+    throw "Computed checksum for $($GitHubGit.OutFile) did not match $($GitHubGit.Hash)"
+    break;
 }
 
 Write-Output "Installing Git for Windows..."
@@ -184,7 +185,10 @@ $ProgressPreference = 'SilentlyContinue'
 Invoke-WebRequest -UseBasicParsing -Uri $GitHubAction.DownloadUrl -OutFile $GitHubAction.OutFile
 $ProgressPreference = 'Continue'
 
-if ((Get-FileHash -Path $GitHubAction.OutFile -Algorithm SHA256).Hash.ToUpper() -ne $GitHubAction.hash) { throw 'Computed checksum did not match' }
+if ((Get-FileHash -Path $GitHubAction.OutFile -Algorithm SHA256).Hash.ToUpper() -ne $GitHubAction.hash) {
+    throw "Computed checksum for $($GitHubAction.OutFile) did not match $($GitHubAction.hash)"
+    break;
+}
 
 Write-Output "Installing GitHub Actions runner $($GitHubAction.Tag) as a Windows service with labels $($GitHubAction.RunnerLabels)..."
 
