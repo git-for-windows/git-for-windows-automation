@@ -72,12 +72,45 @@ catch {
     break;
 }
 
+# =================================
+# Obtain the latest GitHub Actions Runner and other GitHub Actions information
+# =================================
 #
 # Note that the GitHub Actions Runner auto-updates itself by default, but do try to reference a relatively new version here.
-$GitHubActionsRunnerVersion = "2.300.2"
-$GithubActionsRunnerArch = "arm64"
-$GithubActionsRunnerHash = "9409e50d9ad33d8031355ed079b8f56cf3699f35cf5d0ca51e54deed432758ef"
-$GithubActionsRunnerLabels = "self-hosted,Windows,ARM64"
+#
+# This will return the latest release of GitHub Actions Runner download link, hash, Tag, RunnerArch, RunnerLabels and the name of the outfile.
+# Everything will be saved in the object $GitHubAction
+#
+# url for Github API to get the latest release of actions runner
+[string]$GitHubActionUrl = "https://api.github.com/repos/actions/runner/releases/latest"
+
+try {
+    [System.Object]$GithubActionRestData = Invoke-RestMethod -Uri $GitHubActionUrl -Method Get -Headers $GithubHeaders -TimeoutSec 10 | Select-Object -Property assets, body, tag_name
+    if ($GithubActionRestData.body -match "<!-- BEGIN SHA win-arm64 -->(.*)<!-- END SHA win-arm64 -->" -eq $True) {
+        [string]$ActionZipName = "actions-runner-win-arm64-" + [string]$($GithubActionRestData.tag_name.Substring(1)) + ".zip"
+
+        [System.Object]$GitHubAction = [PSCustomObject]@{
+            Tag          = $GithubActionRestData.tag_name.Substring(1)
+            Hash         = $Matches[1].ToUpper()
+            RunnerArch   = "arm64"
+            RunnerLabels = "self-hosted,Windows,ARM64"
+            DownloadUrl  = $GithubActionRestData.assets | where-object { $_.name -match $ActionZipName } | Select-Object -ExpandProperty browser_download_url
+            OutFile      = "$($GitHubActionsRunnerPath)\$($ActionZipName)"
+        }
+    }
+    else {
+        throw "Error: Could not find hash for Github Actions Runner"
+        break;
+    }
+}
+catch {
+    Write-Output @"
+   "Message: "$($_.Exception.Message)`n
+   "Error Line: "$($_.InvocationInfo.Line)`n
+   "Line Number: "$($_.InvocationInfo.ScriptLineNumber)`n
+"@
+    break;
+}
 
 # ======================
 # WINDOWS DEVELOPER MODE
@@ -148,20 +181,21 @@ Write-Output "Downloading GitHub Actions runner..."
 
 mkdir $GitHubActionsRunnerPath | Out-Null
 $ProgressPreference = 'SilentlyContinue'
-Invoke-WebRequest -UseBasicParsing -Uri https://github.com/actions/runner/releases/download/v${GitHubActionsRunnerVersion}/actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip -OutFile ${GitHubActionsRunnerPath}\actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip
+Invoke-WebRequest -UseBasicParsing -Uri $GitHubAction.DownloadUrl -OutFile $GitHubAction.OutFile
 $ProgressPreference = 'Continue'
-if ((Get-FileHash -Path ${GitHubActionsRunnerPath}\actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip -Algorithm SHA256).Hash.ToUpper() -ne $GithubActionsRunnerHash.ToUpper()) { throw 'Computed checksum did not match' }
 
-Write-Output "Installing GitHub Actions runner ${GitHubActionsRunnerVersion} as a Windows service with labels ${GithubActionsRunnerLabels}..."
+if ((Get-FileHash -Path $GitHubAction.OutFile -Algorithm SHA256).Hash.ToUpper() -ne $GitHubAction.hash) { throw 'Computed checksum did not match' }
 
-Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory("${GitHubActionsRunnerPath}\actions-runner-win-${GithubActionsRunnerArch}-${GitHubActionsRunnerVersion}.zip", $GitHubActionsRunnerPath)
+Write-Output "Installing GitHub Actions runner $($GitHubAction.Tag) as a Windows service with labels $($GitHubAction.RunnerLabels)..."
+
+Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory($GitHubAction.OutFile, $GitHubActionsRunnerPath)
 
 Write-Output "Configuring the runner to shut down automatically after running"
 Set-Content -Path "${GitHubActionsRunnerPath}\shut-down.ps1" -Value "shutdown -s -t 60 -d p:4:0 -c `"workflow job is done`""
 [System.Environment]::SetEnvironmentVariable("ACTIONS_RUNNER_HOOK_JOB_COMPLETED", "${GitHubActionsRunnerPath}\shut-down.ps1", [System.EnvironmentVariableTarget]::Machine)
 
 Write-Output "Configuring the runner"
-cmd.exe /c "${GitHubActionsRunnerPath}\config.cmd" --unattended --ephemeral --name ${GithubActionsRunnerName} --runasservice --labels ${GithubActionsRunnerLabels} --url ${GithubActionsRunnerRegistrationUrl} --token ${GitHubActionsRunnerToken}
+cmd.exe /c "${GitHubActionsRunnerPath}\config.cmd" --unattended --ephemeral --name ${GithubActionsRunnerName} --runasservice --labels $($GitHubAction.RunnerLabels) --url ${GithubActionsRunnerRegistrationUrl} --token ${GitHubActionsRunnerToken}
 
 # Ensure that the service was created. If not, exit with error code.
 $MatchedServices = Get-Service -Name "actions.runner.*"
