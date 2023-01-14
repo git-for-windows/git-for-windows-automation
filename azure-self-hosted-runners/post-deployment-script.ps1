@@ -6,7 +6,7 @@ param (
     # GitHub Actions Runner repository. E.g. "https://github.com/MY_ORG" (org-level) or "https://github.com/MY_ORG/MY_REPO" (repo-level)
     # https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners
     [Parameter(Mandatory = $true)]
-    [ValidateScript({ $_ -notlike "https://*" })]
+    [ValidateScript({ $_ -like "https://*" })]
     [string]$GithubActionsRunnerRegistrationUrl,
 
     [Parameter(Mandatory = $true, HelpMessage = "Name of the runner. Needs to be unique in the org/repo")]
@@ -14,7 +14,7 @@ param (
     [string]$GithubActionsRunnerName,
 
     [Parameter(Mandatory = $false, HelpMessage = "Stop Service immediately (useful for spinning up runners preemptively)")]
-    [bool]$StopService = $true,
+    [string]$StopService = 'true',
 
     [Parameter(Mandatory = $true, HelpMessage = "Path to the Actions Runner. Keep this path short to prevent Long Path issues, e.g. D:\a")]
     [ValidateNotNullOrEmpty()]
@@ -221,7 +221,7 @@ if ($null -eq (Get-Service -Name "actions.runner.*")) {
 }
 
 # Immediately stop the service as we want to leave the VM in a deallocated state for later use. The service will automatically be started when Windows starts.
-if ($StopService -eq $true) {
+if ($StopService -eq 'true') {
     #Collects all running services named actions.runner.*
     $GetActionRunnerServices = Get-Service -Name "actions.runner.*" | Where-Object { $_.Status -eq 'Running' } | Select-Object -ExpandProperty Name
 
