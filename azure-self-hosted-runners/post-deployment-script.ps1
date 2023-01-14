@@ -14,6 +14,7 @@ param (
     [string]$GithubActionsRunnerName,
 
     [Parameter(Mandatory = $false, HelpMessage = "Stop Service immediately (useful for spinning up runners preemptively)")]
+    [ValidateSet('true', 'false')]
     [string]$StopService = 'true',
 
     [Parameter(Mandatory = $true, HelpMessage = "Path to the Actions Runner. Keep this path short to prevent Long Path issues, e.g. D:\a")]
