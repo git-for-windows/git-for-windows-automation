@@ -149,10 +149,16 @@ jobs:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     
     - uses: azure/arm-deploy@v1
+      id: deploy-arm-template
       with:
         resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
         template: ./azure-self-hosted-runners/azure-arm-template.json
         parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json ${{ env.AZURE_ARM_PARAMETERS }}
+    
+    - name: Show post-deployment script output
+      env:
+        CUSTOM_SCRIPT_OUTPUT: ${{ steps.deploy-arm-template.outputs.customScriptInstanceView }}
+      run: echo "$CUSTOM_SCRIPT_OUTPUT" | jq -r '.substatuses[0].message' 
 
     - name: Deallocate the VM for later use
       if: env.DEALLOCATE_IMMEDIATELY == 'true'
