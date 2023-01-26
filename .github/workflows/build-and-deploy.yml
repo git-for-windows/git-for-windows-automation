@@ -165,7 +165,11 @@ jobs:
         if: env.ARCHITECTURE == 'i686' && !contains('msys2-runtime gnupg', env.PACKAGE_TO_BUILD)
         shell: powershell
         run: |
-          cd C:\git-sdk-32-full
+          if (Test-Path D:\git-sdk-32-full -PathType Container) {
+            cd D:\git-sdk-32-full
+          } else {
+            cd C:\git-sdk-32-full
+          }
           if (!$?) { exit(1); }
 
           $env:MSYSTEM = "MINGW32"
