@@ -162,7 +162,7 @@ jobs:
         run: pacman -Syyu --noconfirm
 
       - name: rebase `.dll` base addresses
-        if: env.ARCHITECTURE == 'i686' && !contains('msys2-runtime gnupg', env.PACKAGE_TO_BUILD)
+        if: env.ARCHITECTURE == 'i686' && !contains('gnupg', env.PACKAGE_TO_BUILD)
         shell: powershell
         run: |
           if (Test-Path D:\git-sdk-32-full -PathType Container) {
