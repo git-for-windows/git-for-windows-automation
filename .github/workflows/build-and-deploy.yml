@@ -241,9 +241,11 @@ jobs:
           MAKEPKG: ${{ env.REPO != 'MSYS2-packages' && env.PACKAGE_TO_BUILD != 'git-for-windows-keyring' && 'makepkg-mingw' || 'makepkg' }}
         shell: bash
         run: |
+          set -x &&
+
           # Restrict `PATH` to MSYS2
-          MSYS2_PATH_TYPE=minimal
-          . /etc/profile
+          MSYS2_PATH_TYPE=minimal &&
+          . /etc/profile &&
 
           dir="$(cygpath -au artifacts)" &&
           mkdir -p "$dir" &&
