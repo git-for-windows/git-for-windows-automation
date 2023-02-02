@@ -88,7 +88,8 @@ jobs:
             /usr/bin/nproc.exe \
             /usr/bin/pacman.exe \
             /usr/bin/sha256sum.exe \
-            /usr/bin/updpkgsums
+            /usr/bin/updpkgsums \
+            /mingw64/bin/curl.exe
           do
             curl -sLo $p https://github.com/git-for-windows/git-sdk-64/raw/HEAD$p || exit 1
           done &&
@@ -106,7 +107,7 @@ jobs:
             curl -sL https://github.com/git-for-windows/git-sdk-64/tarball/$tree |
             tar --strip-components=1 -C $p -xzvf - || exit 1
           done &&
-          ln -s "${COMSPEC%cmd.exe}curl.exe" /usr/bin/
+          printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >/usr/bin/curl
       - name: Clone ${{ env.REPO }}
         shell: bash
         run: |
