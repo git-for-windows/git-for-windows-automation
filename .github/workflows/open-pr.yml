@@ -141,7 +141,7 @@ jobs:
         shell: bash
         run: |
           cd "/usr/src/$REPO/$PACKAGE_TO_UPGRADE" &&
-          update_script="$GITHUB_WORKSPACE/version/checksums/$PACKAGE_TO_UPGRADE"
+          update_script="$GITHUB_WORKSPACE/update-scripts/version/$PACKAGE_TO_UPGRADE"
           if test -f "$update_script"
           then
             $update_script "$UPGRADE_TO_VERSION"
