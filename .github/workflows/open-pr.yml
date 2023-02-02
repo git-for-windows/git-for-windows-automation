@@ -75,11 +75,22 @@ jobs:
             core.setSecret(accessToken)
             core.setOutput('token', accessToken)
       - name: initialize bare SDK clone
+        id: clone-g4w-sdk
         shell: bash
         run: |
           git clone --bare --depth=1 --single-branch --branch=main --filter=blob:none \
-            https://github.com/git-for-windows/git-sdk-64 .tmp
+            https://github.com/git-for-windows/git-sdk-64 .tmp &&
+          echo "rev=$(git -C .tmp rev-parse HEAD)" >>$GITHUB_OUTPUT
+      - name: restore cached git-sdk-64 subset
+        id: restore-g4w-sdk
+        uses: actions/cache/restore@v3
+        env:
+          cache-name: cache-g4w-sdk
+        with:
+          path: .sdk
+          key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
       - name: check out git-sdk-64 subset
+        if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
         shell: bash
         env:
           GIT_CONFIG_PARAMETERS: "'checkout.workers=56'"
@@ -113,6 +124,14 @@ jobs:
           cygpath -aw "usr/bin" >>$GITHUB_PATH &&
           cygpath -aw "mingw64/bin" >>$GITHUB_PATH &&
           echo "MSYSTEM=MINGW64" >>$GITHUB_ENV
+      - name: cache git-sdk-64 subset
+        if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v3
+        env:
+          cache-name: cache-g4w-sdk
+        with:
+          path: .sdk
+          key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
       - name: Clone ${{ env.REPO }}
         shell: bash
         run: |
