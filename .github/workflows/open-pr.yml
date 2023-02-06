@@ -74,39 +74,64 @@ jobs:
 
             core.setSecret(accessToken)
             core.setOutput('token', accessToken)
-      - name: set up partial Git for Windows SDK
-        uses: git-for-windows/setup-git-for-windows-sdk@v1
-        with:
-          flavor: minimal
-      - name: download files necessary for `updpkgsums` to work
+      - name: initialize bare SDK clone
+        id: clone-g4w-sdk
         shell: bash
         run: |
-          for p in \
-            /etc/makepkg.conf \
-            /usr/bin/gettext.exe \
-            /usr/bin/makepkg \
-            /usr/bin/nproc.exe \
-            /usr/bin/pacman.exe \
-            /usr/bin/sha256sum.exe \
-            /usr/bin/updpkgsums
-          do
-            curl -sLo $p https://github.com/git-for-windows/git-sdk-64/raw/HEAD$p || exit 1
-          done &&
-          for p in /usr/share/makepkg
-          do
-            b=${p##*/} &&
-            d=${p%/$b} &&
-            if test "z$b" = "z$d"
-            then
-              d=
-            fi &&
-            tree=$(curl -s https://api.github.com/repos/git-for-windows/git-sdk-64/git/trees/main:${d#/} |
-              jq -r '.tree[] | select(.path | test("^'$b'$")) | .sha') &&
-            mkdir -p $p &&
-            curl -sL https://github.com/git-for-windows/git-sdk-64/tarball/$tree |
-            tar --strip-components=1 -C $p -xzvf - || exit 1
-          done &&
-          ln -s "${COMSPEC%cmd.exe}curl.exe" /usr/bin/
+          git clone --bare --depth=1 --single-branch --branch=main --filter=blob:none \
+            https://github.com/git-for-windows/git-sdk-64 .tmp &&
+          echo "rev=$(git -C .tmp rev-parse HEAD)" >>$GITHUB_OUTPUT
+      - name: restore cached git-sdk-64 subset
+        id: restore-g4w-sdk
+        uses: actions/cache/restore@v3
+        env:
+          cache-name: cache-g4w-sdk
+        with:
+          path: .sdk
+          key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
+      - name: check out git-sdk-64 subset
+        if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
+        shell: bash
+        env:
+          GIT_CONFIG_PARAMETERS: "'checkout.workers=56'"
+        run: |
+          git -C .tmp config extensions.worktreeConfig true &&
+          git -C .tmp worktree add --no-checkout --detach "$PWD/.sdk" &&
+          cd .sdk &&
+          git config --worktree core.sparseCheckout true &&
+          git config --worktree core.bare false &&
+          sparse="$(git rev-parse --git-path info/sparse-checkout)" &&
+          mkdir -p "${sparse%/*}" &&
+          git show HEAD:.sparse/minimal-sdk >"$sparse" &&
+          cat >>"$sparse" <<-EOF &&
+          /etc/makepkg.conf
+          /usr/bin/gettext.exe
+          /usr/bin/makepkg
+          /usr/bin/nproc.exe
+          /usr/bin/pacman.exe
+          /usr/bin/sha256sum.exe
+          /usr/bin/updpkgsums
+          /usr/share/makepkg/
+          /mingw64/bin/curl.exe
+          EOF
+          git checkout -- &&
+
+          # makepkg/updpkgsums expects `curl` to be present in `/usr/bin/`
+          printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >usr/bin/curl &&
+
+          # add the SDK directories to the `PATH`
+          cygpath -aw "usr/bin/core_perl" >>$GITHUB_PATH &&
+          cygpath -aw "usr/bin" >>$GITHUB_PATH &&
+          cygpath -aw "mingw64/bin" >>$GITHUB_PATH &&
+          echo "MSYSTEM=MINGW64" >>$GITHUB_ENV
+      - name: cache git-sdk-64 subset
+        if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v3
+        env:
+          cache-name: cache-g4w-sdk
+        with:
+          path: .sdk
+          key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
       - name: Clone ${{ env.REPO }}
         shell: bash
         run: |
