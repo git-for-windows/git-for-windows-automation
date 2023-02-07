@@ -140,8 +140,6 @@ jobs:
           flavor: ${{ env.PACKAGE_TO_BUILD == 'mingw-w64-git' && 'build-installers' || 'full' }}
           architecture: ${{ env.ARCHITECTURE || 'x86_64' }}
           msys: ${{ env.REPO == 'MSYS2-packages' || env.PACKAGE_TO_BUILD == 'git-for-windows-keyring' }}
-          # We only have to clean up on self-hosted runners
-          cleanup: ${{ runner.arch == 'ARM64' && true || false }}
 
       - name: Clone ${{ env.REPO }}
         shell: bash
