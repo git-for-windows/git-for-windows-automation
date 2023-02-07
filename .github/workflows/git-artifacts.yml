@@ -22,6 +22,7 @@ on:
         options: 
         - x86_64
         - i686
+        - aarch64
       bundle_artifacts_workflow_run_id:
         description: 'Workflow run ID from bundle-artifacts pipeline'
         required: false
@@ -42,7 +43,7 @@ defaults:
 
 jobs:
   pkg:
-    runs-on: windows-latest
+    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
     outputs:
       artifact_matrix: ${{steps.artifact-build-matrix.outputs.matrix}}
       msystem: ${{steps.configure-environment.outputs.MSYSTEM}}
@@ -64,6 +65,12 @@ jobs:
               MINGW_PREFIX=/mingw32
               MINGW_PACKAGE_PREFIX=mingw-w64-i686
               SDK_REPO_ARCH=32
+              ;;
+            aarch64)
+              MSYSTEM=CLANGARM64
+              MINGW_PREFIX=/clangarm64
+              MINGW_PACKAGE_PREFIX=mingw-w64-clang-aarch64
+              SDK_REPO_ARCH=arm64
               ;;
             *)
               echo "Unhandled architecture: $ARCHITECTURE"
@@ -194,7 +201,7 @@ jobs:
           name: pkg-${{env.ARCHITECTURE}}
           path: artifacts
   artifacts:
-    runs-on: windows-latest
+    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
     needs: pkg
     env:
       MSYSTEM: ${{ needs.pkg.outputs.msystem }}
