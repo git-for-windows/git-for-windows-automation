@@ -152,6 +152,7 @@ jobs:
       id: deploy-arm-template
       with:
         resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
+        deploymentName: deploy-${{ steps.generate-vm-name.outputs.vm_name }}
         template: ./azure-self-hosted-runners/azure-arm-template.json
         parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json ${{ env.AZURE_ARM_PARAMETERS }}
     
