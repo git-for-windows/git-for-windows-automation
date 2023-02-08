@@ -4,7 +4,7 @@
 // Let's auto-translate that.
 
 (async () => {
-    const version = process.argv[2].replace(/_P/, 'p')
+    const version = process.argv[2].replace(/[_.]P/, 'p')
 
     const fs = require('fs')
     const lines = fs.readFileSync('PKGBUILD').toString('utf-8').split(/\r?\n/)
