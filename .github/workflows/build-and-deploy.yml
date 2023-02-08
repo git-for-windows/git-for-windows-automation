@@ -140,8 +140,6 @@ jobs:
           flavor: ${{ env.PACKAGE_TO_BUILD == 'mingw-w64-git' && 'build-installers' || 'full' }}
           architecture: ${{ env.ARCHITECTURE || 'x86_64' }}
           msys: ${{ env.REPO == 'MSYS2-packages' || env.PACKAGE_TO_BUILD == 'git-for-windows-keyring' }}
-          # We only have to clean up on self-hosted runners
-          cleanup: ${{ runner.arch == 'ARM64' && true || false }}
 
       - name: Clone ${{ env.REPO }}
         shell: bash
@@ -250,9 +248,20 @@ jobs:
           dir="$(cygpath -au artifacts)" &&
           mkdir -p "$dir" &&
 
+          case "$ARCHITECTURE" in
+            aarch64)
+              GIT_EXE="/clangarm64/bin/git.exe"
+              BUILD_SRC=
+              ;;
+            *)
+              GIT_EXE="/mingw64/bin/git.exe"
+              BUILD_SRC="YesPlease"
+              ;;
+          esac &&
+
           {
             test -f /usr/bin/git ||
-            printf '#!/bin/sh\n\nexec /mingw64/bin/git.exe "$@"\n' >/usr/bin/git
+            printf '#!/bin/sh\n\nexec '$GIT_EXE' "$@"\n' >/usr/bin/git
           } &&
 
           MINGW_ARCHS_TO_BUILD=$(
@@ -265,18 +274,15 @@ jobs:
                     esac
           )
 
-          # No need to rebuild i686/x86_64 flavors when building the initial
-          # arm64 versions of the wintoast/GCM packages
-          test ebe6c944c573ee4d8900f0e015365468606c9e1e != "$REF" ||
-          test "mingw32 mingw64 clangarm64" != "$MINGW_ARCHS_TO_BUILD" ||
-          MINGW_ARCHS_TO_BUILD=clangarm64
-
           cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
           MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH=$MINGW_ARCHS_TO_BUILD $MAKEPKG -s --noconfirm &&
           cp *.pkg.tar* "$dir/" &&
 
-          MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=mingw64 $MAKEPKG --allsource &&
-          cp *.src.tar* "$dir/" &&
+          if test -n "$BUILD_SRC"
+          then
+            MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=mingw64 $MAKEPKG --allsource &&
+            cp *.src.tar* "$dir/"
+          fi &&
 
           # Ensure that the Git worktree is still clean
           ls -la &&
