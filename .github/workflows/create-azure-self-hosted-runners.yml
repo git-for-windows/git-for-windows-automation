@@ -32,9 +32,9 @@ env:
   DEALLOCATE_IMMEDIATELY: ${{ github.event.inputs.deallocate_immediately }}
   # This has to be a public URL that the VM can access after creation
   POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/azure-self-hosted-runners/post-deployment-script.ps1
-  # Note that you'll need "p" (arm64 processor) and ideally "d" (local temp disk). The number 8 stands for 8 CPU-cores.
+  # Note that you'll need "p" (arm64 processor) and ideally "d" (local temp disk). The number 4 stands for 4 CPU-cores.
   # For a convenient overview of all arm64 VM types, see e.g. https://azureprice.net/?_cpuArchitecture=Arm64
-  AZURE_VM_TYPE: Standard_D8plds_v5
+  AZURE_VM_TYPE: Standard_D4plds_v5
   # At the time of writing, "eastus", "eastus2" and "westus2" were among the cheapest region for the VM type we're using.
   # For more information, see https://learn.microsoft.com/en-us/azure/virtual-machines/dplsv5-dpldsv5-series (which
   # unfortunately does not have more information about price by region)
