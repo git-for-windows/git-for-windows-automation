@@ -1,0 +1,272 @@
+name: git-artifacts
+run-name: Build git-artifacts (${{ inputs.architecture }})
+
+on:
+  workflow_dispatch:
+    inputs:
+      artifacts:
+        description: 'Optionally restrict what artifacts to build (portable, installer, etc.). Separate artifacts with spaces'
+        required: false
+      ref:
+        description: 'Optionally override which branch to build'
+        required: false
+        default: main
+      repository:
+        description: 'Optionally override from where to fetch the specified ref'
+        required: false
+        default: git-for-windows/git
+      architecture:
+        type: choice
+        description: 'Architecture to build'
+        required: true
+        options: 
+        - x86_64
+        - i686
+        - aarch64
+      bundle_artifacts_workflow_run_id:
+        description: 'Workflow run ID from bundle-artifacts pipeline'
+        required: false
+
+env:
+  GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
+  HOME: "${{github.workspace}}\\home"
+  USERPROFILE: "${{github.workspace}}\\home"
+  ARTIFACTS_TO_BUILD: "${{github.event.inputs.artifacts}}"
+  REPOSITORY: "${{github.event.inputs.repository}}"
+  REF: "${{github.event.inputs.ref}}"
+  ARCHITECTURE: "${{github.event.inputs.architecture}}"
+  BUNDLE_ARTIFACTS_WORKFLOW_RUN_ID: "${{github.event.inputs.bundle_artifacts_workflow_run_id}}"
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  pkg:
+    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
+    outputs:
+      artifact_matrix: ${{steps.artifact-build-matrix.outputs.matrix}}
+      msystem: ${{steps.configure-environment.outputs.MSYSTEM}}
+      mingw_package_prefix: ${{steps.configure-environment.outputs.MINGW_PACKAGE_PREFIX}}
+      sdk_repo_arch: ${{steps.configure-environment.outputs.SDK_REPO_ARCH}}
+    steps:
+      - name: Configure environment
+        id: configure-environment
+        run: |
+          case "$ARCHITECTURE" in
+            x86_64)
+              MSYSTEM=MINGW64
+              MINGW_PREFIX=/mingw64
+              MINGW_PACKAGE_PREFIX=mingw-w64-x86_64
+              SDK_REPO_ARCH=64
+              ;;
+            i686)
+              MSYSTEM=MINGW32
+              MINGW_PREFIX=/mingw32
+              MINGW_PACKAGE_PREFIX=mingw-w64-i686
+              SDK_REPO_ARCH=32
+              ;;
+            aarch64)
+              MSYSTEM=CLANGARM64
+              MINGW_PREFIX=/clangarm64
+              MINGW_PACKAGE_PREFIX=mingw-w64-clang-aarch64
+              SDK_REPO_ARCH=arm64
+              ;;
+            *)
+              echo "Unhandled architecture: $ARCHITECTURE"
+              exit 1
+              ;;
+          esac
+          echo "MSYSTEM=$MSYSTEM" >> $GITHUB_ENV
+          echo "MSYSTEM=$MSYSTEM" >> $GITHUB_OUTPUT
+          echo "MINGW_PREFIX=$MINGW_PREFIX" >> $GITHUB_ENV
+          echo "MINGW_PACKAGE_PREFIX=$MINGW_PACKAGE_PREFIX" >> $GITHUB_ENV
+          echo "MINGW_PACKAGE_PREFIX=$MINGW_PACKAGE_PREFIX" >> $GITHUB_OUTPUT
+          echo "SDK_REPO_ARCH=$SDK_REPO_ARCH" >> $GITHUB_OUTPUT
+          echo "ARTIFACTS_TO_BUILD=$(test -n "$ARTIFACTS_TO_BUILD" && echo $ARTIFACTS_TO_BUILD || \
+            echo "installer portable archive mingit$(test "$ARCHITECTURE" = aarch64 || echo ' mingit-busybox')")" >> $GITHUB_ENV
+      - name: Configure user
+        run:
+          USER_NAME="${{github.actor}}" &&
+          USER_EMAIL="${{github.actor}}@users.noreply.github.com" &&
+          mkdir "$HOME" &&
+          git config --global user.name "$USER_NAME" &&
+          git config --global user.email "$USER_EMAIL" &&
+          echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >> $GITHUB_ENV
+      - uses: git-for-windows/setup-git-for-windows-sdk@v1
+        with:
+          flavor: build-installers
+          architecture: ${{env.architecture}}
+      - name: clone git-for-windows-automation
+        run: git clone --single-branch -b $GITHUB_REF_NAME https://github.com/git-for-windows/git-for-windows-automation
+      - uses: actions/github-script@v6
+        id: artifact-build-matrix
+        name: Create artifact build matrix
+        with:
+          script: |
+            core.info('Preparing artifact build matrix...')
+            const createArtifactsMatrix = require('./git-for-windows-automation/create-artifacts-matrix')
+            createArtifactsMatrix(core, process.env.ARTIFACTS_TO_BUILD, process.env.ARCHITECTURE)
+      - uses: actions/github-script@v6
+        id: get-bundle-artifacts-url
+        name: Get bundle-artifacts download URL
+        with:
+          script: |
+            const getArtifact = require('./git-for-windows-automation/get-bundle-artifacts-artifact')
+            const workflowId = process.env.BUNDLE_ARTIFACTS_WORKFLOW_RUN_ID
+            core.info('Getting download URL for bundle-artifacts...')
+            await getArtifact(github, context, core, workflowId)
+      - name: Download bundle-artifacts zip
+        run: |
+          mkdir bundle-artifacts
+          curl -o bundle-artifacts.zip "${{steps.get-bundle-artifacts-url.outputs.downloadUrl}}"
+          unzip bundle-artifacts.zip -d bundle-artifacts
+          echo "GIT_VERSION=$(cat bundle-artifacts/next_version)" >> $GITHUB_ENV
+      - name: Re-publish bundle-artifacts so the next job can easily use it
+        uses: actions/upload-artifact@v3
+        with:
+          name: bundle-artifacts
+          path: bundle-artifacts
+      - name: Clone and update build-extra
+        run: |
+          d=/usr/src/build-extra &&
+          if test ! -d $d/.git
+          then
+            git clone --single-branch -b main https://github.com/git-for-windows/build-extra $d
+          else
+            git -C $d fetch https://github.com/git-for-windows/build-extra main &&
+            git -C $d switch -C main FETCH_HEAD
+          fi &&
+          git -C $d pull "$PWD"/bundle-artifacts/build-extra.bundle main
+      - name: Check out git/git
+        shell: bash
+        run: |
+          git -c init.defaultBranch=main init &&
+          git remote add -f origin https://github.com/git-for-windows/git &&
+          git fetch --tags bundle-artifacts/git.bundle $(cat bundle-artifacts/next_version) &&
+          git reset --hard $(cat bundle-artifacts/next_version)
+      - name: Prepare home directory for code-signing
+        env:
+          CODESIGN_P12: ${{secrets.CODESIGN_P12}}
+          CODESIGN_PASS: ${{secrets.CODESIGN_PASS}}
+        if: env.CODESIGN_P12 != '' && env.CODESIGN_PASS != ''
+        run: |
+          cd home &&
+          mkdir -p .sig &&
+          echo -n "$CODESIGN_P12" | tr % '\n' | base64 -d >.sig/codesign.p12 &&
+          echo -n "$CODESIGN_PASS" >.sig/codesign.pass
+          git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
+      - name: Prepare home directory for GPG signing
+        if: env.GPGKEY != ''
+        run: |
+          echo '${{secrets.PRIVGPGKEY}}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
+          info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
+          git config --global user.name "${info% <*}" &&
+          git config --global user.email "<${info#*<}"
+        env:
+          GPGKEY: ${{secrets.GPGKEY}}
+      - name: Cache ${{env.MINGW_PACKAGE_PREFIX}}-git
+        id: cache-git-pkg
+        uses: actions/cache@v3
+        with:
+          path: artifacts
+          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}
+      - name: Build ${{env.MINGW_PACKAGE_PREFIX}}-git
+        if: steps.cache-git-pkg.outputs.cache-hit != 'true'
+        env:
+          GPGKEY: "${{secrets.GPGKEY}}"
+        run: |
+          set -x
+          BUILD_SRC=$(test x86_64 != "$ARCHITECTURE" || echo "--build-src-pkg")
+          # Make sure that there is a `/usr/bin/git` that can be used by `makepkg-mingw`
+          printf '#!/bin/sh\n\nexec '$MINGW_PREFIX'/bin/git.exe "$@"\n' >/usr/bin/git &&
+          /usr/src/build-extra/please.sh build-mingw-w64-git --only-$ARCHITECTURE $BUILD_SRC -o artifacts HEAD &&
+          cp bundle-artifacts/ver artifacts/ &&
+          if test -n "$GPGKEY"
+          then
+            for tar in artifacts/*.tar*
+            do
+              /usr/src/build-extra/gnupg-with-gpgkey.sh --detach-sign --no-armor $tar
+            done
+          fi &&
+          b=$PWD/artifacts &&
+          version=$(cat bundle-artifacts/next_version) &&
+          (cd /usr/src/MINGW-packages/mingw-w64-git &&
+          cp PKGBUILD.$version PKGBUILD &&
+          git commit -s -m "mingw-w64-git: new version ($version)" PKGBUILD &&
+          git bundle create "$b"/MINGW-packages.bundle origin/main..main)
+      - name: Publish ${{env.MINGW_PACKAGE_PREFIX}}-git
+        uses: actions/upload-artifact@v3
+        with:
+          name: pkg-${{env.ARCHITECTURE}}
+          path: artifacts
+  artifacts:
+    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
+    needs: pkg
+    env:
+      MSYSTEM: ${{ needs.pkg.outputs.msystem }}
+      MINGW_PACKAGE_PREFIX: ${{ needs.pkg.outputs.mingw_package_prefix }}
+      SDK_REPO_ARCH: ${{ needs.pkg.outputs.sdk_repo_arch }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.pkg.outputs.artifact_matrix) }}
+    steps:
+      - name: Download pkg-${{env.ARCHITECTURE}}
+        uses: actions/download-artifact@v3
+        with:
+          name: pkg-${{env.ARCHITECTURE}}
+          path: pkg-${{env.ARCHITECTURE}}
+      - name: Download bundle-artifacts
+        uses: actions/download-artifact@v3
+        with:
+          name: bundle-artifacts
+          path: bundle-artifacts
+      - uses: git-for-windows/setup-git-for-windows-sdk@v1
+        with:
+          flavor: build-installers
+          architecture: ${{env.ARCHITECTURE}}
+      - name: Clone and update build-extra
+        run: |
+          d=/usr/src/build-extra &&
+          if test ! -d $d/.git
+          then
+            git clone --single-branch -b main https://github.com/git-for-windows/build-extra $d
+          else
+            git -C $d fetch https://github.com/git-for-windows/build-extra main &&
+            git -C $d switch -C main FETCH_HEAD
+          fi &&
+          git -C $d pull "$PWD"/bundle-artifacts/build-extra.bundle main
+      - name: Prepare home directory for code-signing
+        env:
+          CODESIGN_P12: ${{secrets.CODESIGN_P12}}
+          CODESIGN_PASS: ${{secrets.CODESIGN_PASS}}
+        if: (matrix.artifact.name == 'installer' || matrix.artifact.name == 'portable') && env.CODESIGN_P12 != '' && env.CODESIGN_PASS != ''
+        run: |
+          mkdir -p home/.sig &&
+          echo -n "$CODESIGN_P12" | tr % '\n' | base64 -d >home/.sig/codesign.p12 &&
+          echo -n "$CODESIGN_PASS" >home/.sig/codesign.pass &&
+          git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
+      - name: Build ${{env.ARCHITECTURE}} ${{matrix.artifact.name}}
+        run: |
+          set -x
+          eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$(cat pkg-${{env.ARCHITECTURE}}/ver) -o artifacts --${{matrix.artifact.name}} --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-[0-9]*.tar.xz --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-doc-html-[0-9]*.tar.xz &&
+          if test portable = '${{matrix.artifact.name}}' && test -n "$(git config alias.signtool)"
+          then
+            git signtool artifacts/PortableGit-*.exe
+          fi &&
+          openssl dgst -sha256 artifacts/${{matrix.artifact.fileprefix}}-*.${{matrix.artifact.fileextension}} | sed "s/.* //" >artifacts/sha-256.txt
+      - name: Copy package-versions and pdbs
+        if: matrix.artifact.name == 'installer'
+        run: |
+          cp /usr/src/build-extra/installer/package-versions.txt artifacts/ &&
+          a=$PWD/artifacts &&
+          p=$PWD/pkg-${{env.ARCHITECTURE}} &&
+          (cd /usr/src/build-extra &&
+          mkdir -p cached-source-packages &&
+          cp "$p"/*-pdb* cached-source-packages/ &&
+          GIT_CONFIG_PARAMETERS="'windows.sdk${{env.SDK_REPO_ARCH}}.path='" ./please.sh bundle_pdbs --arch=${{env.ARCHITECTURE}} --directory="$a" installer/package-versions.txt)
+      - name: Publish ${{matrix.artifact.name}}-${{env.ARCHITECTURE}}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{matrix.artifact.name}}-${{env.ARCHITECTURE}}
+          path: artifacts
