@@ -117,7 +117,7 @@ jobs:
           git checkout -- &&
 
           # makepkg/updpkgsums expects `curl` to be present in `/usr/bin/`
-          printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >usr/bin/curl &&
+          printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >usr/bin/curl
       - name: use git-sdk-64 subset
         shell: bash
         run: |
