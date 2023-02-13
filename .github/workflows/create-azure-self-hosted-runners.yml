@@ -80,7 +80,7 @@ jobs:
           )
 
           const getInstallationAccessToken = require('./get-installation-access-token')
-          const accessToken = await getInstallationAccessToken(
+          const { token: accessToken } = await getInstallationAccessToken(
             console,
             appId,
             privateKey,

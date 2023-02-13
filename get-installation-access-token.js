@@ -7,6 +7,8 @@ module.exports = async (context, appId, privateKey, installation_id) => {
         'POST',
         `/app/installations/${installation_id}/access_tokens`)
     if (answer.error) throw answer.error
-    if (answer.token) return answer.token
+    if (answer.token) return {
+        token: answer.token
+    }
     throw new Error(`Unhandled response:\n${JSON.stringify(answer, null, 2)}`)
 }
