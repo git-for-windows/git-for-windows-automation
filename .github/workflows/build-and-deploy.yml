@@ -66,7 +66,7 @@ jobs:
             )
 
             const getInstallationAccessToken = require('./get-installation-access-token')
-            const accessToken = await getInstallationAccessToken(
+            const { expiresAt, token: accessToken } = await getInstallationAccessToken(
               console,
               appId,
               privateKey,
@@ -74,6 +74,7 @@ jobs:
             )
 
             core.setSecret(accessToken)
+            core.setOutput('expires-at', expiresAt)
             core.setOutput('token', accessToken)
 
       - name: get check run id
@@ -295,6 +296,45 @@ jobs:
             exit 1
           fi
 
+      - name: refresh installation token (if needed)
+        if: env.CREATE_CHECK_RUN != 'false'
+        id: refresh
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // GitHub Apps' installation access tokens expire after one hour, see:
+            // https://docs.github.com/en/developers/apps/building-github-apps/authenticating-with-github-apps#authenticating-as-an-installation
+            // let's generate a new one if less than 5 minutes before the expiry date, otherwise reuse it
+            if (Date.parse('${{ steps.setup.outputs.expires-at }}') - Date.now() > 5 * 60 * 1000) {
+              core.setOutput('expires-at', '${{ steps.setup.outputs.expires-at }}')
+              core.setOutput('token', '${{ steps.setup.outputs.token }}')
+              core.info('Continuing to use the unexpired installation access token')
+              return
+            }
+            const appId = ${{ secrets.GH_APP_ID }}
+            const privateKey = `${{ secrets.GH_APP_PRIVATE_KEY }}`
+
+            const getAppInstallationId = require('./get-app-installation-id')
+            const installationId = await getAppInstallationId(
+              console,
+              appId,
+              privateKey,
+              process.env.OWNER,
+              process.env.REPO
+            )
+
+            const getInstallationAccessToken = require('./get-installation-access-token')
+            const { expiresAt, token: accessToken } = await getInstallationAccessToken(
+              console,
+              appId,
+              privateKey,
+              installationId
+            )
+
+            core.setSecret(accessToken)
+            core.setOutput('expires-at', expiresAt)
+            core.setOutput('token', accessToken)
+
       - name: update check-run
         if: env.CREATE_CHECK_RUN != 'false'
         uses: actions/github-script@v6
@@ -303,7 +343,7 @@ jobs:
             const updateCheckRun = require('./update-check-run')
             await updateCheckRun(
               console,
-              '${{ steps.setup.outputs.token }}',
+              '${{ steps.refresh.outputs.token }}',
               process.env.OWNER,
               process.env.REPO,
               '${{ steps.check-run.outputs.id }}',
@@ -347,7 +387,7 @@ jobs:
             const updateCheckRun = require('./update-check-run')
             await updateCheckRun(
               console,
-              '${{ steps.setup.outputs.token }}',
+              '${{ steps.refresh.outputs.token }}',
               process.env.OWNER,
               process.env.REPO,
               '${{ steps.check-run.outputs.id }}',
