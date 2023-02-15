@@ -26,6 +26,12 @@ on:
       bundle_artifacts_workflow_run_id:
         description: 'Workflow run ID from bundle-artifacts pipeline'
         required: false
+      existing_git_tag:
+        description: 'Existing tag to build from. Requires bundle_artifacts_workflow_run_id to be empty'
+        required: false
+      build_extra_rev_for_existing_git_tag:
+        description: 'build-extra revision to use if building from an existing Git tag. Required if existing_git_tag is non-empty'
+        required: false
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
@@ -36,6 +42,8 @@ env:
   REF: "${{github.event.inputs.ref}}"
   ARCHITECTURE: "${{github.event.inputs.architecture}}"
   BUNDLE_ARTIFACTS_WORKFLOW_RUN_ID: "${{github.event.inputs.bundle_artifacts_workflow_run_id}}"
+  EXISTING_GIT_TAG: "${{github.event.inputs.existing_git_tag}}"
+  BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG: "${{github.event.inputs.build_extra_rev_for_existing_git_tag}}"
 
 defaults:
   run:
@@ -107,16 +115,43 @@ jobs:
             core.info('Preparing artifact build matrix...')
             const createArtifactsMatrix = require('./git-for-windows-automation/create-artifacts-matrix')
             createArtifactsMatrix(core, process.env.ARTIFACTS_TO_BUILD, process.env.ARCHITECTURE)
+      - name: Construct bundle-artifacts from existing tag
+        if: env.EXISTING_GIT_TAG != ''
+        run: |
+          die () {
+            echo "$*" >&2
+            exit 1
+          }
+
+          test -z "$BUNDLE_ARTIFACTS_WORKFLOW_RUN_ID" ||
+          die 'existing_git_tag cannot be used with bundle_artifacts_workflow_run_id!'
+
+          test -n "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" ||
+          die 'existing_git_tag needs build_extra_rev_for_existing_git_tag!'
+
+          set -o pipefail &&
+
+          mkdir -p bundle-artifacts &&
+          echo "$EXISTING_GIT_TAG" >bundle-artifacts/next_version &&
+          echo "$EXISTING_GIT_TAG" |
+          sed -n '/^v[0-9]\+\.[0-9]\+\.[0-9]\+\.windows\.[0-9]\+$/{s/^v//;s/\.windows\.1//;s/\.windows\.\(.*\)/(\1)/;p}' \
+            >bundle-artifacts/display_version &&
+          sed 's/(\(.*\))$/.\1/' <bundle-artifacts/display_version >bundle-artifacts/ver
       - uses: actions/github-script@v6
+        if: env.BUNDLE_ARTIFACTS_WORKFLOW_RUN_ID != ''
         id: get-bundle-artifacts-url
         name: Get bundle-artifacts download URL
         with:
           script: |
+            if (process.env.EXISTING_GIT_TAG || process.env.BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG) {
+              throw new Error('bundle_artifacts_workflow_run_id cannot be used with existing_git_tag or build_extra_rev_for_existing_git_tag!')
+            }
             const getArtifact = require('./git-for-windows-automation/get-bundle-artifacts-artifact')
             const workflowId = process.env.BUNDLE_ARTIFACTS_WORKFLOW_RUN_ID
             core.info('Getting download URL for bundle-artifacts...')
             await getArtifact(github, context, core, workflowId)
       - name: Download bundle-artifacts zip
+        if: env.BUNDLE_ARTIFACTS_WORKFLOW_RUN_ID != ''
         run: |
           mkdir bundle-artifacts
           curl -o bundle-artifacts.zip "${{steps.get-bundle-artifacts-url.outputs.downloadUrl}}"
@@ -137,13 +172,24 @@ jobs:
             git -C $d fetch https://github.com/git-for-windows/build-extra main &&
             git -C $d switch -C main FETCH_HEAD
           fi &&
-          git -C $d pull "$PWD"/bundle-artifacts/build-extra.bundle main
+          if test -z "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
+          then
+            git -C $d pull "$PWD"/bundle-artifacts/build-extra.bundle main
+          else
+            git -C $d fetch origin "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" &&
+            git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
+          fi
       - name: Check out git/git
         shell: bash
         run: |
           git -c init.defaultBranch=main init &&
           git remote add -f origin https://github.com/git-for-windows/git &&
-          git fetch --tags bundle-artifacts/git.bundle $(cat bundle-artifacts/next_version) &&
+          if test -n "$EXISTING_GIT_TAG"
+          then
+            git fetch origin "refs/tags/$EXISTING_GIT_TAG:refs/tags/$EXISTING_GIT_TAG"
+          else
+            git fetch --tags bundle-artifacts/git.bundle $(cat bundle-artifacts/next_version)
+          fi &&
           git reset --hard $(cat bundle-artifacts/next_version)
       - name: Prepare home directory for code-signing
         env:
@@ -193,8 +239,18 @@ jobs:
           version=$(cat bundle-artifacts/next_version) &&
           (cd /usr/src/MINGW-packages/mingw-w64-git &&
           cp PKGBUILD.$version PKGBUILD &&
-          git commit -s -m "mingw-w64-git: new version ($version)" PKGBUILD &&
-          git bundle create "$b"/MINGW-packages.bundle origin/main..main)
+          if test -z "$EXISTING_GIT_TAG"
+          then
+            git commit -s -m "mingw-w64-git: new version ($version)" PKGBUILD &&
+          git bundle create "$b"/MINGW-packages.bundle origin/main..main
+          elif ! git update-index --ignore-submodules --refresh ||
+            ! git diff-files --ignore-submodules ||
+            ! git diff-index --cached --ignore-submodules HEAD
+          then
+            echo "::warning::Uncommitted changes after build!" >&2 &&
+            git diff >&2 &&
+            git bundle create "$b"/MINGW-packages.bundle main^..main
+          fi)
       - name: Publish ${{env.MINGW_PACKAGE_PREFIX}}-git
         uses: actions/upload-artifact@v3
         with:
@@ -235,7 +291,13 @@ jobs:
             git -C $d fetch https://github.com/git-for-windows/build-extra main &&
             git -C $d switch -C main FETCH_HEAD
           fi &&
-          git -C $d pull "$PWD"/bundle-artifacts/build-extra.bundle main
+          if test -z "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
+          then
+            git -C $d pull "$PWD"/bundle-artifacts/build-extra.bundle main
+          else
+            git -C $d fetch origin "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" &&
+            git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
+          fi
       - name: Prepare home directory for code-signing
         env:
           CODESIGN_P12: ${{secrets.CODESIGN_P12}}
