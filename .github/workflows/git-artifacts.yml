@@ -7,14 +7,6 @@ on:
       artifacts:
         description: 'Optionally restrict what artifacts to build (portable, installer, etc.). Separate artifacts with spaces'
         required: false
-      ref:
-        description: 'Optionally override which branch to build'
-        required: false
-        default: main
-      repository:
-        description: 'Optionally override from where to fetch the specified ref'
-        required: false
-        default: git-for-windows/git
       architecture:
         type: choice
         description: 'Architecture to build'
@@ -38,8 +30,6 @@ env:
   HOME: "${{github.workspace}}\\home"
   USERPROFILE: "${{github.workspace}}\\home"
   ARTIFACTS_TO_BUILD: "${{github.event.inputs.artifacts}}"
-  REPOSITORY: "${{github.event.inputs.repository}}"
-  REF: "${{github.event.inputs.ref}}"
   ARCHITECTURE: "${{github.event.inputs.architecture}}"
   BUNDLE_ARTIFACTS_WORKFLOW_RUN_ID: "${{github.event.inputs.bundle_artifacts_workflow_run_id}}"
   EXISTING_GIT_TAG: "${{github.event.inputs.existing_git_tag}}"
