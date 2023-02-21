@@ -118,6 +118,14 @@ jobs:
 
           # makepkg/updpkgsums expects `curl` to be present in `/usr/bin/`
           printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >usr/bin/curl
+      - name: cache git-sdk-64 subset
+        if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v3
+        env:
+          cache-name: cache-g4w-sdk
+        with:
+          path: .sdk
+          key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
       - name: use git-sdk-64 subset
         shell: bash
         run: |
@@ -128,14 +136,6 @@ jobs:
           cygpath -aw "usr/bin" >>$GITHUB_PATH &&
           cygpath -aw "mingw64/bin" >>$GITHUB_PATH &&
           echo "MSYSTEM=MINGW64" >>$GITHUB_ENV
-      - name: cache git-sdk-64 subset
-        if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
-        uses: actions/cache/save@v3
-        env:
-          cache-name: cache-g4w-sdk
-        with:
-          path: .sdk
-          key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
       - name: Clone ${{ env.REPO }}
         shell: bash
         run: |
