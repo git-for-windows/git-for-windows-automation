@@ -11,7 +11,8 @@ module.exports = async (context, token, owner, repo, ref, checkRunName, title, s
     .filter(e => e.name === checkRunName && e.conclusion === null).map(e => {
       return {
         id: e.id,
-        status: e.status
+        status: e.status,
+        output: e.output
       }
     })
   if (filtered.length > 0) {
@@ -22,7 +23,14 @@ module.exports = async (context, token, owner, repo, ref, checkRunName, title, s
         token,
         'PATCH',
         `/repos/${owner}/${repo}/check-runs/${filtered[0].id}`, {
-          status: 'in_progress'
+          status: 'in_progress',
+          details_url: detailsURL,
+          output: {
+            ...filtered[0].output,
+            title: title || filtered[0].output.title,
+            summary: summary || filtered[0].output.summary,
+            text: text || filtered[0].output.text
+          }
         }
       ))
     }
