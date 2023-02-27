@@ -67,17 +67,21 @@ jobs:
           GPGKEY: ${{secrets.GPGKEY}}
         run: |
           set -x &&
+
+          git -c init.defaultBranch=main init --bare git.git &&
+          git -C git.git remote add -f origin https://github.com/git-for-windows/git &&
+          git -C git.git fetch "https://github.com/$REPOSITORY" "$REV" &&
+          tag_name="$(git -C git.git describe --match 'v[0-9]*' FETCH_HEAD)" &&
+
           mkdir -p bundle-artifacts &&
-          git -c init.defaultBranch=main init --bare &&
-          git remote add -f origin https://github.com/git-for-windows/git &&
-          git fetch "https://github.com/$REPOSITORY" "$REV" &&
-          tag_name="$(git describe --match 'v[0-9]*' FETCH_HEAD)" &&
           echo "prerelease-${tag_name#v}" >bundle-artifacts/ver &&
           echo "${tag_name#v}" >bundle-artifacts/display_version &&
           echo "$tag_name" >bundle-artifacts/next_version &&
-          git tag $(test -z "$GPGKEY" || echo " -s") -m "Snapshot build" "$tag_name" FETCH_HEAD &&
-          git bundle create bundle-artifacts/git.bundle origin/main.."$tag_name" &&
-          release_note=$(git show -s  --pretty='tformat:%h (%s, %ad)' --date=short FETCH_HEAD) &&
+
+          git -C git.git tag $(test -z "$GPGKEY" || echo " -s") -m "Snapshot build" "$tag_name" FETCH_HEAD &&
+          git -C git.git bundle create "$GITHUB_WORKSPACE/bundle-artifacts/git.bundle" origin/main.."$tag_name" &&
+          release_note=$(git -C git.git show -s  --pretty='tformat:%h (%s, %ad)' --date=short FETCH_HEAD) &&
+
           cd $RUNNER_TEMP/build-extra &&
           node ./add-release-note.js --commit feature "Snapshot of $release_note" &&
           git bundle create "$GITHUB_WORKSPACE/bundle-artifacts/build-extra.bundle" origin/main..main
