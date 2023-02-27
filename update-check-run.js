@@ -21,4 +21,6 @@ module.exports = async (context, token, owner, repo, checkRunId, appendText, con
       ...statusUpdate
     }
   )
+
+  return text
 }
