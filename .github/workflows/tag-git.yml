@@ -1,14 +1,14 @@
 name: tag-git
+run-name: "Tag Git at ${{ inputs.repository }}@${{ inputs.rev }}"
 
 on:
   workflow_dispatch:
     inputs:
-      ref:
-        description: 'Optionally override which branch to build'
-        required: false
-        default: main
+      rev:
+        description: 'The commit to tag'
+        required: true
       repository:
-        description: 'Optionally override from where to fetch the specified ref'
+        description: 'Optionally override from where to fetch the specified rev'
         required: false
         default: git-for-windows/git
 
@@ -17,13 +17,28 @@ env:
   HOME: "${{github.workspace}}\\home"
   USERPROFILE: "${{github.workspace}}\\home"
   REPOSITORY: "${{github.event.inputs.repository}}"
-  REF: "${{github.event.inputs.ref}}"
+  REV: "${{github.event.inputs.rev}}"
   NODEJS_VERSION: 16
 
 jobs:
   tag-git:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v3
+      - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
+        if: env.CREATE_CHECK_RUN != 'false'
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          rev: ${{ env.REV }}
+          check-run-name: "tag-git"
+          title: "Tag Git @${{ env.REV }}"
+          summary: "Tag Git @${{ env.REV }}"
+          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: Configure user
         run:
           USER_NAME="${{github.actor}}" &&
@@ -49,13 +64,14 @@ jobs:
         with:
           node-version: ${{env.NODEJS_VERSION}}
       - name: Generate bundle artifacts
+        id: generate
         env:
           GPGKEY: ${{secrets.GPGKEY}}
         run: |
           mkdir -p bundle-artifacts &&
           git -c init.defaultBranch=main init --bare &&
           git remote add -f origin https://github.com/git-for-windows/git &&
-          git fetch "https://github.com/$REPOSITORY" "$REF:$REF" &&
+          git fetch "https://github.com/$REPOSITORY" "$REV" &&
           tag_name="$(git describe --match 'v[0-9]*' FETCH_HEAD)" &&
           echo "prerelease-${tag_name#v}" >bundle-artifacts/ver &&
           echo "${tag_name#v}" >bundle-artifacts/display_version &&
@@ -66,8 +82,23 @@ jobs:
           cd $RUNNER_TEMP/build-extra &&
           node ./add-release-note.js --commit feature "Snapshot of $release_note" &&
           git bundle create "$GITHUB_WORKSPACE/bundle-artifacts/build-extra.bundle" origin/main..main
+      - name: update check-run
+        if: env.CREATE_CHECK_RUN != 'false'
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: 'Tagged Git ${{ steps.generate.outputs.tag-name }}'
       - name: 'Publish Pipeline Artifact: bundle-artifacts'
         uses: actions/upload-artifact@v3
         with:
           name: bundle-artifacts
           path: ${{ github.workspace }}/bundle-artifacts
+      - name: mark check run as completed
+        if: env.CREATE_CHECK_RUN != 'false' && always()
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: "${{ job.status == 'success' && 'Done!' || format('Completed: {0}', job.status) }}."
+          conclusion: ${{ job.status }}
