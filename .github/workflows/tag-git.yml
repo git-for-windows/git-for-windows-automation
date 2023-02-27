@@ -14,8 +14,6 @@ on:
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
-  HOME: "${{github.workspace}}\\home"
-  USERPROFILE: "${{github.workspace}}\\home"
   REPOSITORY: "${{github.event.inputs.repository}}"
   REV: "${{github.event.inputs.rev}}"
   NODEJS_VERSION: 16
