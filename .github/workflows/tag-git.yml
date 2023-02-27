@@ -1,5 +1,5 @@
 name: tag-git
-run-name: "Tag Git at ${{ inputs.repository }}@${{ inputs.rev }}"
+run-name: "Tag Git at ${{ inputs.owner }}/${{ inputs.repo }}@${{ inputs.rev }}"
 
 on:
   workflow_dispatch:
@@ -7,14 +7,19 @@ on:
       rev:
         description: 'The commit to tag'
         required: true
-      repository:
+      owner:
         description: 'Optionally override from where to fetch the specified rev'
-        required: false
-        default: git-for-windows/git
+        required: true
+        default: git-for-windows
+      repo:
+        description: 'Optionally override from where to fetch the specified rev'
+        required: true
+        default: git
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
-  REPOSITORY: "${{github.event.inputs.repository}}"
+  OWNER: "${{github.event.inputs.owner}}"
+  REPO: "${{github.event.inputs.repo}}"
   REV: "${{github.event.inputs.rev}}"
   NODEJS_VERSION: 16
 
@@ -70,7 +75,7 @@ jobs:
 
           git -c init.defaultBranch=main init --bare git.git &&
           git -C git.git remote add -f origin https://github.com/git-for-windows/git &&
-          git -C git.git fetch "https://github.com/$REPOSITORY" "$REV" &&
+          git -C git.git fetch "https://github.com/$OWNER/$REPO" "$REV" &&
           tag_name="$(git -C git.git describe --match 'v[0-9]*' FETCH_HEAD)" &&
 
           mkdir -p bundle-artifacts &&
