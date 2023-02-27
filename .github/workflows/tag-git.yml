@@ -66,6 +66,7 @@ jobs:
         env:
           GPGKEY: ${{secrets.GPGKEY}}
         run: |
+          set -x &&
           mkdir -p bundle-artifacts &&
           git -c init.defaultBranch=main init --bare &&
           git remote add -f origin https://github.com/git-for-windows/git &&
