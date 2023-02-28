@@ -1,4 +1,4 @@
-module.exports = async (github, context, core, workflowRunId) => {
+module.exports = async (github, context, core, workflowRunId, artifactName) => {
     const { data } = workflowRunId
         ? await github.rest.actions.listWorkflowRunArtifacts({
             owner: context.repo.owner,
@@ -9,10 +9,10 @@ module.exports = async (github, context, core, workflowRunId) => {
             repo: context.repo.repo
         })
 
-    const artifacts = data.artifacts.filter(a => a.name === 'bundle-artifacts')
+    const artifacts = data.artifacts.filter(a => a.name === artifactName)
 
     if (artifacts.length === 0) {
-        core.setFailed('No artifacts with name bundle-artifacts found')
+        core.setFailed(`No artifacts with name '${artifactName}' found`)
         return
     }
 
