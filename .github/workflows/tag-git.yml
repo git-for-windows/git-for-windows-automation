@@ -71,25 +71,15 @@ jobs:
         env:
           GPGKEY: ${{secrets.GPGKEY}}
         run: |
-          set -x &&
-
           git -c init.defaultBranch=main init --bare git.git &&
           git -C git.git remote add -f origin https://github.com/git-for-windows/git &&
           git -C git.git fetch "https://github.com/$OWNER/$REPO" "$REV" &&
-          tag_name="$(git -C git.git describe --match 'v[0-9]*' FETCH_HEAD)-$(date +%Y%m%d%H%M%S)" &&
 
-          mkdir -p bundle-artifacts &&
-          echo "prerelease-${tag_name#v}" >bundle-artifacts/ver &&
-          echo "${tag_name#v}" >bundle-artifacts/display_version &&
-          echo "$tag_name" >bundle-artifacts/next_version &&
-
-          git -C git.git tag $(test -z "$GPGKEY" || echo " -s") -m "Snapshot build" "$tag_name" FETCH_HEAD &&
-          git -C git.git bundle create "$GITHUB_WORKSPACE/bundle-artifacts/git.bundle" origin/main.."$tag_name" &&
-          release_note=$(git -C git.git show -s  --pretty='tformat:%h (%s, %ad)' --date=short FETCH_HEAD) &&
-
-          cd $RUNNER_TEMP/build-extra &&
-          node ./add-release-note.js --commit feature "Snapshot of $release_note" &&
-          git bundle create "$GITHUB_WORKSPACE/bundle-artifacts/build-extra.bundle" origin/main..main
+          sh -x "$GITHUB_WORKSPACE/update-scripts/tag-git.sh" \
+            --git-dir="git.git" \
+            --build-extra-dir="$RUNNER_TEMP/build-extra" \
+            --artifacts-dir="$GITHUB_WORKSPACE/bundle-artifacts" \
+            "$REV"
       - name: update check-run
         if: env.CREATE_CHECK_RUN != 'false'
         uses: ./.github/actions/check-run-action
