@@ -1,9 +1,9 @@
-module.exports = async (github, context, core, workflowId) => {
-    const { data } = workflowId
+module.exports = async (github, context, core, workflowRunId) => {
+    const { data } = workflowRunId
         ? await github.rest.actions.listWorkflowRunArtifacts({
             owner: context.repo.owner,
             repo: context.repo.repo,
-            run_id: Number(workflowId)
+            run_id: Number(workflowRunId)
         }) : await github.rest.actions.listArtifactsForRepo({
             owner: context.repo.owner,
             repo: context.repo.repo
