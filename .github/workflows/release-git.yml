@@ -1,0 +1,161 @@
+name: Release Git for Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_artifacts_i686_workflow_run_id:
+        description: 'ID of the git-artifacts (i686) workflow run'
+        required: true
+      git_artifacts_x86_64_workflow_run_id:
+        description: 'ID of the git-artifacts (x86_64) workflow run'
+        required: true
+
+env:
+  HOME: "${{github.workspace}}\\home"
+  USERPROFILE: "${{github.workspace}}\\home"
+  OWNER: git-for-windows
+  REPO: git
+  I686_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_i686_workflow_run_id}}"
+  X86_64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_x86_64_workflow_run_id}}"
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      display-version: ${{ steps.bundle-artifacts.outputs.display-version }}
+      tag-name: ${{ steps.bundle-artifacts.outputs.tag-name }}
+      ver: ${{ steps.bundle-artifacts.outputs.ver }}
+      git-rev: ${{ steps.bundle-artifacts.outputs.git-rev }}
+      announcement: ${{ steps.bundle-artifacts.outputs.announcement }}
+      release-notes: ${{ steps.bundle-artifacts.outputs.release-notes }}
+    steps:
+      - uses: actions/checkout@v3
+      - name: Get bundle-artifacts and sha256sums
+        id: bundle-artifacts
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { downloadBundleArtifacts } = require('./github-release')
+            const result = await downloadBundleArtifacts(
+              console,
+              '${{ secrets.GITHUB_TOKEN }}',
+              context.repo.owner,
+              context.repo.repo,
+              process.env.I686_WORKFLOW_RUN_ID,
+              process.env.X86_64_WORKFLOW_RUN_ID
+            )
+
+            core.setOutput('display-version', result.displayVersion)
+            core.setOutput('tag-name', result.tagName)
+            core.setOutput('ver', result.ver)
+            core.setOutput('git-rev', result.gitCommitOID)
+
+            core.setOutput('announcement', result.announcement)
+            core.setOutput('release-notes', result.releaseNotes)
+      - name: Re-publish bundle-artifacts so the next job can easily use it
+        uses: actions/upload-artifact@v3
+        with:
+          name: bundle-artifacts
+          path: bundle-artifacts
+  github-release:
+    needs: ['setup']
+    runs-on: ubuntu-latest
+    steps:
+      - name: GitHub Release
+        uses: git-for-windows/git-for-windows-automation/.github/actions/github-release@release
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          display-version: ${{ needs.setup.outputs.display-version }}
+          tag-name: ${{ needs.setup.outputs.tag-name }}
+          rev: ${{ needs.setup.outputs.git-rev }}
+          release-notes: ${{ needs.setup.outputs.release-notes }}
+          artifacts-repository: ${{ github.repository }}
+          artifacts-token: ${{ secrets.GITHUB_TOKEN }}
+          git_artifacts_i686_workflow_run_id: ${{ env.I686_WORKFLOW_RUN_ID }}
+          git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
+  announcement-mail:
+    needs: ['setup', 'github-release']
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mail announcement
+        uses: git-for-windows/git-for-windows-automation/.github/actions/mail-announcement@release
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          display-version: ${{ needs.setup.outputs.display-version }}
+          rev: ${{ needs.setup.outputs.git-rev }}
+          announcement: ${{ needs.setup.outputs.announcement }}
+          smtp-server: ${{ secrets.SEND_ANNOUNCEMENT_SMTP_SERVER }}
+          smtp-login: ${{ secrets.SEND_ANNOUNCEMENT_SMTP_LOGIN }}
+          smtp-password: ${{ secrets.SEND_ANNOUNCEMENT_SMTP_PASSWORD }}
+  gitforwindows-site:
+    needs: ['setup', 'github-release']
+    runs-on: ubuntu-latest
+    steps:
+      - name: https://gitforwindows.org
+        uses: git-for-windows/git-for-windows-automation/.github/actions/gitforwindows.org@release
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          display-version: ${{ needs.setup.outputs.display-version }}
+          rev: ${{ needs.setup.outputs.git-rev }}
+  repository-updates:
+    needs: ['setup', 'github-release']
+    runs-on: ubuntu-latest
+    steps:
+      - name: Git repository updates (build-extra, MINGW-packages)
+        uses: git-for-windows/git-for-windows-automation/.github/actions/repository-updates@release
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          display-version: ${{ needs.setup.outputs.display-version }}
+          rev: ${{ needs.setup.outputs.git-rev }}
+          artifacts-repository: ${{ github.repository }}
+          artifacts-token: ${{ secrets.GITHUB_TOKEN }}
+          git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
+  pacman-packages:
+    needs: ['setup']
+    runs-on: windows-latest
+    steps:
+      - name: Pacman packages
+        uses: git-for-windows/git-for-windows-automation/.github/actions/pacman-packages@release
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          display-version: ${{ needs.setup.outputs.display-version }}
+          rev: ${{ needs.setup.outputs.git-rev }}
+          artifacts-repository: ${{ github.repository }}
+          artifacts-token: ${{ secrets.GITHUB_TOKEN }}
+          git_artifacts_i686_workflow_run_id: ${{ env.I686_WORKFLOW_RUN_ID }}
+          git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
+          gpg-key: ${{ secrets.GPGKEY }}
+          priv-gpg-key: ${{ secrets.PRIVGPGKEY }}
+          azure-blobs-token: ${{ secrets.AZURE_BLOBS_TOKEN }}
+  nuget-packages:
+    needs: ['setup']
+    runs-on: windows-latest
+    steps:
+      - name: NuGet packages
+        uses: git-for-windows/git-for-windows-automation/.github/actions/nuget-packages@release
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          display-version: ${{ needs.setup.outputs.display-version }}
+          rev: ${{ needs.setup.outputs.git-rev }}
+          artifacts-repository: ${{ github.repository }}
+          artifacts-token: ${{ secrets.GITHUB_TOKEN }}
+          git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
+          nuget-api-key: ${{ secrets.NUGET_API_KEY }}
