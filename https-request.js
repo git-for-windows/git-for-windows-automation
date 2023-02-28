@@ -22,13 +22,16 @@ module.exports = async (context, hostname, method, requestPath, body, headers) =
         try {
             const https = require('https')
             const req = https.request(options, res => {
-                res.on('error', e => reject(e))
+                if (res.statusCode === 204) {
+                    resolve({
+                        statusCode: res.statusCode,
+                        statusMessage: res.statusMessage,
+                        headers: res.headers
+                    })
+                    return
+                }
 
-                if (res.statusCode === 204) resolve({
-                    statusCode: res.statusCode,
-                    statusMessage: res.statusMessage,
-                    headers: res.headers
-                 })
+                res.on('error', e => reject(e))
 
                 const chunks = []
                 res.on('data', data => chunks.push(data))
