@@ -26,6 +26,8 @@ env:
 jobs:
   tag-git:
     runs-on: ubuntu-latest
+    outputs:
+      tag-name: ${{ steps.generate.outputs.tag-name }}
     steps:
       - uses: actions/checkout@v3
       - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
@@ -78,7 +80,10 @@ jobs:
             --git-dir="git.git" \
             --build-extra-dir="$RUNNER_TEMP/build-extra" \
             --artifacts-dir="$GITHUB_WORKSPACE/bundle-artifacts" \
-            "$REV"
+            "$REV" &&
+
+          echo "tag-name=$(cat bundle-artifacts/next_version)" >>$GITHUB_OUTPUT &&
+          echo "Tag name: \`$(cat bundle-artifacts/next_version)\`" >>$GITHUB_STEP_SUMMARY
       - name: update check-run
         if: env.CREATE_CHECK_RUN != 'false'
         uses: ./.github/actions/check-run-action
