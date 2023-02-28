@@ -1,5 +1,5 @@
 name: tag-git
-run-name: "Tag Git at ${{ inputs.owner }}/${{ inputs.repo }}@${{ inputs.rev }}"
+run-name: "Tag Git ${{ inputs.snapshot == 'true' && 'snapshot ' || '' }}at ${{ inputs.owner }}/${{ inputs.repo }}@${{ inputs.rev }}"
 
 on:
   workflow_dispatch:
@@ -15,12 +15,17 @@ on:
         description: 'Optionally override from where to fetch the specified rev'
         required: true
         default: git
+      snapshot:
+        description: 'A flag indicating whether this is a snapshot or a full Git for Windows release'
+        required: true
+        default: true
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
   OWNER: "${{github.event.inputs.owner}}"
   REPO: "${{github.event.inputs.repo}}"
   REV: "${{github.event.inputs.rev}}"
+  SNAPSHOT: "${{github.event.inputs.snapshot}}"
   NODEJS_VERSION: 16
 
 jobs:
@@ -65,6 +70,8 @@ jobs:
           git config --global user.email "<${info#*<}"
         env:
           GPGKEY: ${{secrets.GPGKEY}}
+      - name: install markdown/w3m (needed to render release notes)
+        run: sudo apt-get install -y markdown w3m
       - uses: actions/setup-node@v3
         with:
           node-version: ${{env.NODEJS_VERSION}}
@@ -77,6 +84,7 @@ jobs:
           git -C git.git fetch --tags --filter=blob:none "https://github.com/$OWNER/$REPO" main:refs/remotes/origin/main "$REV" &&
 
           sh -x "$GITHUB_WORKSPACE/update-scripts/tag-git.sh" \
+            ${{ env.SNAPSHOT != 'true' && '--no-snapshot-version' || ''}} \
             --git-dir="git.git" \
             --build-extra-dir="$RUNNER_TEMP/build-extra" \
             --artifacts-dir="$GITHUB_WORKSPACE/bundle-artifacts" \
