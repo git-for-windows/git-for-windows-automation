@@ -76,7 +76,7 @@ jobs:
           git -c init.defaultBranch=main init --bare git.git &&
           git -C git.git remote add -f origin https://github.com/git-for-windows/git &&
           git -C git.git fetch "https://github.com/$OWNER/$REPO" "$REV" &&
-          tag_name="$(git -C git.git describe --match 'v[0-9]*' FETCH_HEAD)" &&
+          tag_name="$(git -C git.git describe --match 'v[0-9]*' FETCH_HEAD)-$(date +%Y%m%d%H%M%S)" &&
 
           mkdir -p bundle-artifacts &&
           echo "prerelease-${tag_name#v}" >bundle-artifacts/ver &&
