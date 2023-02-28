@@ -16,7 +16,7 @@ on:
         - i686
         - aarch64
       tag_git_workflow_run_id:
-        description: 'Workflow run ID from bundle-artifacts pipeline'
+        description: 'Workflow run ID of the tag-git pipeline'
         required: false
       existing_git_tag:
         description: 'Existing tag to build from. Requires tag_git_workflow_run_id to be empty'
