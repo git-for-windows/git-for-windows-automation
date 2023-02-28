@@ -1,9 +1,8 @@
-module.exports = (core, artifactsString, architecture) => {
+module.exports = (artifactsString, architecture) => {
     const artifacts = artifactsString.split(' ')
 
     if (artifacts.length < 1) {
-        core.setFailed('No artifacts provided. Provide in a space-separated string, e.g. "installer portable"')
-        return
+        throw new Error('No artifacts provided. Provide in a space-separated string, e.g. "installer portable"')
     }
 
     const validArtifacts = [
@@ -39,15 +38,13 @@ module.exports = (core, artifactsString, architecture) => {
     for (const artifact of artifacts) {
         const artifactObject = validArtifacts.find(a => a.name === artifact)
         if (!artifactObject) {
-            core.setFailed(`${artifact} is not a valid artifact for ${architecture}`)
-            return
+            throw new Error(`${artifact} is not a valid artifact for ${architecture}`)
         }
     
         artifactsToBuild.push(artifactObject)
     }
 
-    const output = {artifact: artifactsToBuild}
-
-    core.info(`Will be using the following matrix: ${JSON.stringify(output)}`)
-    core.setOutput('matrix', output)
+    return {
+        artifact: artifactsToBuild
+    }
 }

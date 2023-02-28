@@ -104,7 +104,13 @@ jobs:
           script: |
             core.info('Preparing artifact build matrix...')
             const createArtifactsMatrix = require('./git-for-windows-automation/create-artifacts-matrix')
-            createArtifactsMatrix(core, process.env.ARTIFACTS_TO_BUILD, process.env.ARCHITECTURE)
+            try {
+              const output = createArtifactsMatrix(process.env.ARTIFACTS_TO_BUILD, process.env.ARCHITECTURE)
+              core.info(`Will be using the following matrix: ${JSON.stringify(output)}`)
+              core.setOutput('matrix', output)
+            } catch (e) {
+              core.setFailed(e.message)
+            }
       - name: Construct bundle-artifacts from existing tag
         if: env.EXISTING_GIT_TAG != ''
         run: |
