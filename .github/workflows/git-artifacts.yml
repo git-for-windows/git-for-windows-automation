@@ -139,12 +139,15 @@ jobs:
             const getDownloadURL = require('./git-for-windows-automation/get-workflow-run-artifact')
             const workflowRunId = process.env.TAG_GIT_WORKFLOW_RUN_ID
             core.info('Getting download URL for bundle-artifacts...')
-            await getDownloadURL(github, context, core, workflowRunId, 'bundle-artifacts')
+            const downloadURL = await getDownloadURL(github, context.repo.owner, context.repo.repo, workflowRunId, 'bundle-artifacts')
+
+            core.info(`Successfully got download URL. It expires after 1 minute: ${downloadURL}`)
+            core.setOutput('download-url', downloadURL)
       - name: Download bundle-artifacts zip
         if: env.TAG_GIT_WORKFLOW_RUN_ID != ''
         run: |
           mkdir bundle-artifacts
-          curl -o bundle-artifacts.zip "${{steps.get-bundle-artifacts-url.outputs.downloadUrl}}"
+          curl -o bundle-artifacts.zip "${{steps.get-bundle-artifacts-url.outputs.download-url}}"
           unzip bundle-artifacts.zip -d bundle-artifacts
           echo "GIT_VERSION=$(cat bundle-artifacts/next_version)" >> $GITHUB_ENV
       - name: Re-publish bundle-artifacts so the next job can easily use it

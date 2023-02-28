@@ -1,40 +1,35 @@
-module.exports = async (github, context, core, workflowRunId, artifactName) => {
+module.exports = async (octokit, owner, repo, workflowRunId, artifactName) => {
     const { data } = workflowRunId
-        ? await github.rest.actions.listWorkflowRunArtifacts({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
+        ? await octokit.rest.actions.listWorkflowRunArtifacts({
+            owner,
+            repo,
             run_id: Number(workflowRunId)
-        }) : await github.rest.actions.listArtifactsForRepo({
-            owner: context.repo.owner,
-            repo: context.repo.repo
+        }) : await octokit.rest.actions.listArtifactsForRepo({
+            owner,
+            repo
         })
 
     const artifacts = data.artifacts.filter(a => a.name === artifactName)
 
     if (artifacts.length === 0) {
-        core.setFailed(`No artifacts with name '${artifactName}' found`)
-        return
+        throw new Error(`No artifacts with name '${artifactName}' found in workflow run ${workflowRunId}`)
     }
 
     const artifact = artifacts[0]
 
-    core.info(`Getting downloadUrl for artifact ID ${artifact.id}...`)
+    console.log(`Getting downloadUrl for artifact ID ${artifact.id}...`)
 
     // This returns a download URL. The URL expires after 1 minute.
-    const generateDownloadUrl = await github.rest.actions.downloadArtifact({
-        owner: context.repo.owner,
-        repo: context.repo.repo,
+    const generateDownloadUrl = await octokit.rest.actions.downloadArtifact({
+        owner,
+        repo,
         artifact_id: artifact.id,
         archive_format: 'zip'
     })
 
-    const downloadUrl = generateDownloadUrl.url
-
-    if (!downloadUrl) {
-        core.setFailed(`Could not get download URL for artifact ${artifact.id}. Output: ${JSON.stringify(generateDownloadUrl)}`)
-        return
+    if (!generateDownloadUrl.url) {
+        throw new Error(`Could not get download URL for artifact ${artifact.id}. Output: ${JSON.stringify(generateDownloadUrl)}`)
     }
 
-    core.info(`Successfully got downloadUrl. It expires after 1 minute: ${downloadUrl}`)
-    core.setOutput('downloadUrl', downloadUrl)
+    return generateDownloadUrl.url
 }
