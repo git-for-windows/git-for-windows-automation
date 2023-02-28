@@ -20,6 +20,9 @@ die "Usage: $0 [--git-dir=<dir>] [--build-extra-dir=<dir>] [--artifacts-dir=<dir
 
 git_rev="$1"
 
+test "refs/heads/main" = "$(git -C "$build_extra_dir" symbolic-ref HEAD)" ||
+die "Need the current branch in '$build_extra_dir' to be 'main'"
+
 tag_name="$(git -C "$git_git_dir" describe --match 'v[0-9]*' "$git_rev")-$(date +%Y%m%d%H%M%S)" &&
 
 mkdir -p "$artifacts_dir" &&
