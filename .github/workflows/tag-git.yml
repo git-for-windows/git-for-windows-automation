@@ -71,9 +71,8 @@ jobs:
         env:
           GPGKEY: ${{secrets.GPGKEY}}
         run: |
-          git -c init.defaultBranch=main init --bare git.git &&
-          git -C git.git remote add -f origin https://github.com/git-for-windows/git &&
-          git -C git.git fetch "https://github.com/$OWNER/$REPO" "$REV" &&
+          git clone --bare --filter=blob:none https://github.com/git/git &&
+          git -C git.git fetch --tags --filter=blob:none "https://github.com/$OWNER/$REPO" main:refs/remotes/origin/main "$REV" &&
 
           sh -x "$GITHUB_WORKSPACE/update-scripts/tag-git.sh" \
             --git-dir="git.git" \
