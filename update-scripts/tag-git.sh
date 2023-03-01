@@ -25,6 +25,7 @@ git_rev="$1"
 test "refs/heads/main" = "$(git -C "$build_extra_dir" symbolic-ref HEAD)" ||
 die "Need the current branch in '$build_extra_dir' to be 'main'"
 
+mkdir -p "$artifacts_dir" &&
 if test -n "$snapshot_version"
 then
 	tag_name="$(git -C "$git_git_dir" describe --match 'v[0-9]*' --exclude='*-[0-9]*' "$git_rev")-$(date +%Y%m%d%H%M%S)" &&
@@ -73,18 +74,65 @@ else
 		"$build_extra_dir"/ReleaseNotes.md &&
 	git -C "$build_extra_dir" commit -s \
 		-m "Prepare release notes for v$display_version" ReleaseNotes.md &&
-	notes="$(markdown <"$build_extra_dir"/ReleaseNotes.md |
-		 LC_CTYPE=C w3m -dump -cols 72 -T text/html |
-		 sed -n "/^Changes since/,\${:1;p;n;/^Changes/q;b1}")" &&
+
+	raw_notes="$(sed -n "/^## Changes since/,\${:1;p;n;/^## Changes/q;b1}" \
+			<"$build_extra_dir"/ReleaseNotes.md)" &&
+	notes="$(echo "$raw_notes" |
+		markdown |
+		LC_CTYPE=C w3m -dump -cols 72 -T text/html)" &&
 	tag_message="$(printf "%s\n\n%s" \
 		"$(sed -n '1s/.*\(Git for Windows v[^ ]*\).*/\1/p' \
-		<"$build_extra_dir"/ReleaseNotes.md)" "$notes")"
+		<"$build_extra_dir"/ReleaseNotes.md)" "$notes")" &&
+
+	cat >"$artifacts_dir"/release-notes-$display_version <<-EOF &&
+	${raw_notes#\## }
+
+	Filename | SHA-256
+	-------- | -------
+	@@CHECKSUMS@@
+	EOF
+
+	case "$display_version" in
+	prerelease-*)
+		url=https://wingit.blob.core.windows.net/files/index.html
+		;;
+	*-rc*)
+		url=https://github.com/git-for-windows/git/releases/tag/$tag_name
+		;;
+	*)
+		url=https://gitforwindows.org/
+		;;
+	esac &&
+	cat >"$artifacts_dir"/announce-$display_version <<-EOF
+	From ${tag_name#v} Mon Sep 17 00:00:00 2001
+	From: $(git var GIT_COMMITTER_IDENT | sed -e 's/>.*/>/')
+	Date: $(date -R)
+	To: git-for-windows@googlegroups.com, git@vger.kernel.org, git-packagers@googlegroups.com
+	Subject: [ANNOUNCE] Git for Windows $display_version
+	Content-Type: text/plain; charset=UTF-8
+	Content-Transfer-Encoding: 8bit
+	MIME-Version: 1.0
+	Fcc: Sent
+
+	Dear Git users,
+
+	I hereby announce that Git for Windows $display_version is available from:
+
+	    $url
+
+	Changes ${tag_message#*Changes }
+
+	@@CHECKSUMS@@
+
+	Ciao,
+	$(git var GIT_COMMITTER_IDENT | sed -e 's/ .*//')
+	EOF
 fi &&
 
-mkdir -p "$artifacts_dir" &&
 echo "$ver" >"$artifacts_dir"/ver &&
 echo "$display_version" >"$artifacts_dir"/display_version &&
 echo "$tag_name" >"$artifacts_dir"/next_version &&
+echo "$tag_message" >"$artifacts_dir"/tag-message &&
 
 git -C "$git_git_dir" tag $(test -z "$GPGKEY" || echo " -s") -m "$tag_message" "$tag_name" "$git_rev" &&
 git -C "$git_git_dir" bundle create "$artifacts_dir"/git.bundle origin/main.."$tag_name" &&
