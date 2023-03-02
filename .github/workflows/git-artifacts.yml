@@ -97,9 +97,9 @@ jobs:
           architecture: ${{env.architecture}}
       - name: clone git-for-windows-automation
         run: git clone --single-branch -b $GITHUB_REF_NAME https://github.com/git-for-windows/git-for-windows-automation
-      - uses: actions/github-script@v6
+      - name: Create artifact build matrix
+        uses: actions/github-script@v6
         id: artifact-build-matrix
-        name: Create artifact build matrix
         with:
           script: |
             core.info('Preparing artifact build matrix...')
@@ -127,10 +127,10 @@ jobs:
           sed -n '/^v[0-9]\+\.[0-9]\+\.[0-9]\+\.windows\.[0-9]\+$/{s/^v//;s/\.windows\.1//;s/\.windows\.\(.*\)/(\1)/;p}' \
             >bundle-artifacts/display_version &&
           sed 's/(\(.*\))$/.\1/' <bundle-artifacts/display_version >bundle-artifacts/ver
-      - uses: actions/github-script@v6
+      - name: Get bundle-artifacts download URL
+        uses: actions/github-script@v6
         if: env.TAG_GIT_WORKFLOW_RUN_ID != ''
         id: get-bundle-artifacts-url
-        name: Get bundle-artifacts download URL
         with:
           script: |
             if (process.env.EXISTING_GIT_TAG || process.env.BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG) {
