@@ -287,6 +287,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.pkg.outputs.artifact_matrix) }}
+    outputs:
+      sha256sum-installer: ${{ steps.build.outputs.sha256sum-installer }}
+      sha256sum-portable: ${{ steps.build.outputs.sha256sum-portable }}
+      sha256sum-archive: ${{ steps.build.outputs.sha256sum-archive }}
+      sha256sum-mingit: ${{ steps.build.outputs.sha256sum-mingit }}
+      sha256sum-mingit-busybox: ${{ steps.build.outputs.sha256sum-mingit-busybox }}
+      sha256sum-nuget: ${{ steps.build.outputs.sha256sum-nuget }}
     steps:
       - name: Download pkg-${{env.ARCHITECTURE}}
         uses: actions/download-artifact@v3
@@ -335,6 +342,7 @@ jobs:
           set -x
           eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$(cat pkg-${{env.ARCHITECTURE}}/ver) -o artifacts --${{matrix.artifact.name}}-mingit --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-[0-9]*.tar.xz --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-doc-html-[0-9]*.tar.xz
       - name: Build ${{env.ARCHITECTURE}} ${{matrix.artifact.name}}
+        id: build
         run: |
           set -x
           eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$(cat pkg-${{env.ARCHITECTURE}}/ver) -o artifacts --${{matrix.artifact.name}} --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-[0-9]*.tar.xz --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-doc-html-[0-9]*.tar.xz &&
@@ -342,7 +350,13 @@ jobs:
           then
             git signtool artifacts/PortableGit-*.exe
           fi &&
-          openssl dgst -sha256 artifacts/${{matrix.artifact.fileprefix}}*.${{matrix.artifact.fileextension}} | sed "s/.* //" >artifacts/sha-256.txt
+          (
+            cd artifacts &&
+            openssl dgst -sha256 -r ${{matrix.artifact.fileprefix}}*.${{matrix.artifact.fileextension}} >sha256sums.txt
+          ) &&
+          echo "sha256sum-${{ matrix.artifact.name}}<<EOF" >>$GITHUB_OUTPUT &&
+          cat artifacts/sha256sums.txt >>$GITHUB_OUTPUT &&
+          echo EOF >>$GITHUB_OUTPUT
       - name: Copy package-versions and pdbs
         if: matrix.artifact.name == 'installer'
         run: |
@@ -358,3 +372,21 @@ jobs:
         with:
           name: ${{matrix.artifact.name}}-${{env.ARCHITECTURE}}
           path: artifacts
+  sha256sums:
+    runs-on: ubuntu-latest
+    needs: ['pkg', 'artifacts']
+    steps:
+      - name: gather all SHA-256 checksums
+        uses: actions/github-script@v6
+        env:
+          SHA256SUMS: ${{ toJSON(needs.artifacts.outputs) }}
+        with:
+          script: |
+            const fs = require('fs')
+            fs.mkdirSync('sha256sums')
+            fs.writeFileSync('sha256sums/sha256sums.txt', Object.values(JSON.parse(process.env.SHA256SUMS)).join('\n'))
+      - name: publish SHA-256 checksums
+        uses: actions/upload-artifact@v3
+        with:
+          name: sha256sums
+          path: sha256sums
