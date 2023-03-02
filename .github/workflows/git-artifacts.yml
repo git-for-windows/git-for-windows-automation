@@ -84,6 +84,7 @@ jobs:
           test -n "$ARTIFACTS_TO_BUILD" || {
             ARTIFACTS_TO_BUILD="installer portable archive mingit"
             test "$ARCHITECTURE" = aarch64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD mingit-busybox"
+            test "$ARCHITECTURE" != x86_64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD nuget"
           }
           echo "ARTIFACTS_TO_BUILD=$ARTIFACTS_TO_BUILD" >> $GITHUB_ENV
       - name: Configure user
@@ -309,6 +310,11 @@ jobs:
           echo -n "$CODESIGN_P12" | tr % '\n' | base64 -d >home/.sig/codesign.p12 &&
           echo -n "$CODESIGN_PASS" >home/.sig/codesign.pass &&
           git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
+      - name: Build ${{env.ARCHITECTURE}} ${{matrix.artifact.name}}-mingit
+        if: matrix.artifact.name == 'nuget'
+        run: |
+          set -x
+          eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$(cat pkg-${{env.ARCHITECTURE}}/ver) -o artifacts --${{matrix.artifact.name}}-mingit --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-[0-9]*.tar.xz --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-doc-html-[0-9]*.tar.xz
       - name: Build ${{env.ARCHITECTURE}} ${{matrix.artifact.name}}
         run: |
           set -x
@@ -317,7 +323,7 @@ jobs:
           then
             git signtool artifacts/PortableGit-*.exe
           fi &&
-          openssl dgst -sha256 artifacts/${{matrix.artifact.fileprefix}}-*.${{matrix.artifact.fileextension}} | sed "s/.* //" >artifacts/sha-256.txt
+          openssl dgst -sha256 artifacts/${{matrix.artifact.fileprefix}}*.${{matrix.artifact.fileextension}} | sed "s/.* //" >artifacts/sha-256.txt
       - name: Copy package-versions and pdbs
         if: matrix.artifact.name == 'installer'
         run: |

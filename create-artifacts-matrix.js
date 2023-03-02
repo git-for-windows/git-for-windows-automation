@@ -34,6 +34,12 @@ module.exports = (artifactsString, architecture) => {
         fileExtension: 'zip'
     })
     
+    if (architecture === 'x86_64') validArtifacts.push({
+        name: 'nuget',
+        filePrefix: 'Git',
+        fileExtension: 'nupkg'
+    })
+
     const artifactsToBuild = []
     
     for (const artifact of artifacts) {
