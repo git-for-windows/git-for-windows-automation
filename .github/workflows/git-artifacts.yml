@@ -170,7 +170,6 @@ jobs:
             git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
           fi
       - name: Check out git/git
-        shell: bash
         run: |
           git -c init.defaultBranch=main init &&
           git remote add -f origin https://github.com/git-for-windows/git &&
