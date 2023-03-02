@@ -99,7 +99,7 @@ module.exports =  async (context, setSecret, appId, privateKey, owner, repo) => 
     state.store()
   }
 
-  state.update = async (appendText, conclusion) => {
+  state.update = async (appendText, conclusion, title, summary) => {
     if (!state.id) throw new Error('Need to `get()` Check Run before calling `update()`')
 
     await state.refreshToken()
@@ -112,7 +112,9 @@ module.exports =  async (context, setSecret, appId, privateKey, owner, repo) => 
       repo || state.repo,
       state.id,
       appendText,
-      conclusion
+      conclusion,
+      title,
+      summary
     )
     state.conclusion = conclusion
   }

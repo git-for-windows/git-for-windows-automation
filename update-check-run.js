@@ -1,14 +1,15 @@
-module.exports = async (context, token, owner, repo, checkRunId, appendText, conclusion) => {
+module.exports = async (context, token, owner, repo, checkRunId, appendText, conclusion, title, summary) => {
   const githubApiRequest = require('./github-api-request')
-  let { output: { title, summary, text } } = await githubApiRequest(
+  let { output } = await githubApiRequest(
     context,
     token,
     'GET',
     `/repos/${owner}/${repo}/check-runs/${checkRunId}`
   )
 
-  if (!text) text = appendText
-  else if (appendText) text = [text, appendText].join('\n')
+  if (title) output.title = title
+  if (summary) output.summary = summary
+  if (appendText) output.text = [output.text, appendText].join('\n')
 
   const statusUpdate = conclusion ? { status: 'completed', conclusion } : {}
 
@@ -17,10 +18,10 @@ module.exports = async (context, token, owner, repo, checkRunId, appendText, con
     token,
     'PATCH',
     `/repos/${owner}/${repo}/check-runs/${checkRunId}`, {
-      output: { title, summary, text },
+      output,
       ...statusUpdate
     }
   )
 
-  return text
+  return output.text
 }

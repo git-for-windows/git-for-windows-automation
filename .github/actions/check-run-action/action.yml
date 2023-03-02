@@ -82,7 +82,9 @@ runs:
           )
           if (process.env.APPEND_TEXT || process.env.CONCLUSION) await state.update(
             process.env.APPEND_TEXT || undefined,
-            process.env.CONCLUSION || undefined
+            process.env.CONCLUSION || undefined,
+            process.env.TITLE || undefined,
+            process.env.SUMMARY || undefined
           )
 
           core.setOutput('id', state.id)

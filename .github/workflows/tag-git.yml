@@ -98,6 +98,8 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          title: "Tag Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
+          summary: "Tag Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
           append-text: 'Tagged Git ${{ steps.generate.outputs.tag-name }}'
       - name: 'Publish Pipeline Artifact: bundle-artifacts'
         uses: actions/upload-artifact@v3
