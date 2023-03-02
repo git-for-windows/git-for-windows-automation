@@ -25,13 +25,14 @@ module.exports = (artifactsString, architecture) => {
             name: 'mingit',
             filePrefix: 'MinGit',
             fileExtension: 'zip'
-        },
-        architecture !== 'aarch64' && {
-            name: 'mingit-busybox',
-            filePrefix: 'MinGit',
-            fileExtension: 'zip'
         }
     ]
+
+    if (architecture !== 'aarch64') validArtifacts.push({
+        name: 'mingit-busybox',
+        filePrefix: 'MinGit',
+        fileExtension: 'zip'
+    })
     
     const artifactsToBuild = []
     

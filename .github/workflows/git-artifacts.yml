@@ -81,8 +81,11 @@ jobs:
           echo "MINGW_PACKAGE_PREFIX=$MINGW_PACKAGE_PREFIX" >> $GITHUB_ENV
           echo "MINGW_PACKAGE_PREFIX=$MINGW_PACKAGE_PREFIX" >> $GITHUB_OUTPUT
           echo "SDK_REPO_ARCH=$SDK_REPO_ARCH" >> $GITHUB_OUTPUT
-          echo "ARTIFACTS_TO_BUILD=$(test -n "$ARTIFACTS_TO_BUILD" && echo $ARTIFACTS_TO_BUILD || \
-            echo "installer portable archive mingit$(test "$ARCHITECTURE" = aarch64 || echo ' mingit-busybox')")" >> $GITHUB_ENV
+          test -n "$ARTIFACTS_TO_BUILD" || {
+            ARTIFACTS_TO_BUILD="installer portable archive mingit"
+            test "$ARCHITECTURE" = aarch64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD mingit-busybox"
+          }
+          echo "ARTIFACTS_TO_BUILD=$ARTIFACTS_TO_BUILD" >> $GITHUB_ENV
       - name: Configure user
         run:
           USER_NAME="${{github.actor}}" &&
