@@ -49,7 +49,7 @@ jobs:
       sdk_repo_arch: ${{steps.configure-environment.outputs.SDK_REPO_ARCH}}
     steps:
       - name: clone git-for-windows-automation
-        run: git clone --single-branch -b $GITHUB_REF_NAME https://github.com/git-for-windows/git-for-windows-automation
+        uses: actions/checkout@v3
       - name: Construct bundle-artifacts from existing tag
         if: env.EXISTING_GIT_TAG != ''
         run: |
@@ -81,7 +81,7 @@ jobs:
             if (process.env.EXISTING_GIT_TAG || process.env.BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG) {
               throw new Error('tag_git_workflow_run_id cannot be used with existing_git_tag or build_extra_rev_for_existing_git_tag!')
             }
-            const getDownloadURL = require('./git-for-windows-automation/get-workflow-run-artifact')
+            const getDownloadURL = require('./get-workflow-run-artifact')
             const workflowRunId = process.env.TAG_GIT_WORKFLOW_RUN_ID
             core.info('Getting download URL for bundle-artifacts...')
             const downloadURL = await getDownloadURL(github, context.repo.owner, context.repo.repo, workflowRunId, 'bundle-artifacts')
@@ -157,7 +157,7 @@ jobs:
         with:
           script: |
             core.info('Preparing artifact build matrix...')
-            const createArtifactsMatrix = require('./git-for-windows-automation/create-artifacts-matrix')
+            const createArtifactsMatrix = require('./create-artifacts-matrix')
             try {
               const output = createArtifactsMatrix(process.env.ARTIFACTS_TO_BUILD, process.env.ARCHITECTURE)
               core.info(`Will be using the following matrix: ${JSON.stringify(output)}`)
