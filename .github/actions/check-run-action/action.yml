@@ -63,8 +63,8 @@ runs:
             throw new Error(`Expected either 'rev' or 'conclusion' to be specified`)
           }
 
-          const checkRunState = require('./check-run-state')
-          const state = await checkRunState(
+          const { initCheckRunState } = require('./check-runs')
+          const state = await initCheckRunState(
             console,
             core.setSecret,
             process.env.APP_ID || undefined,

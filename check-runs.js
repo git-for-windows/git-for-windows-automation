@@ -1,3 +1,90 @@
+const getOrCreateCheckRun = async (context, token, owner, repo, ref, checkRunName, title, summary, text, detailsURL) => {
+  const githubApiRequest = require('./github-api-request')
+  // is there an existing check-run we can re-use?
+  const { check_runs } = await githubApiRequest(
+    context,
+    token,
+    'GET',
+    `/repos/${owner}/${repo}/commits/${ref}/check-runs`
+  )
+  const filtered = check_runs
+    .filter(e => e.name === checkRunName && e.conclusion === null).map(e => {
+      return {
+        id: e.id,
+        status: e.status,
+        output: e.output
+      }
+    })
+  if (filtered.length > 0) {
+    // ensure that the check_run is set to status "in progress"
+    if (filtered[0].status !== 'in_progress') {
+      console.log(await githubApiRequest(
+        context,
+        token,
+        'PATCH',
+        `/repos/${owner}/${repo}/check-runs/${filtered[0].id}`, {
+          status: 'in_progress',
+          details_url: detailsURL,
+          output: {
+            ...filtered[0].output,
+            title: title || filtered[0].output.title,
+            summary: summary || filtered[0].output.summary,
+            text: text || filtered[0].output.text
+          }
+        }
+      ))
+    }
+    process.stderr.write(`Returning existing ${filtered[0].id}`)
+    return filtered[0].id
+  }
+
+  const { id } = await githubApiRequest(
+    context,
+    token,
+    'POST',
+    `/repos/${owner}/${repo}/check-runs`, {
+      name: checkRunName,
+      head_sha: ref,
+      status: 'in_progress',
+      details_url: detailsURL,
+      output: {
+        title,
+        summary,
+        text
+      }
+    }
+  )
+  return id
+}
+
+const updateCheckRun = async (context, token, owner, repo, checkRunId, appendText, conclusion, title, summary) => {
+  const githubApiRequest = require('./github-api-request')
+  let { output } = await githubApiRequest(
+    context,
+    token,
+    'GET',
+    `/repos/${owner}/${repo}/check-runs/${checkRunId}`
+  )
+
+  if (title) output.title = title
+  if (summary) output.summary = summary
+  if (appendText) output.text = [output.text, appendText].join('\n')
+
+  const statusUpdate = conclusion ? { status: 'completed', conclusion } : {}
+
+  await githubApiRequest(
+    context,
+    token,
+    'PATCH',
+    `/repos/${owner}/${repo}/check-runs/${checkRunId}`, {
+      output,
+      ...statusUpdate
+    }
+  )
+
+  return output.text
+}
+
 const crypto = require('crypto')
 
 const getPublicKey = (privateKey) => crypto.createPublicKey(privateKey)
@@ -29,7 +116,7 @@ const encrypt = (data, publicKey) => {
         .join('/')
 }
 
-module.exports =  async (context, setSecret, appId, privateKey, owner, repo) => {
+const initCheckRunState =  async (context, setSecret, appId, privateKey, owner, repo) => {
   const fs = require('fs')
 
   const stateFile = `${process.env.RUNNER_TEMP || process.env.TEMP || '/tmp'}/check-run.state`
@@ -77,8 +164,7 @@ module.exports =  async (context, setSecret, appId, privateKey, owner, repo) => 
   state.get = async (ref, checkRunName, title, summary, text, detailsURL) => {
     await state.refreshToken()
 
-    const get = require('./get-check-run-id')
-    state.id = await(get(
+    state.id = await(getOrCreateCheckRun(
       context,
       state.accessToken,
       owner || state.owner,
@@ -104,8 +190,7 @@ module.exports =  async (context, setSecret, appId, privateKey, owner, repo) => 
 
     await state.refreshToken()
 
-    const update = require('./update-check-run')
-    state.text = await update(
+    state.text = await updateCheckRun(
       context,
       state.accessToken,
       owner || state.owner,
@@ -121,4 +206,10 @@ module.exports =  async (context, setSecret, appId, privateKey, owner, repo) => 
 
   state.store()
   return state
+}
+
+module.exports = {
+  getOrCreateCheckRun,
+  updateCheckRun,
+  initCheckRunState
 }
