@@ -116,10 +116,10 @@ const encrypt = (data, publicKey) => {
         .join('/')
 }
 
-const initCheckRunState =  async (context, setSecret, appId, privateKey, owner, repo) => {
+const initCheckRunState =  async (context, setSecret, appId, privateKey, owner, repo, stateFile) => {
   const fs = require('fs')
 
-  const stateFile = `${process.env.RUNNER_TEMP || process.env.TEMP || '/tmp'}/check-run.state`
+  if (!stateFile) stateFile = `${process.env.RUNNER_TEMP || process.env.TEMP || '/tmp'}/check-run.state`
   const state = fs.existsSync(stateFile)
     ? JSON.parse(decrypt(fs.readFileSync(stateFile).toString(), privateKey))
     : {}
