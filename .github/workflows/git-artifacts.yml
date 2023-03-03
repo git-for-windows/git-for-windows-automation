@@ -408,7 +408,12 @@ jobs:
         id: build
         run: |
           set -x
-          eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$(cat pkg-${{env.ARCHITECTURE}}/ver) -o artifacts --${{matrix.artifact.name}} --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-[0-9]*.tar.xz --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-doc-html-[0-9]*.tar.xz &&
+          version=$(cat pkg-${{env.ARCHITECTURE}}/ver) &&
+          if test mingit-busybox = ${{matrix.artifact.name}}
+          then
+            version="${version}-busybox"
+          fi &&
+          eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$version -o artifacts --${{matrix.artifact.name}} --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-[0-9]*.tar.xz --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-doc-html-[0-9]*.tar.xz &&
           if test portable = '${{matrix.artifact.name}}' && test -n "$(git config alias.signtool)"
           then
             git signtool artifacts/PortableGit-*.exe
