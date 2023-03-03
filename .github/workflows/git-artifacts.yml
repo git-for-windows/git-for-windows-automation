@@ -185,7 +185,14 @@ jobs:
             } catch (e) {
               core.setFailed(e.message)
             }
+      - name: Restore ${{env.MINGW_PACKAGE_PREFIX}}-git, if cached
+        id: restore-cached-git-pkg
+        uses: actions/cache/restore@v3
+        with:
+          path: artifacts
+          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}
       - name: Clone and update build-extra
+        if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
           d=/usr/src/build-extra &&
           if test ! -d $d/.git
@@ -203,6 +210,7 @@ jobs:
             git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
           fi
       - name: Prepare git-for-windows/git clone with the tag
+        if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
           if test ! -d /usr/src/MINGW-packages
           then
@@ -232,7 +240,7 @@ jobs:
         env:
           CODESIGN_P12: ${{secrets.CODESIGN_P12}}
           CODESIGN_PASS: ${{secrets.CODESIGN_PASS}}
-        if: env.CODESIGN_P12 != '' && env.CODESIGN_PASS != ''
+        if: env.CODESIGN_P12 != '' && env.CODESIGN_PASS != '' && steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
           cd home &&
           mkdir -p .sig &&
@@ -240,7 +248,7 @@ jobs:
           echo -n "$CODESIGN_PASS" >.sig/codesign.pass
           git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
       - name: Prepare home directory for GPG signing
-        if: env.GPGKEY != ''
+        if: env.GPGKEY != '' && steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
           echo '${{secrets.PRIVGPGKEY}}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
           info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
@@ -249,19 +257,14 @@ jobs:
         env:
           GPGKEY: ${{secrets.GPGKEY}}
       - name: update check-run
+        if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         uses: ./.github/actions/check-run-action
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           append-text: 'About to build the `${{env.MINGW_PACKAGE_PREFIX}}-git` package'
-      - name: Cache ${{env.MINGW_PACKAGE_PREFIX}}-git
-        id: cache-git-pkg
-        uses: actions/cache@v3
-        with:
-          path: artifacts
-          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}
       - name: Build ${{env.MINGW_PACKAGE_PREFIX}}-git
-        if: steps.cache-git-pkg.outputs.cache-hit != 'true'
+        if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         env:
           GPGKEY: "${{secrets.GPGKEY}}"
         run: |
@@ -298,6 +301,12 @@ jobs:
             git diff >&2 &&
             git bundle create "$b"/MINGW-packages.bundle main^..main
           fi)
+      - name: Cache ${{env.MINGW_PACKAGE_PREFIX}}-git
+        if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v3
+        with:
+          path: artifacts
+          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}
       - name: update check-run
         uses: ./.github/actions/check-run-action
         with:
