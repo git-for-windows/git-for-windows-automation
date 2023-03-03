@@ -133,6 +133,7 @@ echo "$ver" >"$artifacts_dir"/ver &&
 echo "$display_version" >"$artifacts_dir"/display_version &&
 echo "$tag_name" >"$artifacts_dir"/next_version &&
 echo "$tag_message" >"$artifacts_dir"/tag-message &&
+git -C "$git_git_dir" rev-parse --verify "$git_rev"^0 >"$artifacts_dir"/git-commit-oid &&
 
 git -C "$git_git_dir" tag $(test -z "$GPGKEY" || echo " -s") -m "$tag_message" "$tag_name" "$git_rev" &&
 git -C "$git_git_dir" bundle create "$artifacts_dir"/git.bundle origin/main.."$tag_name" &&
