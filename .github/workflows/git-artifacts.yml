@@ -204,7 +204,7 @@ jobs:
           fi &&
           if test -z "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
           then
-            git -C $d pull "$PWD"/bundle-artifacts/build-extra.bundle main
+            git -C $d -c pull.rebase=false pull "$PWD"/bundle-artifacts/build-extra.bundle main
           else
             git -C $d fetch origin "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" &&
             git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
@@ -365,6 +365,13 @@ jobs:
         with:
           flavor: build-installers
           architecture: ${{env.ARCHITECTURE}}
+      - name: Configure user
+        run:
+          USER_NAME="${{github.actor}}" &&
+          USER_EMAIL="${{github.actor}}@users.noreply.github.com" &&
+          mkdir "$HOME" &&
+          git config --global user.name "$USER_NAME" &&
+          git config --global user.email "$USER_EMAIL"
       - name: Clone and update build-extra
         run: |
           d=/usr/src/build-extra &&
@@ -377,7 +384,7 @@ jobs:
           fi &&
           if test -z "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
           then
-            git -C $d pull "$PWD"/bundle-artifacts/build-extra.bundle main
+            git -C $d -c pull.rebase=false pull "$PWD"/bundle-artifacts/build-extra.bundle main
           else
             git -C $d fetch origin "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" &&
             git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
