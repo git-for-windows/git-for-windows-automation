@@ -232,17 +232,9 @@ const uploadGitArtifacts = async (context, token, owner, repo, releaseId, gitArt
   context.log('Done uploading Git artifacts')
 }
 
-const callGit = (parameters) => {
-  const { spawnSync } = require('child_process')
-  const git = spawnSync('git', parameters, {
-    stdio: ['ignore', 'inherit', 'inherit']
-  })
-  if (git.error) throw error
-  if (git.status !== 0) throw new Error(`git ${parameters.join(' ')} failed with status ${git.status}`)
-}
-
 const pushGitTag = (context, setSecret, token, owner, repo, tagName, bundlePath) => {
   context.log(`Pushing Git tag ${tagName}`)
+  const { callGit } = require('./repository-updates')
   callGit(['clone',
     '--bare', '--single-branch', '--branch', 'main', '--depth', '50',
     `https://github.com/${owner}/${repo}`, 'git'
