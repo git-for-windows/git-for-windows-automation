@@ -190,7 +190,7 @@ jobs:
         uses: actions/cache/restore@v3
         with:
           path: artifacts
-          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}
+          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}-${{env.TAG_GIT_WORKFLOW_RUN_ID}}
       - name: Clone and update build-extra
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
@@ -306,7 +306,7 @@ jobs:
         uses: actions/cache/save@v3
         with:
           path: artifacts
-          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}
+          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}-${{env.TAG_GIT_WORKFLOW_RUN_ID}}
       - name: update check-run
         uses: ./.github/actions/check-run-action
         with:
