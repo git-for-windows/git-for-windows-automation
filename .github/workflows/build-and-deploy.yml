@@ -297,7 +297,7 @@ jobs:
           fi
 
       - name: refresh installation token (if needed)
-        if: env.CREATE_CHECK_RUN != 'false'
+        if: env.CREATE_CHECK_RUN != 'false' && always()
         id: refresh
         uses: actions/github-script@v6
         with:
