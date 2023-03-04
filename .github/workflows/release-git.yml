@@ -29,6 +29,27 @@ jobs:
       announcement: ${{ steps.bundle-artifacts.outputs.announcement }}
       release-notes: ${{ steps.bundle-artifacts.outputs.release-notes }}
     steps:
+      - name: The `release` branch must be up to date
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { data: { object: { sha } } } = await github.rest.git.getRef({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              ref: 'heads/release'
+            })
+
+            if (sha !== '${{ github.sha }}') {
+              throw new Error(`The 'release' branch is not up to date!
+
+            Actual: ${sha}, expected: ${{ github.sha }}.
+
+            The idea of the 'release-git' workflow is that the runs are started from
+            the 'main' branch and the actual jobs' definitions are maintained in
+            the 'release' branch, to allow modifying them and re-starting failed jobs
+            individually. To that end, the 'release' branch is expected to point at the
+            same commit as the 'main' branch when this workflow is started.`)
+            }
       - uses: actions/checkout@v3
       - name: Get bundle-artifacts and sha256sums
         id: bundle-artifacts
