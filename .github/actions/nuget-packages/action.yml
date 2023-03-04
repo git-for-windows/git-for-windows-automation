@@ -1,0 +1,90 @@
+name: 'Deploy the NuGet packages'
+description: 'Publishes the NuGet packages associated with a new Git for Windows version.'
+inputs:
+  app-id:
+    description: 'The GitHub App ID'
+    required: true
+  private-key:
+    description: 'The private key of the GitHub App'
+    required: true
+  owner:
+    description: 'The owner of the target repository'
+    required: true
+    default: 'git-for-windows'
+  repo:
+    description: 'The name of the target repository'
+    required: true
+    default: 'git'
+  display-version:
+    description: 'The version that is being released'
+    required: true
+  rev:
+    description: 'The target commit'
+    required: true
+  artifacts-repository:
+    description: 'The repository that has the workflow run artifacts'
+    required: true
+  artifacts-token:
+    description: 'The token to access the workflow run artifacts'
+    required: true
+  git_artifacts_x86_64_workflow_run_id:
+    description: 'ID of the git-artifacts (x86_64) workflow run'
+    required: true
+  nuget-api-key:
+    description: 'The API key needed to publish NuGet packages'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: release
+    - name: Mirror Check Run to ${{ inputs.owner }}/${{ inputs.repo }}
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ inputs.owner }}
+        repo: ${{ inputs.repo }}
+        rev: ${{ inputs.rev }}
+        check-run-name: "nuget-packages"
+        title: "Deploy the NuGet packages for ${{ inputs.display-version }}"
+        summary: "Downloading the NuGet packages from ${{ inputs.git_artifacts_x86_64_workflow_run_id }} and pushing them to nuget.org"
+        text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+        details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+    - name: Download the NuGet packages
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const [ artifactsOwner, artifactsRepo ] = '${{ inputs.artifacts-repository }}'.split('/')
+          const { getWorkflowRunArtifact } = require('./repository-updates')
+          await getWorkflowRunArtifact(
+            console,
+            ${{ toJSON(inputs.artifacts-token) }},
+            artifactsOwner,
+            artifactsRepo,
+            ${{ inputs.git_artifacts_x86_64_workflow_run_id }},
+            'nuget-x86_64'
+          )
+    - uses: nuget/setup-nuget@v1
+    - name: Upload NuGet packages
+      shell: bash
+      run: |
+        for nupkg in nuget-x86_64/*.nupkg
+        do
+          nuget push \
+            -NonInteractive \
+            -Verbosity detailed \
+            -Source https://api.nuget.org/v3/index.json \
+            -ApiKey '${{ inputs.nuget-api-key }}' \
+            -Timeout 3000 \
+            "$nupkg" || exit 1
+        done
+    - name: update check-run
+      if: always()
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        append-text: "${{ github.action_status == 'success' && 'Done!' || format('Completed: {0}', github.action_status) }}."
+        conclusion: ${{ github.action_status }}
