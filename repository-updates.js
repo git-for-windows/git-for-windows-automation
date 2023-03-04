@@ -22,19 +22,25 @@ const getWorkflowRunArtifact = async (context, token, owner, repo, workflowRunId
 const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner, repo, refName, bundlePath) => {
   context.log(`Pushing updates to ${owner}/${repo}`)
 
-  const bare = repo === 'build-extra' ? '' : '--bare'
+  const bare = ['build-extra', 'git-for-windows.github.io'].includes(repo) ? '' : '--bare'
 
   callGit(['clone', ...bare,
     '--single-branch', '--branch', 'main', '--depth', '50',
     `https://github.com/${owner}/${repo}`, repo
   ])
 
-  callGit(['--git-dir', 'git', 'fetch', bundlePath, refName])
+  if (bundlePath) {
+    callGit(['--git-dir', 'git', 'fetch', bundlePath, refName])
+  }
 
   if (repo === 'build-extra') {
     callGit(['switch', '-f', '-c', refName, 'FETCH_HEAD'])
     callProg('./download-stats.sh', ['--update'])
     callGit(['commit', '-s', '-m', 'download-stats: new Git for Windows version', './download-stats.sh'])
+  } else if (repo === 'git-for-windows.github.io') {
+    callGit(['switch', '-C', 'main', 'origin/main'])
+    callProg('node', ['bump-version.js', '--auto'])
+    callGit(['commit', '-a', '-s', '-m', 'New Git for Windows version'])
   }
 
   const getAppInstallationId = require('./get-app-installation-id')
