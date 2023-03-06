@@ -78,6 +78,19 @@ jobs:
           echo "GIT_VERSION=$EXISTING_GIT_TAG" >> $GITHUB_ENV &&
           git fetch --depth 1 --filter blob:none https://github.com/$OWNER/$REPO "refs/tags/$EXISTING_GIT_TAG:refs/tags/$EXISTING_GIT_TAG" &&
           echo "GIT_REV=$(git rev-parse --verify "refs/tags/$EXISTING_GIT_TAG"^0)" >>$GITHUB_ENV
+      - name: wait if workflow run has not finished yet
+        if: env.TAG_GIT_WORKFLOW_RUN_ID != ''
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const { waitForWorkflowRunToFinish } = require('workflow-runs')
+            await waitForWorkflowRunToFinish(
+              console,
+              '${{ secrets.GITHUB_TOKEN }},
+              context.repo.owner,
+              context.repo.repo,
+              process.env.TAG_GIT_WORKFLOW_RUN_ID
+            )
       - name: Get bundle-artifacts download URL
         uses: actions/github-script@v6
         if: env.TAG_GIT_WORKFLOW_RUN_ID != ''
