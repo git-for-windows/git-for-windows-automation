@@ -53,7 +53,6 @@ jobs:
         run:
           USER_NAME="${{github.actor}}" &&
           USER_EMAIL="${{github.actor}}@users.noreply.github.com" &&
-          mkdir "$HOME" &&
           git config --global user.name "$USER_NAME" &&
           git config --global user.email "$USER_EMAIL" &&
           echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >> $GITHUB_ENV
@@ -63,7 +62,6 @@ jobs:
         if: env.GPGKEY != ''
         run: |
           echo '${{secrets.PRIVGPGKEY}}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
-          mkdir -p home &&
           git config --global gpg.program "$RUNNER_TEMP/build-extra/gnupg-with-gpgkey.sh" &&
           info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
           git config --global user.name "${info% <*}" &&
