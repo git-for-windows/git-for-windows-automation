@@ -25,6 +25,6 @@ const waitForWorkflowRunToFinish = async (context, token, owner, repo, workflowR
   }
 }
 
-modules.exports = {
+module.exports = {
   waitForWorkflowRunToFinish
 }
