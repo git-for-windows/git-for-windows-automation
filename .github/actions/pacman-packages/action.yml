@@ -94,7 +94,7 @@ runs:
       run: |
         # Mask the form of the access key in which `openssl` requires it to generate the HMAC signature,
         # to avoid leaking the key inadvertently e.g. when debugging via `set -x`
-        echo "::add-mask::$(echo "${{ inputs.AZURE_BLOBS_TOKEN }}" | base64 -d -w0 | xxd -p -c256)"
+        echo "::add-mask::$(echo "${{ inputs.azure-blobs-token }}" | base64 -d -w0 | xxd -p -c256)"
     - name: Clone build-extra
       shell: bash
       run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra "$RUNNER_TEMP"/build-extra
