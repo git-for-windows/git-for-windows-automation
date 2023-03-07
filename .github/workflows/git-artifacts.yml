@@ -125,7 +125,7 @@ jobs:
           rev: ${{ env.GIT_REV }}
           check-run-name: "git-artifacts-${{ env.ARCHITECTURE }}"
           title: "Build Git ${{ env.GIT_VERSION }} artifacts"
-          summary: "Build Git ${{ env.GIT_VERSION }} artifacts from commit ${{ env.GIT_REV }} (tag-git run #${{ github.run_id }})"
+          summary: "Build Git ${{ env.GIT_VERSION }} artifacts from commit ${{ env.GIT_REV }}${{ env.TAG_GIT_WORKFLOW_RUN_ID && format(' (tag-git run #{0})', env.TAG_GIT_WORKFLOW_RUN_ID) || '' }}"
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: Re-publish bundle-artifacts so the next job can easily use it
