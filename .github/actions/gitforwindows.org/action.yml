@@ -1,0 +1,67 @@
+name: 'Update gitforwindows.org'
+description: 'This stage updates https://gitforwindows.org/ to point to the new version.'
+inputs:
+  app-id:
+    description: 'The GitHub App ID'
+    required: true
+  private-key:
+    description: 'The private key of the GitHub App'
+    required: true
+  owner:
+    description: 'The owner of the target repository'
+    required: true
+    default: 'git-for-windows'
+  repo:
+    description: 'The name of the target repository'
+    required: true
+    default: 'git'
+  display-version:
+    description: 'The version that is being released'
+    required: true
+  rev:
+    description: 'The target commit'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: release
+    - name: Mirror Check Run to ${{ inputs.owner }}/${{ inputs.repo }}
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ inputs.owner }}
+        repo: ${{ inputs.repo }}
+        rev: ${{ inputs.rev }}
+        check-run-name: "gitforwindows.org"
+        title: "Point gitforwindows.org to ${{ inputs.display-version }}"
+        summary: "This stage pushes the commits to git-for-windows.github.io"
+        text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+        details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+    - name: Update gitforwindows.org
+      if: ${{ !contains(inputs.display-version, '-rc') }}
+      uses: actions/github-script@v6
+      env:
+        GIT_CONFIG_PARAMETERS: "'user.name=gitforwindowshelper-bot' 'user.email=gitforwindowshelper-bot@users.noreply.github.com'"
+      with:
+        script: |
+          const { pushRepositoryUpdate } = require('./repository-updates')
+          await pushRepositoryUpdate(
+            console,
+            core.setSecret,
+            ${{ inputs.app-id }},
+            ${{ toJSON(inputs.private-key) }},
+            '${{ inputs.owner }}',
+            'git-for-windows.github.io',
+            'main'
+          )
+    - name: update check-run
+      if: always()
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        append-text: "${{ contains(inputs.display-version, '-rc') && 'Skipped -rc version' || (github.action_status == 'success' && 'Done!' || format('Completed: {0}', github.action_status)) }}."
+        conclusion: ${{ contains(inputs.display-version, '-rc') && 'skipped' || github.action_status }}

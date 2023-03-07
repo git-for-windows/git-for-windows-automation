@@ -1,0 +1,104 @@
+name: 'Update the repositories'
+description: 'This stage pushes updates the various repositories of Git for Windows.'
+inputs:
+  app-id:
+    description: 'The GitHub App ID'
+    required: true
+  private-key:
+    description: 'The private key of the GitHub App'
+    required: true
+  owner:
+    description: 'The owner of the target repository'
+    required: true
+    default: 'git-for-windows'
+  repo:
+    description: 'The name of the target repository'
+    required: true
+    default: 'git'
+  display-version:
+    description: 'The version that is being released'
+    required: true
+  rev:
+    description: 'The target commit'
+    required: true
+  artifacts-repository:
+    description: 'The repository that has the workflow run artifacts'
+    required: true
+  artifacts-token:
+    description: 'The token to access the workflow run artifacts'
+    required: true
+  git_artifacts_x86_64_workflow_run_id:
+    description: 'ID of the git-artifacts (x86_64) workflow run'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: release
+    - name: Mirror Check Run to ${{ inputs.owner }}/${{ inputs.repo }}
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ inputs.owner }}
+        repo: ${{ inputs.repo }}
+        rev: ${{ inputs.rev }}
+        check-run-name: "repository-updates"
+        title: "Push ${{ inputs.display-version }} updates to the various repositories"
+        summary: "This pushes the commits to build-extra and MINGW-packages"
+        text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+        details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+    - name: Download bundle-artifacts (needed to push the `main` branch)
+      uses: actions/download-artifact@v3
+      if: ${{ !contains(inputs.display-version, '-rc') }}
+      with:
+        name: bundle-artifacts
+        path: bundle-artifacts
+    - name: Update repositories
+      if: ${{ !contains(inputs.display-version, '-rc') }}
+      uses: actions/github-script@v6
+      env:
+        GIT_CONFIG_PARAMETERS: "'user.name=gitforwindowshelper-bot' 'user.email=gitforwindowshelper-bot@users.noreply.github.com'"
+      with:
+        script: |
+          const [ artifactsOwner, artifactsRepo ] = '${{ inputs.artifacts-repository }}'.split('/')
+          const { getWorkflowRunArtifact, pushRepositoryUpdate } = require('./repository-updates')
+          await getWorkflowRunArtifact(
+            console,
+            ${{ toJSON(inputs.artifacts-token) }},
+            artifactsOwner,
+            artifactsRepo,
+            ${{ inputs.git_artifacts_x86_64_workflow_run_id }},
+            'pkg-x86_64'
+          )
+
+          await pushRepositoryUpdate(
+            console,
+            core.setSecret,
+            ${{ inputs.app-id }},
+            ${{ toJSON(inputs.private-key) }},
+            '${{ inputs.owner }}',
+            'MINGW-packages',
+            'main',
+            'pkg-x86_64/MINGW-packages.bundle'
+          )
+
+          await pushRepositoryUpdate(
+            console,
+            core.setSecret,
+            ${{ inputs.app-id }},
+            ${{ toJSON(inputs.private-key) }},
+            '${{ inputs.owner }}',
+            'build-extra',
+            'main',
+            'bundle-artifacts/build-extra.bundle'
+          )
+    - name: update check-run
+      if: always()
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        append-text: "${{ contains(inputs.display-version, '-rc') && 'Skipped -rc version' || (github.action_status == 'success' && 'Done!' || format('Completed: {0}', github.action_status)) }}."
+        conclusion: ${{ contains(inputs.display-version, '-rc') && 'skipped' || github.action_status }}

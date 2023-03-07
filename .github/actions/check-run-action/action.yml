@@ -1,0 +1,90 @@
+name: 'Create/Update a check run'
+description: 'Creates or updates a check run in a different repository; Requires the credentials of a GitHub App installed in that repository.'
+inputs:
+  app-id:
+    description: 'The GitHub App ID'
+    required: true
+  private-key:
+    description: 'The private key of the GitHub App'
+    required: true
+  owner:
+    description: 'The owner of the target repository'
+    required: true
+    default: 'git-for-windows'
+  repo:
+    description: 'The name of the target repository'
+    required: true
+  rev:
+    description: 'The target commit'
+    required: true
+  check-run-name:
+    description: 'The name of the Check Run'
+    required: true
+  title:
+    description: 'The title of the Check Run'
+  summary:
+    description: 'The summary of the Check Run'
+  text:
+    description: 'The body of the Check Run'
+  details-url:
+    description: 'The details URL of the Check Run'
+  append-text:
+    description: 'Text to append to the Check Run'
+  conclusion:
+    description: 'Conclusion ("success", "cancelled" or "failure")'
+outputs:
+  check-run-id:
+    description: "The Check Run ID"
+    value: ${{ steps.check-run.outputs.id }}
+runs:
+  using: "composite"
+  steps:
+    - name: Create or update the Check Run
+      id: check-run
+      uses: actions/github-script@v6
+      env:
+        APP_ID: ${{ inputs.app-id }}
+        PRIVATE_KEY: ${{ inputs.private-key }}
+        OWNER: ${{ inputs.owner }}
+        REPO: ${{ inputs.repo }}
+
+        REV: ${{ inputs.rev }}
+        CHECK_RUN_NAME: ${{ inputs.check-run-name }}
+        TITLE: ${{ inputs.title }}
+        SUMMARY: ${{ inputs.summary }}
+        TEXT: ${{ inputs.text }}
+        DETAILS_URL: ${{ inputs.details-url }}
+
+        APPEND_TEXT: ${{ inputs.append-text }}
+        CONCLUSION: ${{ inputs.conclusion }}
+      with:
+        script: |
+          if (!process.env.REV && !process.env.APPEND_TEXT && !process.env.CONCLUSION) {
+            throw new Error(`Expected either 'rev' or 'conclusion' to be specified`)
+          }
+
+          const { initCheckRunState } = require('./check-runs')
+          const state = await initCheckRunState(
+            console,
+            core.setSecret,
+            process.env.APP_ID || undefined,
+            process.env.PRIVATE_KEY || undefined,
+            process.env.OWNER || undefined,
+            process.env.REPO || undefined)
+
+          if (process.env.REV) await state.get(
+            process.env.REV,
+            process.env.CHECK_RUN_NAME || undefined,
+            process.env.TITLE || undefined,
+            process.env.SUMMARY || undefined,
+            process.env.TEXT || undefined,
+            process.env.DETAILS_URL || undefined
+          )
+          if (process.env.APPEND_TEXT || process.env.CONCLUSION) await state.update(
+            process.env.APPEND_TEXT || undefined,
+            process.env.CONCLUSION || undefined,
+            process.env.TITLE || undefined,
+            process.env.SUMMARY || undefined
+          )
+
+          core.setOutput('id', state.id)

@@ -47,59 +47,20 @@ jobs:
         #
         # Therefore, we registered a GitHub App and stored the data required to
         # act as that App in repository secrets `GH_APP_ID`, `GH_APP_PRIVATE_KEY`.
-      - name: Obtain installation token
+      - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
         if: env.CREATE_CHECK_RUN != 'false'
-        id: setup
-        uses: actions/github-script@v6
+        uses: ./.github/actions/check-run-action
         with:
-          script: |
-            const appId = ${{ secrets.GH_APP_ID }}
-            const privateKey = `${{ secrets.GH_APP_PRIVATE_KEY }}`
-
-            const getAppInstallationId = require('./get-app-installation-id')
-            const installationId = await getAppInstallationId(
-              console,
-              appId,
-              privateKey,
-              process.env.OWNER,
-              process.env.REPO
-            )
-
-            const getInstallationAccessToken = require('./get-installation-access-token')
-            const { expiresAt, token: accessToken } = await getInstallationAccessToken(
-              console,
-              appId,
-              privateKey,
-              installationId
-            )
-
-            core.setSecret(accessToken)
-            core.setOutput('expires-at', expiresAt)
-            core.setOutput('token', accessToken)
-
-      - name: get check run id
-        if: env.CREATE_CHECK_RUN != 'false'
-        id: check-run
-        uses: actions/github-script@v6
-        with:
-          script: |
-            const getCheckRunId = require('./get-check-run-id')
-            core.setOutput('id', await getCheckRunId(
-              console,
-              '${{ steps.setup.outputs.token }}',
-              process.env.OWNER,
-              process.env.REPO,
-              process.env.REF,
-              `${
-                process.env.BUILD_ONLY ? 'build' : 'deploy'
-              }${
-                process.env.ARCHITECTURE ? `_${process.env.ARCHITECTURE}` : ''
-              }`,
-              `Build${process.env.BUILD_ONLY ? '' : ' and deploy'} ${process.env.PACKAGE_TO_BUILD}`,
-              `${process.env.BUILD_ONLY ? 'Building' : 'Deploying'} ${process.env.PACKAGE_TO_BUILD}`,
-              `For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}).`,
-              `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}`
-            ))
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          ref: ${{ env.REF }}
+          check-run-name: "${{ env.BUILD_ONLY && 'build' || 'deploy' }}${{ env.ARCHITECTURE && format(' _{0}', env.ARCHITECTURE) || '' }}"
+          title: "Build${{ !env.BUILD_ONLY && ' and deploy' || '' }} ${{ env.PACKAGE_TO_BUILD }}"
+          summary: "${{ env.BUILD_ONLY && 'Building' || 'Deploying' }} ${{ env.PACKAGE_TO_BUILD }}"
+          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
 
       - name: Identify actor
         id: actor
@@ -296,59 +257,13 @@ jobs:
             exit 1
           fi
 
-      - name: refresh installation token (if needed)
-        if: env.CREATE_CHECK_RUN != 'false'
-        id: refresh
-        uses: actions/github-script@v6
-        with:
-          script: |
-            // GitHub Apps' installation access tokens expire after one hour, see:
-            // https://docs.github.com/en/developers/apps/building-github-apps/authenticating-with-github-apps#authenticating-as-an-installation
-            // let's generate a new one if less than 5 minutes before the expiry date, otherwise reuse it
-            if (Date.parse('${{ steps.setup.outputs.expires-at }}') - Date.now() > 5 * 60 * 1000) {
-              core.setOutput('expires-at', '${{ steps.setup.outputs.expires-at }}')
-              core.setOutput('token', '${{ steps.setup.outputs.token }}')
-              core.info('Continuing to use the unexpired installation access token')
-              return
-            }
-            const appId = ${{ secrets.GH_APP_ID }}
-            const privateKey = `${{ secrets.GH_APP_PRIVATE_KEY }}`
-
-            const getAppInstallationId = require('./get-app-installation-id')
-            const installationId = await getAppInstallationId(
-              console,
-              appId,
-              privateKey,
-              process.env.OWNER,
-              process.env.REPO
-            )
-
-            const getInstallationAccessToken = require('./get-installation-access-token')
-            const { expiresAt, token: accessToken } = await getInstallationAccessToken(
-              console,
-              appId,
-              privateKey,
-              installationId
-            )
-
-            core.setSecret(accessToken)
-            core.setOutput('expires-at', expiresAt)
-            core.setOutput('token', accessToken)
-
       - name: update check-run
         if: env.CREATE_CHECK_RUN != 'false'
-        uses: actions/github-script@v6
+        uses: ./.github/actions/check-run-action
         with:
-          script: |
-            const updateCheckRun = require('./update-check-run')
-            await updateCheckRun(
-              console,
-              '${{ steps.refresh.outputs.token }}',
-              process.env.OWNER,
-              process.env.REPO,
-              '${{ steps.check-run.outputs.id }}',
-              `The build was successful!`
-            )
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: 'The build was successful!'
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v1
@@ -381,16 +296,9 @@ jobs:
 
       - name: mark check run as completed
         if: env.CREATE_CHECK_RUN != 'false' && always()
-        uses: actions/github-script@v6
+        uses: ./.github/actions/check-run-action
         with:
-          script: |
-            const updateCheckRun = require('./update-check-run')
-            await updateCheckRun(
-              console,
-              '${{ steps.refresh.outputs.token }}',
-              process.env.OWNER,
-              process.env.REPO,
-              '${{ steps.check-run.outputs.id }}',
-              '${{ job.status }}' == 'success' ? 'Done!' : `Completed: ${{ job.status }}.`,
-              '${{ job.status }}'
-            )
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: "${{ job.status == 'success' && 'Done!' || format('Completed: {0}', job.status) }}."
+          conclusion: ${{ job.status }}

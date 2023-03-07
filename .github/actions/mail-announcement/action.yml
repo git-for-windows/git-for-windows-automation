@@ -1,0 +1,94 @@
+name: 'Send the announcement mail'
+description: 'This stage sends out a mail to the various mailing lists to announce the new Git for Windows release.'
+inputs:
+  app-id:
+    description: 'The GitHub App ID'
+    required: true
+  private-key:
+    description: 'The private key of the GitHub App'
+    required: true
+  owner:
+    description: 'The owner of the target repository'
+    required: true
+    default: 'git-for-windows'
+  repo:
+    description: 'The name of the target repository'
+    required: true
+    default: 'git'
+  display-version:
+    description: 'The version that is being released'
+    required: true
+  rev:
+    description: 'The target commit'
+    required: true
+  announcement:
+    description: 'The mail to send out'
+    required: true
+  smtp-server:
+    description: 'The SMTP server to use to send out the mail'
+    required: true
+  smtp-login:
+    description: 'The SMTP login to use to send out the mail'
+    required: true
+  smtp-password:
+    description: 'The SMTP password to use to send out the mail'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: release
+    - name: Mirror Check Run to ${{ inputs.owner }}/${{ inputs.repo }}
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ inputs.owner }}
+        repo: ${{ inputs.repo }}
+        rev: ${{ inputs.rev }}
+        check-run-name: "announcement-mail"
+        title: "Send ${{ inputs.display-version }} announcement"
+        summary: "Sending out a mail to the various mailing lists to announce Git for Windows"
+        text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+        details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+    - name: Install git-email
+      shell: bash
+      run: |
+        sudo add-apt-repository ppa:git-core/ppa &&
+        sudo apt-get update &&
+        sudo apt-get -y install libnet-ssleay-perl git-email
+    - name: Send announcement email
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const mbox = ${{ toJSON(inputs.announcement) }}
+
+          const match = mbox.match(/From: ([^<]+) <([^>]+>)/)
+          if (!match) throw new Error(`Could not find author information in ${mbox}`)
+          const { callGit } = require('./repository-updates')
+          callGit(['config', 'user.name', match[1]])
+          callGit(['config', 'user.email', match[2]])
+
+          const fs = require('fs')
+          fs.writeFileSync('mbox', mbox)
+
+          callGit(['-c', 'sendemail.confirm=never',
+            'send-email',
+            '--to-cmd=true',
+            '--cc-cmd=true',
+            '--8bit-encoding=UTF-8',
+            '--smtp-encryption=tls',
+            `--smtp-server=${{ inputs.smtp-server }}`,
+            `--smtp-user=${{ inputs.smtp-login }}`,
+            `--smtp-pass=${{ inputs.smtp-password }}`,
+            'mbox'
+          ])
+    - name: update check-run
+      if: always()
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        append-text: "${{ github.action_status == 'success' && 'Done!' || format('Completed: {0}', github.action_status) }}."
+        conclusion: ${{ github.action_status }}

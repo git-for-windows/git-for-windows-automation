@@ -1,0 +1,158 @@
+name: 'Upload Git artifacts to a new GitHub Release'
+description: 'Creates a new GitHub Release in git-for-windows/git and uploads previously generated Git artifacts.'
+inputs:
+  app-id:
+    description: 'The GitHub App ID'
+    required: true
+  private-key:
+    description: 'The private key of the GitHub App'
+    required: true
+  owner:
+    description: 'The owner of the target repository'
+    required: true
+    default: 'git-for-windows'
+  repo:
+    description: 'The name of the target repository'
+    required: true
+    default: 'git'
+  display-version:
+    description: 'The version that is being released'
+    required: true
+  tag-name:
+    description: 'The name of the git-for-windows/tag for the release'
+    required: true
+  rev:
+    description: 'The target commit'
+    required: true
+  release-notes:
+    description: 'The note to attach to the GitHub Release'
+    required: true
+  artifacts-repository:
+    description: 'The repository that has the workflow run artifacts'
+    required: true
+  artifacts-token:
+    description: 'The token to access the workflow run artifacts'
+    required: true
+  git_artifacts_i686_workflow_run_id:
+    description: 'ID of the git-artifacts (i686) workflow run'
+    required: true
+  git_artifacts_x86_64_workflow_run_id:
+    description: 'ID of the git-artifacts (x86_64) workflow run'
+    required: true
+outputs:
+  github-release-url:
+    description: "The GitHub Release URL"
+    value: ${{ steps.release.outputs.url }}
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: release
+    - name: Mirror Check Run to ${{ inputs.owner }}/${{ inputs.repo }}
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ inputs.owner }}
+        repo: ${{ inputs.repo }}
+        rev: ${{ inputs.rev }}
+        check-run-name: "github-release"
+        title: "Publish ${{ inputs.display-version }} for @${{ inputs.rev }}"
+        summary: "Downloading the Git artifacts from ${{ inputs.git_artifacts_x86_64_workflow_run_id }} and ${{ inputs.git_artifacts_i686_workflow_run_id }} and publishing them as a new GitHub Release at ${{ inputs.owner }}/${{ inputs.repo }}"
+        text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+        details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+    - name: Download bundle-artifacts (needed to push the tag)
+      uses: actions/download-artifact@v3
+      with:
+        name: bundle-artifacts
+        path: bundle-artifacts
+    - name: create release and upload release assets
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const {
+            getGitArtifacts,
+            sha256sumsFromReleaseNotes,
+            checkSHA256Sums,
+            createRelease,
+            uploadGitArtifacts,
+            pushGitTag,
+            updateRelease
+          } = require('./github-release')
+
+          const [ artifactsOwner, artifactsRepo ] = '${{ inputs.artifacts-repository }}'.split('/')
+          const artifacts = await getGitArtifacts(
+            console,
+            ${{ toJSON(inputs.artifacts-token) }},
+            artifactsOwner,
+            artifactsRepo,
+            ${{ inputs.git_artifacts_i686_workflow_run_id }},
+            ${{ inputs.git_artifacts_x86_64_workflow_run_id }}
+          )
+
+          const sha256sums = sha256sumsFromReleaseNotes(${{ toJSON(inputs.release-notes) }})
+          await checkSHA256Sums(console, artifacts, sha256sums)
+
+          const { initCheckRunState } = require('./check-runs')
+          const state = await initCheckRunState(
+            console,
+            core.setSecret,
+            ${{ inputs.app-id }},
+            ${{ toJSON(inputs.private-key) }},
+            '${{ inputs.owner }}',
+            '${{ inputs.repo }}')
+          await state.refreshToken()
+
+          const release = await createRelease(
+            console,
+            state.accessToken,
+            '${{ inputs.owner }}',
+            '${{ inputs.repo }}',
+            '${{ inputs.tag-name }}',
+            undefined,
+            'Git for Windows ${{ inputs.display-version }}',
+            ${{ toJSON(inputs.release-notes) }}
+          )
+          await state.refreshToken()
+
+          await uploadGitArtifacts(
+            console,
+            state.accessToken,
+            '${{ inputs.owner }}',
+            '${{ inputs.repo }}',
+            release.id,
+            artifacts
+          )
+          await state.refreshToken()
+
+          await pushGitTag(
+            console,
+            core.setSecret,
+            state.accessToken,
+            '${{ inputs.owner }}',
+            '${{ inputs.repo }}',
+            '${{ inputs.tag-name }}',
+            'bundle-artifacts/git.bundle'
+          )
+          await state.refreshToken()
+
+          console.log('Publishing release')
+          await updateRelease(
+            console,
+            state.accessToken,
+            '${{ inputs.owner }}',
+            '${{ inputs.repo }}',
+            release.id, {
+              draft: false,
+              prerelease: '${{ inputs.tag-name }}'.indexOf('-rc') > 0
+            }
+          )
+    - name: update check-run
+      if: always()
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        append-text: "${{ github.action_status == 'success' && 'Done!' || format('Completed: {0}', github.action_status) }}."
+        conclusion: ${{ github.action_status }}

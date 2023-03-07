@@ -1,0 +1,123 @@
+name: 'Upload Pacman packages for a new Git for Windows version'
+description: 'Publishes the various Pacman packages associated with a new Git for Windows version.'
+inputs:
+  app-id:
+    description: 'The GitHub App ID'
+    required: true
+  private-key:
+    description: 'The private key of the GitHub App'
+    required: true
+  owner:
+    description: 'The owner of the target repository'
+    required: true
+    default: 'git-for-windows'
+  repo:
+    description: 'The name of the target repository'
+    required: true
+    default: 'git'
+  display-version:
+    description: 'The version that is being released'
+    required: true
+  rev:
+    description: 'The target commit'
+    required: true
+  artifacts-repository:
+    description: 'The repository that has the workflow run artifacts'
+    required: true
+  artifacts-token:
+    description: 'The token to access the workflow run artifacts'
+    required: true
+  git_artifacts_i686_workflow_run_id:
+    description: 'ID of the git-artifacts (i686) workflow run'
+    required: true
+  git_artifacts_x86_64_workflow_run_id:
+    description: 'ID of the git-artifacts (x86_64) workflow run'
+    required: true
+  gpg-key:
+    description: 'The GPG key to use to sign the updated Pacman database'
+    required: true
+  priv-gpg-key:
+    description: 'The base64-encoded private GPG key to use to sign the updated Pacman database'
+    required: true
+  azure-blobs-token:
+    description: 'The token needed to upload the files to the Pacman repository'
+    required: true
+runs:
+  using: "composite"
+  steps:
+    - uses: actions/checkout@v3
+      with:
+        ref: release
+    - name: Mirror Check Run to ${{ inputs.owner }}/${{ inputs.repo }}
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        owner: ${{ inputs.owner }}
+        repo: ${{ inputs.repo }}
+        rev: ${{ inputs.rev }}
+        check-run-name: "pacman-packages"
+        title: "Deploy the mingw-w64-git packages ${{ inputs.display-version }}"
+        summary: "Downloading the Pacman packages from ${{ inputs.git_artifacts_x86_64_workflow_run_id }} and ${{ inputs.git_artifacts_i686_workflow_run_id }} and deploying them to the Pacman Repository"
+        text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+        details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+    - name: Download artifacts
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const [ artifactsOwner, artifactsRepo ] = '${{ inputs.artifacts-repository }}'.split('/')
+          const { getWorkflowRunArtifact } = require('./repository-updates')
+          await getWorkflowRunArtifact(
+            console,
+            ${{ toJSON(inputs.artifacts-token) }},
+            artifactsOwner,
+            artifactsRepo,
+            ${{ inputs.git_artifacts_x86_64_workflow_run_id }},
+            'pkg-x86_64'
+          )
+
+          await getWorkflowRunArtifact(
+            console,
+            ${{ toJSON(inputs.artifacts-token) }},
+            artifactsOwner,
+            artifactsRepo,
+            ${{ inputs.git_artifacts_i686_workflow_run_id }},
+            'pkg-i686'
+          )
+    - name: Download Git for Windows SDK
+      uses: git-for-windows/setup-git-for-windows-sdk@v1
+      with:
+        flavor: build-installers
+        architecture: x86_64
+    - name: Prepare home directory for deploying to the Pacman repository
+      shell: bash
+      run: |
+        # Mask the form of the access key in which `openssl` requires it to generate the HMAC signature,
+        # to avoid leaking the key inadvertently e.g. when debugging via `set -x`
+        echo "::add-mask::$(echo "${{ inputs.AZURE_BLOBS_TOKEN }}" | base64 -d -w0 | xxd -p -c256)"
+    - name: Clone build-extra
+      shell: bash
+      run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra "$RUNNER_TEMP"/build-extra
+    - name: Prepare home directory for GPG signing
+      shell: bash
+      env:
+        GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
+      run: |
+        echo '${{ inputs.priv-gpg-key }}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
+        git config --global gpg.program "$RUNNER_TEMP/build-extra/gnupg-with-gpgkey.sh"
+    - name: Upload Pacman packages
+      shell: bash
+      env:
+        GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
+        GPGKEY: ${{ inputs.gpg-key }}
+        azure_blobs_token: ${{ inputs.azure-blobs-token }}
+      run: |
+        "$RUNNER_TEMP"/build-extra/pacman-helper.sh quick_add pkg-x86_64/*.tar.* pkg-i686/*.tar.*
+    - name: update check-run
+      if: always()
+      uses: ./.github/actions/check-run-action
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+        append-text: "${{ github.action_status == 'success' && 'Done!' || format('Completed: {0}', github.action_status) }}."
+        conclusion: ${{ github.action_status }}
