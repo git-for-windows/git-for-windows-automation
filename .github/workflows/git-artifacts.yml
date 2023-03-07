@@ -83,10 +83,10 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const { waitForWorkflowRunToFinish } = require('workflow-runs')
+            const { waitForWorkflowRunToFinish } = require('./workflow-runs')
             await waitForWorkflowRunToFinish(
               console,
-              '${{ secrets.GITHUB_TOKEN }},
+              '${{ secrets.GITHUB_TOKEN }}',
               context.repo.owner,
               context.repo.repo,
               process.env.TAG_GIT_WORKFLOW_RUN_ID
