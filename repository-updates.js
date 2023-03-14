@@ -24,6 +24,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   context.log(`Pushing updates to ${owner}/${repo}`)
 
   const bare = ['build-extra', 'git-for-windows.github.io'].includes(repo) ? '' : ['--bare']
+  const gitDir = `${repo}${bare ? '' : '/.git'}`
 
   callGit(['clone', ...bare,
     '--single-branch', '--branch', 'main', '--depth', '50',
@@ -31,7 +32,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   ])
 
   if (bundlePath) {
-    callGit(['--git-dir', 'git', 'fetch', bundlePath, refName], repo)
+    callGit(['--git-dir', gitDir, 'fetch', bundlePath, refName], repo)
   }
 
   if (repo === 'build-extra') {
@@ -64,7 +65,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   const auth = Buffer.from(`PAT:${accessToken}`).toString('base64')
   if (setSecret) setSecret(auth)
 
-  callGit(['--git-dir', `${repo}${bare ? '' : '/.git'}`,
+  callGit(['--git-dir', gitDir,
     '-c', `http.extraHeader=Authorization: Basic ${auth}`,
     'push', `https://github.com/${owner}/${repo}`, refName
   ])
