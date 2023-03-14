@@ -1,15 +1,16 @@
-const callProg = (prog, parameters) => {
+const callProg = (prog, parameters, cwd) => {
   const { spawnSync } = require('child_process')
   const child = spawnSync(prog, parameters, {
-    stdio: ['ignore', 'pipe', 'inherit']
+    stdio: ['ignore', 'pipe', 'inherit'],
+    cwd
   })
   if (child.error) throw error
   if (child.status !== 0) throw new Error(`${prog} ${parameters.join(' ')} failed with status ${child.status}`)
   return child.stdout.toString('utf-8')
 }
 
-const callGit = (parameters) => {
-  return callProg('git', parameters)
+const callGit = (parameters, cwd) => {
+  return callProg('git', parameters, cwd)
 }
 
 const getWorkflowRunArtifact = async (context, token, owner, repo, workflowRunId, name) => {
