@@ -64,10 +64,10 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   const auth = Buffer.from(`PAT:${accessToken}`).toString('base64')
   if (setSecret) setSecret(auth)
 
-  callGit(['--git-dir', 'git',
+  callGit(['--git-dir', `${repo}${bare ? '' : '/.git'}`,
     '-c', `http.extraHeader=Authorization: Basic ${auth}`,
     'push', `https://github.com/${owner}/${repo}`, refName
-  ], repo)
+  ])
   context.log(`Done pushing ref ${refName} to ${owner}/${repo}`)
 }
 
