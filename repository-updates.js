@@ -36,7 +36,8 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   }
 
   if (repo === 'build-extra') {
-    callGit(['switch', '-f', '-c', refName, 'FETCH_HEAD'], repo)
+    callGit(['branch', '-M', refName], repo)
+    callGit(['merge', '--no-edit', 'FETCH_HEAD'], repo)
     callProg('./download-stats.sh', ['--update'], repo)
     callGit(['commit', '-s', '-m', 'download-stats: new Git for Windows version', './download-stats.sh'], repo)
   } else if (repo === 'git-for-windows.github.io') {
