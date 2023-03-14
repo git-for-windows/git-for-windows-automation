@@ -61,7 +61,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
     installationId
   )
 
-  const auth = Buffer.from(`PATH:${token}`).toString('base64')
+  const auth = Buffer.from(`PAT:${accessToken}`).toString('base64')
   if (setSecret) setSecret(auth)
 
   callGit(['--git-dir', 'git',
