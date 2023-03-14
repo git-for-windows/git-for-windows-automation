@@ -31,17 +31,17 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   ])
 
   if (bundlePath) {
-    callGit(['--git-dir', 'git', 'fetch', bundlePath, refName])
+    callGit(['--git-dir', 'git', 'fetch', bundlePath, refName], repo)
   }
 
   if (repo === 'build-extra') {
-    callGit(['switch', '-f', '-c', refName, 'FETCH_HEAD'])
-    callProg('./download-stats.sh', ['--update'])
-    callGit(['commit', '-s', '-m', 'download-stats: new Git for Windows version', './download-stats.sh'])
+    callGit(['switch', '-f', '-c', refName, 'FETCH_HEAD'], repo)
+    callProg('./download-stats.sh', ['--update'], repo)
+    callGit(['commit', '-s', '-m', 'download-stats: new Git for Windows version', './download-stats.sh'], repo)
   } else if (repo === 'git-for-windows.github.io') {
-    callGit(['switch', '-C', 'main', 'origin/main'])
-    callProg('node', ['bump-version.js', '--auto'])
-    callGit(['commit', '-a', '-s', '-m', 'New Git for Windows version'])
+    callGit(['switch', '-C', 'main', 'origin/main'], repo)
+    callProg('node', ['bump-version.js', '--auto'], repo)
+    callGit(['commit', '-a', '-s', '-m', 'New Git for Windows version'], repo)
   }
 
   const getAppInstallationId = require('./get-app-installation-id')
@@ -67,7 +67,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   callGit(['--git-dir', 'git',
     '-c', `http.extraHeader=Authorization: Basic ${auth}`,
     'push', `https://github.com/${owner}/${repo}`, refName
-  ])
+  ], repo)
   context.log(`Done pushing ref ${refName} to ${owner}/${repo}`)
 }
 
