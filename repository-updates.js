@@ -32,7 +32,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   ])
 
   if (bundlePath) {
-    callGit(['--git-dir', gitDir, 'fetch', bundlePath, refName], repo)
+    callGit(['--git-dir', gitDir, 'fetch', bundlePath, refName])
   }
 
   if (repo === 'build-extra') {
