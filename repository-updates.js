@@ -23,7 +23,7 @@ const getWorkflowRunArtifact = async (context, token, owner, repo, workflowRunId
 const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner, repo, refName, bundlePath) => {
   context.log(`Pushing updates to ${owner}/${repo}`)
 
-  const bare = ['build-extra', 'git-for-windows.github.io'].includes(repo) ? '' : '--bare'
+  const bare = ['build-extra', 'git-for-windows.github.io'].includes(repo) ? '' : ['--bare']
 
   callGit(['clone', ...bare,
     '--single-branch', '--branch', 'main', '--depth', '50',
