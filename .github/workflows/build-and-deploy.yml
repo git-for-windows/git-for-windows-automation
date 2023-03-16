@@ -55,8 +55,8 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: ${{ env.OWNER }}
           repo: ${{ env.REPO }}
-          ref: ${{ env.REF }}
-          check-run-name: "${{ env.BUILD_ONLY && 'build' || 'deploy' }}${{ env.ARCHITECTURE && format(' _{0}', env.ARCHITECTURE) || '' }}"
+          rev: ${{ env.REF }}
+          check-run-name: "${{ env.BUILD_ONLY && 'build' || 'deploy' }}${{ env.ARCHITECTURE && format('_{0}', env.ARCHITECTURE) || '' }}"
           title: "Build${{ !env.BUILD_ONLY && ' and deploy' || '' }} ${{ env.PACKAGE_TO_BUILD }}"
           summary: "${{ env.BUILD_ONLY && 'Building' || 'Deploying' }} ${{ env.PACKAGE_TO_BUILD }}"
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
