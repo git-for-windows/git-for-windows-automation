@@ -6,7 +6,7 @@ const callProg = (prog, parameters, cwd) => {
   })
   if (child.error) throw error
   if (child.status !== 0) throw new Error(`${prog} ${parameters.join(' ')} failed with status ${child.status}`)
-  return child.stdout.toString('utf-8')
+  return child.stdout.toString('utf-8').replace(/\r?\n$/, '')
 }
 
 const callGit = (parameters, cwd) => {
