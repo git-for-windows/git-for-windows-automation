@@ -100,11 +100,28 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   ])
   context.log(`Done pushing ref ${refName} to ${owner}/${repo}`)
 }
+
+const pushGitBranch = async (context, setSecret, appId, privateKey, owner, repo, pushRefSpec) => {
+  context.log(`Pushing ${pushRefSpec} to ${owner}/${repo}`)
+
+  callGit(['clone', '--bare', '--filter=blob:none',
+    '--single-branch', '--branch', 'main', '--depth', '50',
+    `https://github.com/${owner}/${repo}`, repo
+  ])
+
+  const authorizationHeader = await getPushAuthorizationHeader(context, setSecret, appId, privateKey, owner, repo)
+
+  callGit(['--git-dir', repo,
+    '-c', `http.extraHeader=${authorizationHeader}`,
+    'push', `https://github.com/${owner}/${repo}`, pushRefSpec
+  ])
+  context.log(`Done pushing ref ${pushRefSpec} to ${owner}/${repo}`)
 }
 
 module.exports = {
   mergeBundle,
   callGit,
   getWorkflowRunArtifact,
-  pushRepositoryUpdate
+  pushRepositoryUpdate,
+  pushGitBranch
 }

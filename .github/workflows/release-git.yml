@@ -40,7 +40,20 @@ jobs:
             })
 
             if (sha !== '${{ github.sha }}') {
-              throw new Error(`The 'release' branch is not up to date!
+              // Try to update the `release` branch by fast-forwarding to `main`
+              try {
+                const { pushGitBranch } = require('./repository-updates.js')
+                await pushGitBranch(
+                  console,
+                  core.setSecret,
+                  ${{ secrets.GH_APP_ID }}
+                  ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                  context.repo.owner,
+                  context.repo.repo,
+                  'refs/heads/main:refs/heads/release'
+                )
+              } catch(e) {
+                throw new Error(`The 'release' branch is not up to date!
 
             Actual: ${sha}, expected: ${{ github.sha }}.
 
@@ -49,6 +62,7 @@ jobs:
             the 'release' branch, to allow modifying them and re-starting failed jobs
             individually. To that end, the 'release' branch is expected to point at the
             same commit as the 'main' branch when this workflow is started.`)
+              }
             }
       - uses: actions/checkout@v3
       - name: Get bundle-artifacts and sha256sums
