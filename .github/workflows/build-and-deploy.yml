@@ -107,10 +107,10 @@ jobs:
         shell: bash
         run: |
           mkdir -p /usr/src &&
-          git init -b main /usr/src/${{ env.REPO }} &&
-          git -C /usr/src/${{ env.REPO }} remote add origin "https://github.com/$OWNER/$REPO" &&
-          git -C /usr/src/${{ env.REPO }} fetch --depth 1 origin $REF &&
-          git -C /usr/src/${{ env.REPO }} reset --hard FETCH_HEAD
+          git init -b main /usr/src/$REPO &&
+          git -C /usr/src/$REPO remote add origin "https://github.com/$OWNER/$REPO" &&
+          git -C /usr/src/$REPO fetch --depth 1 origin $REF &&
+          git -C /usr/src/$REPO reset --hard FETCH_HEAD
 
       - name: check if the package was already deployed
         shell: bash
