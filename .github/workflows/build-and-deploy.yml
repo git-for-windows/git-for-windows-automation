@@ -112,6 +112,11 @@ jobs:
           git -C /usr/src/${{ env.REPO }} fetch --depth 1 origin $REF &&
           git -C /usr/src/${{ env.REPO }} reset --hard FETCH_HEAD
 
+      - name: check if the package was already deployed
+        shell: bash
+        run: |
+          ./update-scripts/ensure-not-yet-deployed.sh${{ env.ARCHITECTURE != '' && format(' --architecture={0}', env.ARCHITECTURE) || '' }} "/usr/src/$REPO/$PACKAGE_TO_BUILD"
+
       - name: Clone build-extra (unless cloned already)
         if: env.REPO != 'build-extra'
         shell: bash

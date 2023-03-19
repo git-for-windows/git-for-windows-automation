@@ -199,6 +199,10 @@ jobs:
           git commit -sm "$msg" PKGBUILD &&
           echo "msg=$msg" >>$GITHUB_OUTPUT &&
           echo "modified=true" >>$GITHUB_OUTPUT
+      - name: check if the package was already deployed
+        shell: bash
+        run: |
+          ./update-scripts/ensure-not-yet-deployed.sh "/usr/src/$REPO/$PACKAGE_TO_UPGRADE"
       - name: push
         if: steps.update.outputs.modified == 'true'
         shell: bash
