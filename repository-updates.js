@@ -61,7 +61,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   if (bundlePath) mergeBundle(gitDir, !bare && repo, bundlePath, refName)
 
   if (repo === 'build-extra') {
-    callProg('./download-stats.sh', ['--update'], repo)
+    callProg('sh', ['./download-stats.sh', '--update'], repo)
     callGit(['commit', '-s', '-m', 'download-stats: new Git for Windows version', './download-stats.sh'], repo)
   } else if (repo === 'git-for-windows.github.io') {
     callGit(['switch', '-C', 'main', 'origin/main'], repo)
