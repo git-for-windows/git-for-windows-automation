@@ -62,6 +62,31 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   if (bundlePath) mergeBundle(gitDir, !bare && repo, bundlePath, refName)
 
   if (repo === 'build-extra') {
+    // Add `versions/package-versions-$ver*.txt`
+    const fs = require('fs')
+    const ver = fs.readFileSync('bundle-artifacts/ver').toString().trim()
+    fs.renameSync(
+      'installer-x86_64/package-versions.txt',
+      `${repo}/versions/package-versions-${ver}.txt`
+    )
+    fs.renameSync(
+      'mingit-x86_64/package-versions.txt',
+      `${repo}/versions/package-versions-${ver}-MinGit.txt`
+    )
+    callGit([
+      'add',
+      `versions/package-versions-${ver}.txt`,
+      `versions/package-versions-${ver}-MinGit.txt`
+    ], repo)
+    callGit([
+      'commit',
+      '-s',
+      '-m', `versions: add v${ver}`,
+      `versions/package-versions-${ver}.txt`,
+      `versions/package-versions-${ver}-MinGit.txt`
+    ], repo)
+
+    // Update `download-stats.sh`
     callProg('sh', ['./download-stats.sh', '--update'], repo)
     callGit(['commit', '-s', '-m', 'download-stats: new Git for Windows version', './download-stats.sh'], repo)
   } else if (repo === 'git-for-windows.github.io') {
