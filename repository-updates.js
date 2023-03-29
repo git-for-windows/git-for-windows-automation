@@ -50,6 +50,7 @@ const mergeBundle = (gitDir, worktree, bundlePath, refName) => {
 const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner, repo, refName, bundlePath) => {
   context.log(`Pushing updates to ${owner}/${repo}`)
 
+  // Updates to `build-extra` and `git-for-windows.github.io` need a worktree
   const bare = ['build-extra', 'git-for-windows.github.io'].includes(repo) ? '' : ['--bare']
   const gitDir = `${repo}${bare ? '' : '/.git'}`
 

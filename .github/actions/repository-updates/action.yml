@@ -64,6 +64,8 @@ runs:
         script: |
           const [ artifactsOwner, artifactsRepo ] = '${{ inputs.artifacts-repository }}'.split('/')
           const { getWorkflowRunArtifact, pushRepositoryUpdate } = require('./repository-updates')
+
+          // For MINGW-packages.bundle
           await getWorkflowRunArtifact(
             console,
             ${{ toJSON(inputs.artifacts-token) }},
