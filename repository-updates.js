@@ -47,6 +47,30 @@ const mergeBundle = (gitDir, worktree, bundlePath, refName) => {
   }
 }
 
+const getPushAuthorizationHeader = async (context, setSecret, appId, privateKey, owner, repo) => {
+  const getAppInstallationId = require('./get-app-installation-id')
+  const installationId = await getAppInstallationId(
+    context,
+    appId,
+    privateKey,
+    owner,
+    repo
+  )
+
+  const getInstallationAccessToken = require('./get-installation-access-token')
+  const { token: accessToken } = await getInstallationAccessToken(
+    context,
+    appId,
+    privateKey,
+    installationId
+  )
+
+  const auth = Buffer.from(`PAT:${accessToken}`).toString('base64')
+  if (setSecret) setSecret(auth)
+
+  return `Authorization: Basic ${auth}`
+}
+
 const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner, repo, refName, bundlePath) => {
   context.log(`Pushing updates to ${owner}/${repo}`)
 
@@ -69,36 +93,35 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
     callGit(['commit', '-a', '-s', '-m', 'New Git for Windows version'], repo)
   }
 
-  const getAppInstallationId = require('./get-app-installation-id')
-  const installationId = await getAppInstallationId(
-    context,
-    appId,
-    privateKey,
-    owner,
-    repo
-  )
-
-  const getInstallationAccessToken = require('./get-installation-access-token')
-  const { token: accessToken } = await getInstallationAccessToken(
-    context,
-    appId,
-    privateKey,
-    installationId
-  )
-
-  const auth = Buffer.from(`PAT:${accessToken}`).toString('base64')
-  if (setSecret) setSecret(auth)
-
+  const authorizationHeader = await getPushAuthorizationHeader(context, setSecret, appId, privateKey, owner, repo)
   callGit(['--git-dir', gitDir,
-    '-c', `http.extraHeader=Authorization: Basic ${auth}`,
+    '-c', `http.extraHeader=${authorizationHeader}`,
     'push', `https://github.com/${owner}/${repo}`, refName
   ])
   context.log(`Done pushing ref ${refName} to ${owner}/${repo}`)
+}
+
+const pushGitBranch = async (context, setSecret, appId, privateKey, owner, repo, pushRefSpec) => {
+  context.log(`Pushing ${pushRefSpec} to ${owner}/${repo}`)
+
+  callGit(['clone', '--bare', '--filter=blob:none',
+    '--single-branch', '--branch', 'main', '--depth', '50',
+    `https://github.com/${owner}/${repo}`, repo
+  ])
+
+  const authorizationHeader = await getPushAuthorizationHeader(context, setSecret, appId, privateKey, owner, repo)
+
+  callGit(['--git-dir', repo,
+    '-c', `http.extraHeader=${authorizationHeader}`,
+    'push', `https://github.com/${owner}/${repo}`, pushRefSpec
+  ])
+  context.log(`Done pushing ref ${pushRefSpec} to ${owner}/${repo}`)
 }
 
 module.exports = {
   mergeBundle,
   callGit,
   getWorkflowRunArtifact,
-  pushRepositoryUpdate
+  pushRepositoryUpdate,
+  pushGitBranch
 }
