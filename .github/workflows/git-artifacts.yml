@@ -438,7 +438,7 @@ jobs:
           echo "sha256sum-${{ matrix.artifact.name}}<<EOF" >>$GITHUB_OUTPUT &&
           cat artifacts/sha256sums.txt >>$GITHUB_OUTPUT &&
           echo EOF >>$GITHUB_OUTPUT
-      - name: Copy package-versions and pdbs
+      - name: Copy package-versions and pdbs (installer)
         if: matrix.artifact.name == 'installer'
         run: |
           cp /usr/src/build-extra/installer/package-versions.txt artifacts/ &&
@@ -448,6 +448,10 @@ jobs:
           mkdir -p cached-source-packages &&
           cp "$p"/*-pdb* cached-source-packages/ &&
           GIT_CONFIG_PARAMETERS="'windows.sdk${{env.SDK_REPO_ARCH}}.path='" ./please.sh bundle_pdbs --arch=${{env.ARCHITECTURE}} --directory="$a" installer/package-versions.txt)
+      - name: Copy package-versions (MinGit)
+        if: matrix.artifact.name == 'mingit'
+        run: |
+          cp /usr/src/build-extra/mingit/root/etc/package-versions.txt artifacts/
       - name: Publish ${{matrix.artifact.name}}-${{env.ARCHITECTURE}}
         uses: actions/upload-artifact@v3
         with:

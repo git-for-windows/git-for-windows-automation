@@ -64,6 +64,8 @@ runs:
         script: |
           const [ artifactsOwner, artifactsRepo ] = '${{ inputs.artifacts-repository }}'.split('/')
           const { getWorkflowRunArtifact, pushRepositoryUpdate } = require('./repository-updates')
+
+          // For MINGW-packages.bundle
           await getWorkflowRunArtifact(
             console,
             ${{ toJSON(inputs.artifacts-token) }},
@@ -82,6 +84,26 @@ runs:
             'MINGW-packages',
             'main',
             'pkg-x86_64/MINGW-packages.bundle'
+          )
+
+          // For versions/package-versions-$ver.txt
+          await getWorkflowRunArtifact(
+            console,
+            ${{ toJSON(inputs.artifacts-token) }},
+            artifactsOwner,
+            artifactsRepo,
+            ${{ inputs.git_artifacts_x86_64_workflow_run_id }},
+            'installer-x86_64'
+          )
+
+          // For versions/package-versions-$ver-MinGit.txt
+          await getWorkflowRunArtifact(
+            console,
+            ${{ toJSON(inputs.artifacts-token) }},
+            artifactsOwner,
+            artifactsRepo,
+            ${{ inputs.git_artifacts_x86_64_workflow_run_id }},
+            'mingit-x86_64'
           )
 
           await pushRepositoryUpdate(
