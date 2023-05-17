@@ -70,7 +70,7 @@ jobs:
             const githubApiRequest = require('./github-api-request')
             const answer = await githubApiRequest(
               console,
-              '${{ steps.setup.outputs.token }}',
+              '${{ secrets.GITHUB_TOKEN }}',
               'GET',
               `/users/${process.env.ACTOR}`
             )

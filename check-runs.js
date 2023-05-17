@@ -124,10 +124,18 @@ const initCheckRunState =  async (context, setSecret, appId, privateKey, owner, 
     ? JSON.parse(decrypt(fs.readFileSync(stateFile).toString(), privateKey))
     : {}
 
-  if (!state.owner) state.owner = owner
-  else if (owner && state.owner !== owner) throw new Error(`Expected owner ${state.owner}, got ${owner}`)
-  if (!state.repo) state.repo = repo
-  else if (repo && state.repo !== repo) throw new Error(`Expected repo ${state.repo}, got ${repo}`)
+  if (!state.appId) {
+    if (!appId) throw new Error(`Need an appId`)
+    state.appId = appId
+  } else if (appId && state.appId !== appId) throw new Error(`Expected appId ${state.appId}, got ${appId}`)
+  if (!state.owner) {
+    if (!owner) throw new Error(`Need an owner`)
+    state.owner = owner
+  } else if (owner && state.owner !== owner) throw new Error(`Expected owner ${state.owner}, got ${owner}`)
+  if (!state.repo) {
+    if (!repo) throw new Error(`Need a repository`)
+    state.repo = repo
+  } else if (repo && state.repo !== repo) throw new Error(`Expected repo ${state.repo}, got ${repo}`)
 
   state.store = () => {
     fs.writeFileSync(stateFile, encrypt(JSON.stringify(state), getPublicKey(privateKey)))
@@ -140,16 +148,16 @@ const initCheckRunState =  async (context, setSecret, appId, privateKey, owner, 
     const getAppInstallationId = require('./get-app-installation-id')
     const installationId = await getAppInstallationId(
       context,
-      appId,
+      state.appId,
       privateKey,
-      owner,
-      repo
+      state.owner,
+      state.repo
     )
 
     const getInstallationAccessToken = require('./get-installation-access-token')
     const { expiresAt, token: accessToken } = await getInstallationAccessToken(
       context,
-      appId,
+      state.appId,
       privateKey,
       installationId
     )
@@ -167,8 +175,8 @@ const initCheckRunState =  async (context, setSecret, appId, privateKey, owner, 
     state.id = await(getOrCreateCheckRun(
       context,
       state.accessToken,
-      owner || state.owner,
-      repo || state.repo,
+      state.owner,
+      state.repo,
       ref,
       checkRunName,
       title,
@@ -193,8 +201,8 @@ const initCheckRunState =  async (context, setSecret, appId, privateKey, owner, 
     state.text = await updateCheckRun(
       context,
       state.accessToken,
-      owner || state.owner,
-      repo || state.repo,
+      state.owner,
+      state.repo,
       state.id,
       appendText,
       conclusion,

@@ -18,7 +18,7 @@ on:
       snapshot:
         description: 'A flag indicating whether this is a snapshot or a full Git for Windows release'
         required: true
-        default: true
+        default: "true"
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
@@ -26,6 +26,7 @@ env:
   REPO: "${{github.event.inputs.repo}}"
   REV: "${{github.event.inputs.rev}}"
   SNAPSHOT: "${{github.event.inputs.snapshot}}"
+  CREATE_CHECK_RUN: "true"
   NODEJS_VERSION: 16
 
 jobs:
