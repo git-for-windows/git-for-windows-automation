@@ -46,7 +46,7 @@ jobs:
                 await pushGitBranch(
                   console,
                   core.setSecret,
-                  ${{ secrets.GH_APP_ID }}
+                  ${{ secrets.GH_APP_ID }},
                   ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
                   context.repo.owner,
                   context.repo.repo,
