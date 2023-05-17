@@ -40,7 +40,7 @@ jobs:
             })
 
             if (sha !== '${{ github.sha }}') {
-              // Try to update the `release` branch by fast-forwarding to `main`
+              console.log(`Trying to update the 'release' branch by fast-forwarding to 'main' in ${context.repo.owner}/${context.repo.repo}`)
               try {
                 const { pushGitBranch } = require('./repository-updates.js')
                 await pushGitBranch(
@@ -53,6 +53,7 @@ jobs:
                   'refs/heads/main:refs/heads/release'
                 )
               } catch(e) {
+                console.log(e)
                 throw new Error(`The 'release' branch is not up to date!
 
             Actual: ${sha}, expected: ${{ github.sha }}.
