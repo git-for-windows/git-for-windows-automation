@@ -26,6 +26,7 @@ env:
   REPO: "${{github.event.inputs.repo}}"
   REV: "${{github.event.inputs.rev}}"
   SNAPSHOT: "${{github.event.inputs.snapshot}}"
+  CREATE_CHECK_RUN: "true"
   NODEJS_VERSION: 16
 
 jobs:
