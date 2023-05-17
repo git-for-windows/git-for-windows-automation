@@ -9,17 +9,13 @@ inputs:
     required: true
   owner:
     description: 'The owner of the target repository'
-    required: true
     default: 'git-for-windows'
   repo:
     description: 'The name of the target repository'
-    required: true
   rev:
     description: 'The target commit'
-    required: true
   check-run-name:
     description: 'The name of the Check Run'
-    required: true
   title:
     description: 'The title of the Check Run'
   summary:
