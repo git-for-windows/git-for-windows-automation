@@ -83,7 +83,12 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
     `https://github.com/${owner}/${repo}`, repo
   ])
 
-  if (bundlePath) mergeBundle(gitDir, !bare && repo, bundlePath, refName)
+  if (bundlePath) {
+    // Allow Git to fetch non-local objects by pretending to be a partial clone
+    callGit(['--git-dir', gitDir, 'config', 'remote.origin.promisor', 'true'])
+    callGit(['--git-dir', gitDir, 'config', 'remote.origin.partialCloneFilter', 'blob:none'])
+    mergeBundle(gitDir, !bare && repo, bundlePath, refName)
+  }
 
   if (repo === 'build-extra') {
     // Add `versions/package-versions-$ver*.txt`
@@ -134,6 +139,10 @@ const pushGitBranch = async (context, setSecret, appId, privateKey, owner, repo,
     '--single-branch', '--branch', 'main', '--depth', '50',
     `https://github.com/${owner}/${repo}`, repo
   ])
+
+  // Allow Git to fetch non-local objects by pretending to be a partial clone
+  callGit(['--git-dir', repo, 'config', 'remote.origin.promisor', 'true'])
+  callGit(['--git-dir', repo, 'config', 'remote.origin.partialCloneFilter', 'blob:none'])
 
   const authorizationHeader = await getPushAuthorizationHeader(context, setSecret, appId, privateKey, owner, repo)
 

@@ -240,6 +240,10 @@ const pushGitTag = (context, setSecret, token, owner, repo, tagName, bundlePath)
     `https://github.com/${owner}/${repo}`, 'git'
   ])
 
+  // Allow Git to fetch non-local objects by pretending to be a partial clone
+  callGit(['--git-dir', 'git', 'config', 'remote.origin.promisor', 'true'])
+  callGit(['--git-dir', 'git', 'config', 'remote.origin.partialCloneFilter', 'blob:none'])
+
   callGit(['--git-dir', 'git', 'fetch', bundlePath, `refs/tags/${tagName}:refs/tags/${tagName}`])
   const auth = Buffer.from(`PATH:${token}`).toString('base64')
   if (setSecret) setSecret(auth)

@@ -124,6 +124,7 @@ const initCheckRunState =  async (context, setSecret, appId, privateKey, owner, 
     ? JSON.parse(decrypt(fs.readFileSync(stateFile).toString(), privateKey))
     : {}
 
+  if (appId && typeof(appId) === 'string') appId = parseInt(appId)
   if (!state.appId) {
     if (!appId) throw new Error(`Need an appId`)
     state.appId = appId
