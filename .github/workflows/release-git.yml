@@ -34,11 +34,19 @@ jobs:
         uses: actions/github-script@v6
         with:
           script: |
-            const { data: { object: { sha } } } = await github.rest.git.getRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: 'heads/release'
-            })
+            const sha = await (async () => {
+              try {
+                return (await github.rest.git.getRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: 'heads/release'
+                })).data.object.sha
+              } catch (e) {
+                // If the ref does not exist, use an undefined `sha`
+                if (e?.status === 404) return undefined
+                throw e
+              }
+            })()
 
             if (sha !== '${{ github.sha }}') {
               console.log(`Trying to update the 'release' branch by fast-forwarding to 'main' in ${context.repo.owner}/${context.repo.repo}`)
