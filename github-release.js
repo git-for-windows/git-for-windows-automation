@@ -134,6 +134,18 @@ const downloadBundleArtifacts = async (context, token, owner, repo, git_artifact
 
   fs.writeFileSync('bundle-artifacts/sha256sums', checksums)
 
+  // Work around out-of-band versions' announcement file containing parentheses
+  const withParens = result.ver.replace(/^(\d+\.\d+\.\d+)\.(\d+)$/, '$1($2)')
+  console.log(`withParens: ${withParens}`)
+  if (result.ver !== withParens) {
+    if (!fs.existsSync(`bundle-artifacts/announce-${result.ver}`)) {
+      fs.renameSync(`bundle-artifacts/announce-${withParens}`, `bundle-artifacts/announce-${result.ver}`)
+    }
+    if (!fs.existsSync(`bundle-artifacts/release-notes-${result.ver}`)) {
+      fs.renameSync(`bundle-artifacts/release-notes-${withParens}`, `bundle-artifacts/release-notes-${result.ver}`)
+    }
+  }
+
   result.announcement = fs
     .readFileSync(`bundle-artifacts/announce-${result.ver}`)
     .toString()
