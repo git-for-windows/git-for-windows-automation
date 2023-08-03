@@ -1,4 +1,0 @@
-#!/usr/bin/env node
-
-// Handle this identically to the MSYS package
-require('./openssl')
