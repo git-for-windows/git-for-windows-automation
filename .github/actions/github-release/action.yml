@@ -138,6 +138,7 @@ runs:
           await state.refreshToken()
 
           console.log('Publishing release')
+          const isPrerelease = '${{ inputs.tag-name }}'.indexOf('-rc') > 0
           await updateRelease(
             console,
             state.accessToken,
@@ -145,7 +146,8 @@ runs:
             '${{ inputs.repo }}',
             release.id, {
               draft: false,
-              prerelease: '${{ inputs.tag-name }}'.indexOf('-rc') > 0
+              prerelease: isPrerelease,
+              make_latest : !isPrerelease
             }
           )
     - name: update check-run
