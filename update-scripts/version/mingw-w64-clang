@@ -1,0 +1,2 @@
+#!/bin/bash
+. ./update-clang-from-msys2.sh
