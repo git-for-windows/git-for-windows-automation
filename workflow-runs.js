@@ -20,8 +20,8 @@ const waitForWorkflowRunToFinish = async (context, token, owner, repo, workflowR
           return res
       }
       if (context.log) context.log(`Waiting for workflow run ${workflowRunId} (current status: ${res.status})`)
-      if (counter++ > 30) throw new Error(`Times out waiting for workflow run ${workflowRunId}?`)
-      await sleep(1000)
+      if (counter++ > 60) throw new Error(`Timed out waiting for workflow run ${workflowRunId}?`)
+      await sleep(10000)
   }
 }
 
