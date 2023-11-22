@@ -1,0 +1,56 @@
+name: Cleanup Azure self hosted runners
+run-name: Cleanup Azure self hosted runners
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+# The following secrets are required for this workflow to run:
+# AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
+#                     group specifically for self-hosted Actions Runners.
+#   az ad sp create-for-rbac --name "{YOUR_DESCRIPTIVE_NAME_HERE}" --role contributor \
+#     --scopes /subscriptions/{SUBSCRIPTION_ID_HERE}/resourceGroups/{RESOURCE_GROUP_HERE} \
+#     --sdk-auth
+# AZURE_RESOURCE_GROUP - Resource group to create the runner(s) in
+jobs:
+  delete-runner:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Azure Login
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+    - name: Discover VMs to delete
+      uses: azure/CLI@v1
+      with:
+        azcliversion: 2.54.0
+        inlineScript: |
+          active_vms=$(az vm list -g ${{ secrets.AZURE_RESOURCE_GROUP }} | jq -c '.[] | {name,timeCreated}')
+          current_time=$(date +%s)
+          three_hours_ago=$(($current_time - 3 * 3600))
+
+          if [ -z "$active_vms" ]; then
+              echo "No active VMs found, nothing to do."
+              exit 0
+          else
+              echo "Found these active VMs:"
+              echo $active_vms
+          fi
+
+          for active_vm in ${active_vms[@]}; do
+              vm_name=$(echo $active_vm | jq '.name')
+              vm_creation_iso_string=$(echo $active_vm | jq -r '.timeCreated')
+              vm_creation_time=$(date -d $vm_creation_iso_string +%s)
+              
+              if [ "$three_hours_ago" -ge "$vm_creation_time" ]; then
+                  echo "The VM ${vm_name} was created more than 3 hours ago and wasn't deleted. Let's do that now."
+                  az vm delete -n "$vm_name" -g ${{ secrets.AZURE_RESOURCE_GROUP }} --yes
+                  az network nsg delete -n "$vm_name"-nsg -g ${{ secrets.AZURE_RESOURCE_GROUP }}
+                  az network vnet delete -n "$vm_name"-vnet -g ${{ secrets.AZURE_RESOURCE_GROUP }}
+                  az network public-ip delete -n "$vm_name"-ip -g ${{ secrets.AZURE_RESOURCE_GROUP }}
+              else
+                  echo "The VM ${vm_name} was created less then 3 hours ago and shouldn't be deleted yet. Skipping."
+              fi
+          done
