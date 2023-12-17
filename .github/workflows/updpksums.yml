@@ -1,0 +1,194 @@
+name: Update the checksums of a package version in an open PR
+run-name: Update checksums in git-for-windows/${{ inputs.repo }}#${{ inputs.pr-number }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: The repository containing the Pull Request
+        type: string
+        required: true
+      pr-number:
+        description: The number of the Pull Request to update
+        type: string
+        required: true
+      actor:
+        description: The GitHub user on whose behalf this workflow is run
+        required: false
+
+env:
+  REPO: ${{ github.event.inputs.repo }}
+  PR_NUMBER: ${{ github.event.inputs.pr-number }}
+  OWNER: 'git-for-windows'
+  ACTOR: "${{ github.event.inputs.actor || github.triggering_actor }}"
+
+jobs:
+  updpkgsums:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v3
+        # Since we want to operate on _another_ repository, we sadly cannot use:
+        #
+        # permissions:
+        #  checks: write
+        #
+        # Therefore, we registered a GitHub App and stored the data required to
+        # act as that App in repository secrets `GH_APP_ID`, `GH_APP_PRIVATE_KEY`.
+      - name: Obtain installation token
+        id: setup
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const appId = ${{ secrets.GH_APP_ID }}
+            const privateKey = `${{ secrets.GH_APP_PRIVATE_KEY }}`
+
+            const getAppInstallationId = require('./get-app-installation-id')
+            const installationId = await getAppInstallationId(
+              console,
+              appId,
+              privateKey,
+              process.env.OWNER,
+              process.env.REPO
+            )
+
+            const getInstallationAccessToken = require('./get-installation-access-token')
+            const { token: accessToken } = await getInstallationAccessToken(
+              console,
+              appId,
+              privateKey,
+              installationId
+            )
+
+            core.setSecret(accessToken)
+            core.setOutput('token', accessToken)
+      - name: Initialize Git for Windows SDK subset
+        uses: ./.github/actions/init-g4w-sdk-for-pacman
+      - name: Clone ${{ env.REPO }}
+        id: clone
+        shell: bash
+        run: |
+          mkdir -p /usr/src &&
+          git init "/usr/src/$REPO" &&
+          cd "/usr/src/$REPO" &&
+          git fetch --depth 1 "https://github.com/$OWNER/$REPO" "refs/pull/$PR_NUMBER/head" &&
+          git checkout FETCH_HEAD &&
+          echo "result=$(cygpath -aw "/usr/src/$REPO")" >>$GITHUB_OUTPUT
+      - name: Determine modified packages
+        id: determine-packages
+        uses: actions/github-script@v6
+        env:
+          WORKTREE_PATH: '${{ steps.clone.outputs.result }}'
+        with:
+          result-encoding: string
+          script: |
+            const githubApiRequest = require('./github-api-request')
+            const files = await githubApiRequest(
+              context,
+              '${{ steps.setup.outputs.token }}',
+              'GET',
+              `/repos/${process.env.OWNER}/${process.env.REPO}/pulls/${process.env.PR_NUMBER}/files`
+            )
+            const fs = require('fs')
+            const path = require('path')
+            const packages = files.map(e => path.dirname(e.filename)).reduce((a, directory) => {
+              if (a[0] !== directory && fs.existsSync(path.join(process.env.WORKTREE_PATH, directory, 'PKGBUILD'))) {
+                if (directory.indexOf(' ') >= 0) throw new Error(`${directory}: contains spaces!`)
+                a.unshift(directory)
+              }
+              return a
+            }, [])
+            return packages.join(' ')
+      - name: Identify actor
+        if: steps.determine-packages.outputs.result != ''
+        id: actor
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const githubApiRequest = require('./github-api-request')
+            const answer = await githubApiRequest(
+              console,
+              '${{ steps.setup.outputs.token }}',
+              'GET',
+              `/users/${process.env.ACTOR}`
+            )
+            core.setOutput('login', answer.login)
+            core.setOutput('name', answer.name)
+            core.setOutput('email', answer.email || `${process.env.ACTOR}@users.noreply.github.com`)
+      - name: Configure build
+        if: steps.determine-packages.outputs.result != ''
+        shell: bash
+        run: |
+          USER_NAME="${{ steps.actor.outputs.name }}" &&
+          USER_EMAIL="${{ steps.actor.outputs.email }}" &&
+          mkdir -p "$HOME" &&
+          git config --global user.name "$USER_NAME" &&
+          git config --global user.email "$USER_EMAIL" &&
+          echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >>$GITHUB_ENV
+      - name: Update packages
+        if: steps.determine-packages.outputs.result != ''
+        id: update
+        shell: bash
+        env:
+          PACKAGES: ${{ steps.determine-packages.outputs.result }}
+        run: |
+          for PACKAGE_TO_UPGRADE in $PACKAGES
+          do
+            cd "/usr/src/$REPO/$PACKAGE_TO_UPGRADE" &&
+            update_script="$GITHUB_WORKSPACE/update-scripts/checksums/$PACKAGE_TO_UPGRADE" &&
+            if test -f "$update_script"
+            then
+              PACKAGE_VERSION="$(sed -n 's/^pkgver=//p' PKGBUILD)" &&
+              test -n "$PACKAGE_VERSION" &&
+              $update_script "$PACKAGE_VERSION"
+            else
+              updpkgsums
+            fi &&
+
+            # give `pkgver()` a chance
+            if grep '^pkgver *()' PKGBUILD
+            then
+              # give makepkg a chance to update the version
+              git fetch --unshallow "https://github.com/$OWNER/$REPO" "refs/pull/$PR_NUMBER/head" &&
+              makepkg --noextract --nobuild
+            fi ||
+            exit 1
+          done
+
+          git update-index -q --refresh &&
+          if git diff-files --exit-code
+          then
+            echo "::notice::No checksums needed to be updated in $PACKAGES"
+            exit 0
+          fi &&
+
+          msg="$PACKAGES: update checksums" &&
+          git commit -asm "$msg" &&
+          echo "msg=$msg" >>$GITHUB_OUTPUT &&
+          echo "modified=true" >>$GITHUB_OUTPUT
+      - name: Determine repository to push to
+        # PRs frequently originate from forks; Unless contributors uncheck the box to
+        # allow maintainers to push to their PR branch, the GitForWindowsHelper GitHub
+        # App credentials are still good enough to push there, we just need to figure
+        # out where "there" is.
+        if: steps.update.outputs.modified == 'true'
+        id: determine-repository
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const githubApiRequest = require('./github-api-request')
+            const pr = await githubApiRequest(
+              context,
+              '${{ steps.setup.outputs.token }}',
+              'GET',
+              `/repos/${process.env.OWNER}/${process.env.REPO}/pulls/${process.env.PR_NUMBER}`
+            )
+            core.setOutput('ref', pr.head.ref)
+            core.setOutput('url', pr.head.repo.clone_url)
+      - name: Push changes
+        if: steps.update.outputs.modified == 'true'
+        shell: bash
+        run: |
+          auth="$(printf '%s:%s' '${{ steps.actor.outputs.login }}' '${{ steps.setup.outputs.token }}' | base64)" &&
+          echo "::add-mask::$auth" &&
+          cd "/usr/src/$REPO/$PACKAGE_TO_UPGRADE" &&
+          git -c http.extraHeader="Authorization: Basic $auth" push --force '${{ steps.determine-repository.outputs.url }}' HEAD:refs/heads/'${{ steps.determine-repository.outputs.ref }}'
