@@ -1,0 +1,75 @@
+name: 'Initialize Git for Windows SDK subset to run `pacman`'
+description: 'This composite GitHub Action initializes a subset of the Git for Windows SDK intended to run `pacman` and friends'
+outputs:
+  result:
+    description: 'The path to the subset of the SDK'
+    value: '${{ steps.use-sdk.outputs.result }}'
+runs:
+  using: 'composite'
+  steps:
+    - name: initialize bare SDK clone
+      id: clone-g4w-sdk
+      shell: bash
+      run: |
+        git clone --bare --depth=1 --single-branch --branch=main --filter=blob:none \
+          https://github.com/git-for-windows/git-sdk-64 .tmp &&
+        echo "rev=$(git -C .tmp rev-parse HEAD)" >>$GITHUB_OUTPUT
+    - name: restore cached git-sdk-64 subset
+      id: restore-g4w-sdk
+      uses: actions/cache/restore@v3
+      env:
+        cache-name: cache-g4w-sdk
+      with:
+        path: .sdk
+        key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
+    - name: check out git-sdk-64 subset
+      if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
+      shell: bash
+      env:
+        GIT_CONFIG_PARAMETERS: "'checkout.workers=56'"
+      run: |
+        git -C .tmp config extensions.worktreeConfig true &&
+        git -C .tmp worktree add --no-checkout --detach "$PWD/.sdk" &&
+        cd .sdk &&
+        git config --worktree core.sparseCheckout true &&
+        git config --worktree core.bare false &&
+        sparse="$(git rev-parse --git-path info/sparse-checkout)" &&
+        mkdir -p "${sparse%/*}" &&
+        git show HEAD:.sparse/minimal-sdk >"$sparse" &&
+        cat >>"$sparse" <<-EOF &&
+        /etc/makepkg.conf
+        /usr/bin/base64.exe
+        /usr/bin/gettext.exe
+        /usr/bin/makepkg
+        /usr/bin/nproc.exe
+        /usr/bin/pacman.exe
+        /usr/bin/sha256sum.exe
+        /usr/bin/updpkgsums
+        /usr/share/makepkg/
+        /mingw64/bin/curl.exe
+        EOF
+        git checkout -- &&
+
+        # makepkg/updpkgsums expects `curl` to be present in `/usr/bin/`
+        printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >usr/bin/curl
+    - name: cache git-sdk-64 subset
+      if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
+      uses: actions/cache/save@v3
+      env:
+        cache-name: cache-g4w-sdk
+      with:
+        path: .sdk
+        key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
+    - name: use git-sdk-64 subset
+      id: use-sdk
+      shell: bash
+      run: |
+        cd .sdk &&
+
+        echo "result=$(cygpath -aw .)" >>$GITHUB_OUTPUT &&
+
+        # add the SDK directories to the `PATH`
+        cygpath -aw "usr/bin/core_perl" >>$GITHUB_PATH &&
+        cygpath -aw "usr/bin" >>$GITHUB_PATH &&
+        cygpath -aw "mingw64/bin" >>$GITHUB_PATH &&
+        echo "MSYSTEM=MINGW64" >>$GITHUB_ENV
