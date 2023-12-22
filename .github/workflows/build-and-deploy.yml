@@ -98,6 +98,7 @@ jobs:
 
       - name: Download Git for Windows SDK
         uses: git-for-windows/setup-git-for-windows-sdk@v1
+        id: setup-sdk
         with:
           flavor: ${{ env.PACKAGE_TO_BUILD == 'mingw-w64-git' && 'build-installers' || 'full' }}
           architecture: ${{ env.ARCHITECTURE || 'x86_64' }}
@@ -122,9 +123,10 @@ jobs:
         shell: bash
         run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra /usr/src/build-extra
 
-      - name: pacman -Syyu
-        shell: bash
-        run: pacman -Syyu --noconfirm
+      - name: update the SDK ("pacman -Syyu")
+        shell: powershell
+        run: |
+          & ("${{ steps.setup-sdk.outputs.result }}\update-via-pacman.ps1")
 
       - name: rebase `.dll` base addresses
         if: env.ARCHITECTURE == 'i686'
