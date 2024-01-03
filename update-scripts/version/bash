@@ -24,4 +24,4 @@
         }
     })
     fs.writeFileSync('PKGBUILD', lines.join('\n'))
-})().catch(console.log)
+})().catch((err) => {console.log(err); process.exit(1)})
