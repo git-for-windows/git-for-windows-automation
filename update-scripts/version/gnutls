@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-// The `openssl` version is not actually stored in the `pkgver` variable, but in
-// `_ver` (because of the funny trailing letter in the OpenSSL v1.1.* versions)
+// The `gnutls` version is not actually stored in the `pkgver` variable, but in
+// `_base_ver`
 
 (async () => {
     const version = process.argv[2]
