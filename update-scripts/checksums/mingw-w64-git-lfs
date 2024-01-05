@@ -32,6 +32,10 @@
         'aarch64': 'arm64',
     }
 
+    if(!('386' in sha256sums && 'amd64' in sha256sums && 'arm64' in sha256sums)) {
+        throw 'Not all expected checksums found in release notes. Are the release artifacts ready yet?'
+    }
+
     const fs = require('fs')
     const lines = fs.readFileSync('PKGBUILD').toString('utf-8').split(/\r?\n/)
     lines.forEach((line, i) => {
@@ -42,4 +46,4 @@
         }
     })
     fs.writeFileSync('PKGBUILD', lines.join('\n'))
-})().catch(console.log)
+})().catch((err) => {console.log(err); process.exit(1)})

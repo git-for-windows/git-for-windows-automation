@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
-// The `openssl` version is not actually stored in the `pkgver` variable, but in
-// `_ver` (because of the funny trailing letter in the OpenSSL v1.1.* versions)
+// The `mingw-w64-gnutls` version is not actually stored in the `pkgver` variable,
+//  but in `_pkgver`
 
 (async () => {
     const version = process.argv[2]
@@ -16,4 +16,4 @@
         }
     })
     fs.writeFileSync('PKGBUILD', lines.join('\n'))
-})().catch(console.log)
+})().catch((err) => {console.log(err); process.exit(1)})
