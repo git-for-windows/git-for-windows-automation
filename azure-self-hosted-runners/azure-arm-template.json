@@ -36,6 +36,12 @@
                 "description": "Windows Computer Name. Can be maximum 15 characters."
             }
         },
+        "ephemeral": {
+            "type": "string",
+            "metadata": {
+                "description": "(optional) Whether to spin up an ephemeral runner or not."
+            }
+        },
         "stopService": {
             "type": "string",
             "metadata": {
@@ -116,7 +122,7 @@
         "firstFileNameString": "[variables('UriFileNamePieces')[sub(length(variables('UriFileNamePieces')), 1)]]",
         "firstFileNameBreakString": "[split(variables('firstFileNameString'), '?')]",
         "firstFileName": "[variables('firstFileNameBreakString')[0]]",
-        "postDeploymentScriptArguments": "[concat('-GitHubActionsRunnerToken ', parameters('githubActionsRunnerToken'), ' -GithubActionsRunnerRegistrationUrl ', parameters('githubActionsRunnerRegistrationUrl'), ' -GithubActionsRunnerName ', parameters('virtualMachineName'), ' -StopService ', parameters('stopService'), ' -GitHubActionsRunnerPath ', parameters('githubActionsRunnerPath'))]"
+        "postDeploymentScriptArguments": "[concat('-GitHubActionsRunnerToken ', parameters('githubActionsRunnerToken'), ' -GithubActionsRunnerRegistrationUrl ', parameters('githubActionsRunnerRegistrationUrl'), ' -GithubActionsRunnerName ', parameters('virtualMachineName'), ' -Ephemeral ', parameters('ephemeral'), ' -StopService ', parameters('stopService'), ' -GitHubActionsRunnerPath ', parameters('githubActionsRunnerPath'))]"
     },
     "resources": [
         {

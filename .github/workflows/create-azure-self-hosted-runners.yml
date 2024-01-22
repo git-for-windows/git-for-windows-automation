@@ -27,12 +27,21 @@ on:
         required: true
         description: Deallocate the runner immediately after creating it (useful for spinning up runners preemptively)
         default: "false"
+      ephemeral:
+        type: choice
+        options:
+          - false
+          - true
+        required: true
+        description: Start the runner in ephemeral mode (i.e. unregister after running one job)
+        default: "true"
 
 env:
   ACTIONS_RUNNER_SCOPE: ${{ github.event.inputs.runner_scope }}
   ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org || github.repository_owner }}"
   ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo || github.event.repository.name }}"
   DEALLOCATE_IMMEDIATELY: ${{ github.event.inputs.deallocate_immediately }}
+  EPHEMERAL_RUNNER: ${{ github.event.inputs.ephemeral }}
   # This has to be a public URL that the VM can access after creation
   POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/azure-self-hosted-runners/post-deployment-script.ps1
   # Note that you'll need "p" (arm64 processor) and ideally "d" (local temp disk). The number 4 stands for 4 CPU-cores.
@@ -142,6 +151,7 @@ jobs:
           publicIpAddressName1="${{ steps.generate-vm-name.outputs.vm_name }}-ip"
           adminUsername="${{ secrets.AZURE_VM_USERNAME }}"
           adminPassword="${{ secrets.AZURE_VM_PASSWORD }}"
+          ephemeral="$EPHEMERAL_RUNNER"
           stopService="$DEALLOCATE_IMMEDIATELY"
           githubActionsRunnerPath="$ACTIONS_RUNNER_PATH"
           location="$AZURE_VM_REGION"
