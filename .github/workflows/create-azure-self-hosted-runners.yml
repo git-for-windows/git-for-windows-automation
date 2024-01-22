@@ -20,7 +20,10 @@ on:
         required: false
         description: Repo to deploy the runner to. Only needed if runner_scope is set to "repo-level" (defaults to current repository)
       deallocate_immediately:
-        type: string
+        type: choice
+        options:
+          - false
+          - true
         required: true
         description: Deallocate the runner immediately after creating it (useful for spinning up runners preemptively)
         default: "false"
