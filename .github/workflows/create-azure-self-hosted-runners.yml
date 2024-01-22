@@ -126,14 +126,21 @@ jobs:
     # https://github.com/actions/runner/issues/475
     - name: Generate Actions Runner token and registration URL
       run: |
+        # We need to URL-encode the user name because it usually is a GitHub App, which means that
+        # it has the suffix `[bot]`. If un-encoded, this would cause a cURL error "bad range in URL"
+        # because it would mistake this for an IPv6 address or something like that.
+        user_pwd="$(jq -n \
+          --arg user '${{ github.actor }}' \
+          --arg pwd '${{ secrets.GITHUB_TOKEN }}' \
+          '$user | @uri + ":" + $pwd')"
         case "$ACTIONS_RUNNER_SCOPE" in
           "org-level")
-            ACTIONS_API_URL="https://api.github.com/repos/$ACTIONS_RUNNER_ORG/actions/runners/registration-token"
-            ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/$ACTIONS_RUNNER_ORG"
+            ACTIONS_API_URL="https://$user_pwd@api.github.com/repos/$ACTIONS_RUNNER_ORG/actions/runners/registration-token"
+            ACTIONS_RUNNER_REGISTRATION_URL="https://$user_pwd@github.com/$ACTIONS_RUNNER_ORG"
             ;;
           "repo-level")
-            ACTIONS_API_URL="https://api.github.com/repos/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO/actions/runners/registration-token"
-            ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO"
+            ACTIONS_API_URL="https://$user_pwd@api.github.com/repos/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO/actions/runners/registration-token"
+            ACTIONS_RUNNER_REGISTRATION_URL="https://$user_pwd@github.com/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO"
             ;;
           *)
             echo "Unsupported runner scope: $ACTIONS_RUNNER_SCOPE"
@@ -225,7 +232,7 @@ jobs:
       if: always()
       env:
         CUSTOM_SCRIPT_OUTPUT: ${{ steps.deploy-arm-template.outputs.customScriptInstanceView }}
-      run: echo "$CUSTOM_SCRIPT_OUTPUT" | jq -r '.substatuses[0].message'
+      run: echo "$CUSTOM_SCRIPT_OUTPUT" | jq -r '.substatuses[0].message' | sed 's/${{ secrets.GITHUB_TOKEN }}/***/g'
 
     - name: Deallocate the VM for later use
       if: env.DEALLOCATE_IMMEDIATELY == 'true'
