@@ -50,6 +50,8 @@ env:
 # AZURE_RESOURCE_GROUP - Resource group to create the runner(s) in
 # AZURE_VM_USERNAME - Username of the VM so you can RDP into it
 # AZURE_VM_PASSWORD - Password of the VM so you can RDP into it
+# GH_APP_ID - The ID of the GitHub App whose credentials are to be used to obtain the runner token
+# GH_APP_PRIVATE_KEY - The private key of the GitHub App whose credentials are to be used to obtain the runner token
 jobs:
   create-runner:
     runs-on: ubuntu-latest
