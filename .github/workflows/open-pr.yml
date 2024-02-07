@@ -49,7 +49,7 @@ jobs:
         # act as that App in repository secrets `GH_APP_ID`, `GH_APP_PRIVATE_KEY`.
       - name: Obtain installation token
         id: setup
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const appId = ${{ secrets.GH_APP_ID }}
@@ -83,7 +83,7 @@ jobs:
           git clone --depth 1 --single-branch -b main "https://github.com/$OWNER/$REPO" "/usr/src/$REPO"
       - name: Identify actor
         id: actor
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const githubApiRequest = require('./github-api-request')
@@ -152,7 +152,7 @@ jobs:
           git -c http.extraHeader="Authorization: Basic $auth" push --force origin HEAD:refs/heads/$PACKAGE_TO_UPGRADE-$UPGRADE_TO_VERSION
       - name: open PR
         if: steps.update.outputs.modified == 'true'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           github-token: ${{ steps.setup.outputs.token }}
           script: |

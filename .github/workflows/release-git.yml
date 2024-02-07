@@ -31,7 +31,7 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: The `release` branch must be up to date
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const sha = await (async () => {
@@ -76,7 +76,7 @@ jobs:
             }
       - name: Get bundle-artifacts and sha256sums
         id: bundle-artifacts
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const { downloadBundleArtifacts } = require('./github-release')
