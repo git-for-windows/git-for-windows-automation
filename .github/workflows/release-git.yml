@@ -97,7 +97,7 @@ jobs:
             core.setOutput('announcement', result.announcement)
             core.setOutput('release-notes', result.releaseNotes)
       - name: Re-publish bundle-artifacts so the next job can easily use it
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bundle-artifacts
           path: bundle-artifacts

@@ -101,7 +101,7 @@ jobs:
           summary: "Tag Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
           append-text: 'Tagged Git ${{ steps.generate.outputs.tag-name }}'
       - name: 'Publish Pipeline Artifact: bundle-artifacts'
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: bundle-artifacts
           path: ${{ github.workspace }}/bundle-artifacts
