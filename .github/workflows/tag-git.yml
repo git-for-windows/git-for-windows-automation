@@ -71,7 +71,7 @@ jobs:
           GPGKEY: ${{secrets.GPGKEY}}
       - name: install markdown/w3m (needed to render release notes)
         run: sudo apt-get install -y markdown w3m
-      - uses: actions/setup-node@v3
+      - uses: actions/setup-node@v4
         with:
           node-version: ${{env.NODEJS_VERSION}}
       - name: Generate bundle artifacts
