@@ -200,7 +200,7 @@ jobs:
             }
       - name: Restore ${{env.MINGW_PACKAGE_PREFIX}}-git, if cached
         id: restore-cached-git-pkg
-        uses: actions/cache/restore@v3
+        uses: actions/cache/restore@v4
         with:
           path: artifacts
           key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}-${{env.TAG_GIT_WORKFLOW_RUN_ID}}
@@ -316,7 +316,7 @@ jobs:
           fi)
       - name: Cache ${{env.MINGW_PACKAGE_PREFIX}}-git
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v3
+        uses: actions/cache/save@v4
         with:
           path: artifacts
           key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}-${{env.TAG_GIT_WORKFLOW_RUN_ID}}
