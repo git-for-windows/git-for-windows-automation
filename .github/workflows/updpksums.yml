@@ -36,7 +36,7 @@ jobs:
         # act as that App in repository secrets `GH_APP_ID`, `GH_APP_PRIVATE_KEY`.
       - name: Obtain installation token
         id: setup
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const appId = ${{ secrets.GH_APP_ID }}
@@ -75,7 +75,7 @@ jobs:
           echo "result=$(cygpath -aw "/usr/src/$REPO")" >>$GITHUB_OUTPUT
       - name: Determine modified packages
         id: determine-packages
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         env:
           WORKTREE_PATH: '${{ steps.clone.outputs.result }}'
         with:
@@ -101,7 +101,7 @@ jobs:
       - name: Identify actor
         if: steps.determine-packages.outputs.result != ''
         id: actor
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const githubApiRequest = require('./github-api-request')
@@ -172,7 +172,7 @@ jobs:
         # out where "there" is.
         if: steps.update.outputs.modified == 'true'
         id: determine-repository
-        uses: actions/github-script@v6
+        uses: actions/github-script@v7
         with:
           script: |
             const githubApiRequest = require('./github-api-request')
