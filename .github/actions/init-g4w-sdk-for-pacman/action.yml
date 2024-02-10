@@ -16,7 +16,7 @@ runs:
         echo "rev=$(git -C .tmp rev-parse HEAD)" >>$GITHUB_OUTPUT
     - name: restore cached git-sdk-64 subset
       id: restore-g4w-sdk
-      uses: actions/cache/restore@v3
+      uses: actions/cache/restore@v4
       env:
         cache-name: cache-g4w-sdk
       with:
@@ -54,7 +54,7 @@ runs:
         printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >usr/bin/curl
     - name: cache git-sdk-64 subset
       if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
-      uses: actions/cache/save@v3
+      uses: actions/cache/save@v4
       env:
         cache-name: cache-g4w-sdk
       with:
