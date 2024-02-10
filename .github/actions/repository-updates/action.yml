@@ -50,7 +50,7 @@ runs:
         text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
         details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
     - name: Download bundle-artifacts (needed to push the `main` branch)
-      uses: actions/download-artifact@v3
+      uses: actions/download-artifact@v4
       if: ${{ !contains(inputs.display-version, '-rc') }}
       with:
         name: bundle-artifacts
