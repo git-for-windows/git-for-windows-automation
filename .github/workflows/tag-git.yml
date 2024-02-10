@@ -35,7 +35,7 @@ jobs:
     outputs:
       tag-name: ${{ steps.generate.outputs.tag-name }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
       - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
         if: env.CREATE_CHECK_RUN != 'false'
         uses: ./.github/actions/check-run-action

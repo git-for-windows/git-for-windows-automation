@@ -39,7 +39,7 @@ jobs:
           esac &&
           echo "REPO=$repo" >>$GITHUB_ENV &&
           echo "repo=$repo" >>$GITHUB_OUTPUT
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         # Since we want to operate on _another_ repository, we sadly cannot use:
         #
         # permissions:

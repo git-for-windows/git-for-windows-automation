@@ -38,7 +38,7 @@ jobs:
   build:
     runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
         # Since we want to operate on _another_ repository, we sadly cannot use:
         #

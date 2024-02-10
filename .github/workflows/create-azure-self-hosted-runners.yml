@@ -61,7 +61,7 @@ jobs:
         VM_NAME="actions-runner-$(date +%Y%m%d%H%M%S%N)"
         echo "Will be using $VM_NAME as the VM name"
         echo "vm_name=$VM_NAME" >> $GITHUB_OUTPUT
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Obtain installation token
       id: setup
       uses: actions/github-script@v7
