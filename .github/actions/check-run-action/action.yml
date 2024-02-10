@@ -37,7 +37,7 @@ runs:
   steps:
     - name: Create or update the Check Run
       id: check-run
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       env:
         APP_ID: ${{ inputs.app-id }}
         PRIVATE_KEY: ${{ inputs.private-key }}

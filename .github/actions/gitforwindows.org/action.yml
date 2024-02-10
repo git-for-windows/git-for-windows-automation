@@ -42,7 +42,7 @@ runs:
         details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
     - name: Update gitforwindows.org
       if: ${{ !contains(inputs.display-version, '-rc') }}
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       env:
         GIT_CONFIG_PARAMETERS: "'user.name=gitforwindowshelper-bot' 'user.email=gitforwindowshelper-bot@users.noreply.github.com'"
       with:

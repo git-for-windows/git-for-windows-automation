@@ -59,7 +59,7 @@ runs:
         sudo apt-get update &&
         sudo apt-get -y install libnet-ssleay-perl git-email
     - name: Send announcement email
-      uses: actions/github-script@v6
+      uses: actions/github-script@v7
       with:
         script: |
           const mbox = ${{ toJSON(inputs.announcement) }}
