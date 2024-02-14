@@ -299,7 +299,10 @@ jobs:
       - name: Clean up temporary files
         if: always()
         shell: bash
-        run: rm -rf "$HOME"
+        run: |
+          gpgconf --kill dirmng &&
+          gpgconf --kill gpg-agent &&
+          rm -rf "$HOME"
 
       - name: mark check run as completed
         if: env.CREATE_CHECK_RUN != 'false' && always()
