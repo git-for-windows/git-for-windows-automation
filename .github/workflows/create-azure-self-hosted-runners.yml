@@ -148,7 +148,7 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     
-    - uses: azure/arm-deploy@v1
+    - uses: azure/arm-deploy@v2
       id: deploy-arm-template
       with:
         resourceGroupName: ${{ secrets.AZURE_RESOURCE_GROUP }}
