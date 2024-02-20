@@ -244,7 +244,7 @@ const uploadGitArtifacts = async (context, token, owner, repo, releaseId, gitArt
   context.log('Done uploading Git artifacts')
 }
 
-const pushGitTag = (context, setSecret, token, owner, repo, tagName, bundlePath) => {
+const pushGitTagAndMainBranch = (context, setSecret, token, owner, repo, tagName, bundlePath) => {
   context.log(`Pushing Git tag ${tagName}`)
   const { callGit } = require('./repository-updates')
   callGit(['clone',
@@ -261,7 +261,7 @@ const pushGitTag = (context, setSecret, token, owner, repo, tagName, bundlePath)
   if (setSecret) setSecret(auth)
   callGit(['--git-dir', 'git',
     '-c', `http.extraHeader=Authorization: Basic ${auth}`,
-    'push', `https://github.com/${owner}/${repo}`, `refs/tags/${tagName}`
+    'push', `https://github.com/${owner}/${repo}`, `refs/tags/${tagName}`, `refs/tags/${tagName}^0:refs/heads/main`
   ])
   context.log('Done pushing tag')
 }
@@ -278,5 +278,5 @@ module.exports = {
   calculateSHA256ForFile,
   checkSHA256Sums,
   uploadGitArtifacts,
-  pushGitTag
+  pushGitTagAndMainBranch
 }

@@ -77,7 +77,7 @@ runs:
             checkSHA256Sums,
             createRelease,
             uploadGitArtifacts,
-            pushGitTag,
+            pushGitTagAndMainBranch,
             updateRelease
           } = require('./github-release')
 
@@ -126,7 +126,7 @@ runs:
           )
           await state.refreshToken()
 
-          await pushGitTag(
+          await pushGitTagAndMainBranch(
             console,
             core.setSecret,
             state.accessToken,
