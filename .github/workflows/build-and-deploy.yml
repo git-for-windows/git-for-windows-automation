@@ -302,7 +302,7 @@ jobs:
         run: |
           gpgconf --kill dirmngr &&
           gpgconf --kill gpg-agent &&
-          rm -rf "$HOME"
+          { rm -rf "$HOME" || echo "Gracefully leaving files undeleted" >&2; }
 
       - name: mark check run as completed
         if: env.CREATE_CHECK_RUN != 'false' && always()
