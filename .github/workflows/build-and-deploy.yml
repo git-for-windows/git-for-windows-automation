@@ -300,7 +300,7 @@ jobs:
         if: always()
         shell: bash
         run: |
-          gpgconf --kill dirmng &&
+          gpgconf --kill dirmngr &&
           gpgconf --kill gpg-agent &&
           rm -rf "$HOME"
 
