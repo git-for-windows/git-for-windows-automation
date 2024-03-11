@@ -28,7 +28,7 @@ jobs:
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     - name: Delete VM '${{ env.ACTIONS_RUNNER_NAME }}'
-      uses: azure/CLI@v1
+      uses: azure/CLI@v2
       with:
         azcliversion: 2.43.0
         inlineScript: |
