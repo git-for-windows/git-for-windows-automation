@@ -163,7 +163,7 @@ jobs:
 
     - name: Deallocate the VM for later use
       if: env.DEALLOCATE_IMMEDIATELY == 'true'
-      uses: azure/CLI@v1
+      uses: azure/CLI@v2
       with:
         azcliversion: 2.43.0
         inlineScript: |
