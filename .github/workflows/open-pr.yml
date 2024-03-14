@@ -135,7 +135,8 @@ jobs:
             updpkgsums
           fi &&
           msg="$PACKAGE_TO_UPGRADE: update to $UPGRADE_TO_VERSION" &&
-          git commit -sm "$msg" PKGBUILD &&
+          git add PKGBUILD &&
+          git commit -sm "$msg" &&
           echo "msg=$msg" >>$GITHUB_OUTPUT &&
           echo "modified=true" >>$GITHUB_OUTPUT
       - name: check if the package was already deployed
