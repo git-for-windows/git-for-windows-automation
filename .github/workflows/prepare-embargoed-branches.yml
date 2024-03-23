@@ -1,0 +1,60 @@
+name: prepare-embargoed-branches
+run-name: Prepare branches for embargoed Git ${{ inputs.version }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'The Git version for which to prepare the branches'
+        required: true
+
+jobs:
+  prepare-embargoed-branches:
+    runs-on: ubuntu-latest
+    steps:
+      - name: sanity check
+        if: ${{ github.repository_owner == 'git-for-windows' }}
+        run: echo "This action is not meant to be run on the Git for Windows repository" >&2 && exit 1
+      - run: actions/checkout@v4
+      - name: identify actor
+        id: actor
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const githubApiRequest = require('./github-api-request')
+            const answer = await githubApiRequest(
+              console,
+              '${{ secrets.GITHUB_TOKEN }}',
+              'GET',
+              '/users/${{ github.triggering_actor }}'
+            )
+            core.setOutput('name', answer.name)
+            core.setOutput('email', answer.email || '${{ github.triggering_actor }}@users.noreply.github.com')
+      - name: configure
+        run: |
+          USER_NAME="${{ steps.actor.outputs.name }}" &&
+          USER_EMAIL="${{ steps.actor.outputs.email }}" &&
+          git config --global user.name "$USER_NAME" &&
+          git config --global user.email "$USER_EMAIL" &&
+          git config --global url.https://github.com/${{ github.repository_owner }}.insteadOf \
+            https://github.com/embargoed-git-for-windows-builds &&
+          git config --global credential.helper '' &&
+          git config --global --add credential.helper cache
+      - name: configure push token
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { callGit, getPushAuthorizationHeader } = require('./repository-updates.js')
+            for (const repo of ['build-extra', 'git', 'git-sdk-32', 'git-sdk-64', 'MINGW-packages']) {
+              const header = await getPushAuthorizationHeader(
+                console,
+                core.setSecret,
+                ${{ secrets.GH_APP_ID }},
+                ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                context.repo.owner,
+                repo
+              )
+              console.log(callGit(['config', '--global', `http.https://github.com/${context.repo.owner}/${repo}.extraHeader`, header]))
+            }
+      - name: Prepare embargoed branches
+        run: sh -x ./prepare-embargoed-branches.sh "${{ inputs.version }}"

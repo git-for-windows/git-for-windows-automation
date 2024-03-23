@@ -158,5 +158,6 @@ module.exports = {
   callGit,
   getWorkflowRunArtifact,
   pushRepositoryUpdate,
-  pushGitBranch
+  pushGitBranch,
+  getPushAuthorizationHeader
 }
