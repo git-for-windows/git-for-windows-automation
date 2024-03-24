@@ -9,12 +9,14 @@ git_git_dir=/usr/src/git/.git &&
 build_extra_dir=/usr/src/build-extra &&
 artifacts_dir= &&
 release_branch=main &&
+git_or_mingit="Git for Windows" &&
 snapshot_version=t &&
 while case "$1" in
 --git-dir=*) git_git_dir="${1#*=}";;
 --build-extra-dir=*) build_extra_dir="${1#*=}";;
 --artifacts-dir=*) artifacts_dir="${1#*=}";;
 --release-branch=*) release_branch="${1#*=}";;
+--mingit) git_or_mingit="MinGit for Windows";;
 --full|--full-version|--no-snapshot|--no-snapshot-version) snapshot_version=;;
 *) break;;
 esac; do shift; done ||
@@ -120,7 +122,7 @@ else
 		sed -e 's/\( [2-9]\?[4-90]\| 1[0-9]\) /\1th /' \
 			-e 's/1 /1st /' -e 's/2 /2nd /' -e 's/3 /3rd /'
 	)" &&
-	sed -i -e "1s/.*/# Git for Windows v$display_version Release Notes/" \
+	sed -i -e "1s/.*/# $git_or_mingit v$display_version Release Notes/" \
 		-e "2s/.*/Latest update: $release_date/" \
 		"$build_extra_dir"/ReleaseNotes.md &&
 	git -C "$build_extra_dir" commit -s \
@@ -133,7 +135,7 @@ else
 		markdown |
 		LC_CTYPE=C w3m -dump -cols 72 -T text/html)" &&
 	tag_message="$(printf "%s\n\n%s" \
-		"$(sed -n '1s/.*\(Git for Windows v[^ ]*\).*/\1/p' \
+		"$(sed -n '1s/.* \(\(Min\)\?Git for Windows v[^ ]*\).*/\1/p' \
 		<"$build_extra_dir"/ReleaseNotes.md)" "$notes")" &&
 
 	cat >"$artifacts_dir"/release-notes-$display_version <<-EOF &&
@@ -144,11 +146,11 @@ else
 	@@CHECKSUMS@@
 	EOF
 
-	case "$display_version" in
-	prerelease-*)
+	case "$git_or_mingit,$display_version" in
+	*,prerelease-*)
 		url=https://gitforwindows.org/git-snapshots/
 		;;
-	*-rc*)
+	*,*-rc*|MinGit*)
 		url=https://github.com/git-for-windows/git/releases/tag/$tag_name
 		;;
 	*)
@@ -160,7 +162,7 @@ else
 	From: $(git var GIT_COMMITTER_IDENT | sed -e 's/>.*/>/')
 	Date: $(date -R)
 	To: git@vger.kernel.org, git-packagers@googlegroups.com
-	Subject: [ANNOUNCE] Git for Windows $display_version
+	Subject: [ANNOUNCE] $git_or_mingit $display_version
 	Content-Type: text/plain; charset=UTF-8
 	Content-Transfer-Encoding: 8bit
 	MIME-Version: 1.0
@@ -168,7 +170,7 @@ else
 
 	Dear Git users,
 
-	I hereby announce that Git for Windows $display_version is available from:
+	I hereby announce that $git_or_mingit $display_version is available from:
 
 	    $url
 
