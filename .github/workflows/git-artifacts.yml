@@ -21,9 +21,10 @@ on:
       existing_git_tag:
         description: 'Existing tag to build from. Requires tag_git_workflow_run_id to be empty'
         required: false
-      build_extra_rev_for_existing_git_tag:
-        description: 'build-extra revision to use if building from an existing Git tag. Required if existing_git_tag is non-empty'
+      release_branch:
+        description: 'The branch name to use for this release (e.g. `git-2.44.x-releases`)'
         required: false
+        type: string
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
@@ -35,7 +36,7 @@ env:
   REPO: git
   TAG_GIT_WORKFLOW_RUN_ID: "${{github.event.inputs.tag_git_workflow_run_id}}"
   EXISTING_GIT_TAG: "${{github.event.inputs.existing_git_tag}}"
-  BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG: "${{github.event.inputs.build_extra_rev_for_existing_git_tag}}"
+  RELEASE_BRANCH: "${{github.event.inputs.release_branch}}"
 
 defaults:
   run:
@@ -51,10 +52,12 @@ jobs:
       mingw_package_prefix: ${{steps.configure-environment.outputs.MINGW_PACKAGE_PREFIX}}
       sdk_repo_arch: ${{steps.configure-environment.outputs.SDK_REPO_ARCH}}
       check-run-state: ${{steps.check-run-state.outputs.check-run-state}}
+      release-branch: ${{steps.configure-environment.outputs.release-branch}}
     steps:
       - name: clone git-for-windows-automation
         uses: actions/checkout@v4
       - name: Construct bundle-artifacts from existing tag
+        id: handle-existing-git-tag
         if: env.EXISTING_GIT_TAG != ''
         run: |
           die () {
@@ -65,8 +68,14 @@ jobs:
           test -z "$TAG_GIT_WORKFLOW_RUN_ID" ||
           die 'existing_git_tag cannot be used with tag_git_workflow_run_id!'
 
-          test -n "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" ||
-          die 'existing_git_tag needs build_extra_rev_for_existing_git_tag!'
+          if test -n "$RELEASE_BRANCH"
+          then
+            RELEASE_BRANCH="${EXISTING_GIT_TAG%%.windows.*}" &&
+            RELEASE_BRANCH=git-"${RELEASE_BRANCH#v}" &&
+            test git- != "$RELEASE_BRANCH" ||
+            die "Could not determine release branch from '$EXISTING_GIT_TAG'"
+            echo "RELEASE_BRANCH=$RELEASE_BRANCH" >>$GITHUB_ENV
+          fi
 
           set -o pipefail &&
 
@@ -98,8 +107,8 @@ jobs:
         id: get-bundle-artifacts-url
         with:
           script: |
-            if (process.env.EXISTING_GIT_TAG || process.env.BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG) {
-              throw new Error('tag_git_workflow_run_id cannot be used with existing_git_tag or build_extra_rev_for_existing_git_tag!')
+            if (process.env.EXISTING_GIT_TAG) {
+              throw new Error('tag_git_workflow_run_id cannot be used with existing_git_tag!')
             }
             const getDownloadURL = require('./get-workflow-run-artifact')
             const workflowRunId = process.env.TAG_GIT_WORKFLOW_RUN_ID
@@ -167,6 +176,7 @@ jobs:
           echo "MINGW_PREFIX=$MINGW_PREFIX" >> $GITHUB_OUTPUT
           echo "MINGW_PACKAGE_PREFIX=$MINGW_PACKAGE_PREFIX" >> $GITHUB_ENV
           echo "MINGW_PACKAGE_PREFIX=$MINGW_PACKAGE_PREFIX" >> $GITHUB_OUTPUT
+          echo "SDK_REPO_ARCH=$SDK_REPO_ARCH" >> $GITHUB_ENV
           echo "SDK_REPO_ARCH=$SDK_REPO_ARCH" >> $GITHUB_OUTPUT
           test -n "$ARTIFACTS_TO_BUILD" || {
             ARTIFACTS_TO_BUILD="mingit"
@@ -176,6 +186,18 @@ jobs:
           }
           echo "ARTIFACTS_TO_BUILD=$ARTIFACTS_TO_BUILD" >> $GITHUB_ENV
           echo "PKG_CACHE_KEY=pkg-$GIT_VERSION-$ARCHITECTURE-$TAG_GIT_WORKFLOW_RUN_ID" >> $GITHUB_ENV
+
+          if test -z "$RELEASE_BRANCH"
+          then
+            RELEASE_BRANCH="$(cat bundle-artifacts/release-branch)"
+            if test -z "$RELEASE_BRANCH"
+            then
+              echo "No release branch found in bundle-artifacts/release-branch"
+              exit 1
+            fi
+            echo "RELEASE_BRANCH=$RELEASE_BRANCH" >> $GITHUB_ENV
+          fi
+          echo "release-branch=$RELEASE_BRANCH" >> $GITHUB_OUTPUT
       - name: Configure user
         run:
           USER_NAME="${{github.actor}}" &&
@@ -185,9 +207,21 @@ jobs:
           git config --global user.email "$USER_EMAIL" &&
           echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >> $GITHUB_ENV
       - uses: git-for-windows/setup-git-for-windows-sdk@v1
+        if: env.OWNER == 'git-for-windows' && env.RELEASE_BRANCH == 'main'
         with:
           flavor: build-installers
           architecture: ${{env.architecture}}
+      - name: Set up Git for Windows SDK ${{ env.architecture }} (${{ env.RELEASE_BRANCH }})
+        if: env.OWNER != 'git-for-windows' || env.RELEASE_BRANCH != 'main'
+        shell: bash
+        run: |
+          git -c checkout.workers=56 \
+            clone --single-branch -b "$RELEASE_BRANCH" --depth 1 \
+            https://github.com/git-for-windows/git-sdk-$SDK_REPO_ARCH D:/git-sdk-$SDK_REPO_ARCH &&
+
+          cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/usr/bin/core_perl >>$GITHUB_PATH &&
+          cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/usr/bin >>$GITHUB_PATH &&
+          cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/${MSYSTEM,,?}/bin >>$GITHUB_PATH
       - name: Create artifact build matrix
         uses: actions/github-script@v7
         id: artifact-build-matrix
@@ -214,17 +248,14 @@ jobs:
           d=/usr/src/build-extra &&
           if test ! -d $d/.git
           then
-            git clone --single-branch -b main https://github.com/git-for-windows/build-extra $d
+            git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/git-for-windows/build-extra $d
           else
-            git -C $d fetch https://github.com/git-for-windows/build-extra main &&
-            git -C $d switch -C main FETCH_HEAD
+            git -C $d fetch https://github.com/git-for-windows/build-extra "$RELEASE_BRANCH" &&
+            git -C $d switch -C "$RELEASE_BRANCH" FETCH_HEAD
           fi &&
-          if test -z "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
+          if test -z "$EXISTING_GIT_TAG"
           then
-            git -C $d -c pull.rebase=false pull "$PWD"/bundle-artifacts/build-extra.bundle main
-          else
-            git -C $d fetch origin "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" &&
-            git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
+            git -C $d -c pull.rebase=false pull "$PWD"/bundle-artifacts/build-extra.bundle "$RELEASE_BRANCH"
           fi
       - name: Prepare git-for-windows/git clone with the tag
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
@@ -232,7 +263,7 @@ jobs:
           set -x
           if test ! -d /usr/src/MINGW-packages
           then
-            git clone --depth 1 --single-branch -b main \
+            git clone --depth 1 --single-branch -b "$RELEASE_BRANCH" \
               https://github.com/git-for-windows/MINGW-packages /usr/src/MINGW-packages
           fi &&
           cd /usr/src/MINGW-packages/mingw-w64-git &&
@@ -317,7 +348,8 @@ jobs:
           if test -z "$EXISTING_GIT_TAG"
           then
             git commit -s -m "mingw-w64-git: new version ($version)" PKGBUILD &&
-            git bundle create "$b"/MINGW-packages.bundle origin/main..main
+            git bundle create "$b"/MINGW-packages.bundle \
+              "origin/$RELEASE_BRANCH..$RELEASE_BRANCH"
           elif ! git update-index --ignore-submodules --refresh ||
             ! git diff-files --ignore-submodules ||
             ! git diff-index --cached --ignore-submodules HEAD
@@ -325,7 +357,8 @@ jobs:
             echo "::warning::Uncommitted changes after build!" >&2 &&
             git diff >&2 &&
             git commit -s -m "mingw-w64-git: new version ($version)" PKGBUILD &&
-            git bundle create "$b"/MINGW-packages.bundle main^..main
+            git bundle create "$b"/MINGW-packages.bundle \
+              "$RELEASE_BRANCH^..$RELEASE_BRANCH"
           fi)
       - name: Cache ${{env.MINGW_PACKAGE_PREFIX}}-git
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
@@ -364,6 +397,7 @@ jobs:
       MINGW_PREFIX: ${{ needs.pkg.outputs.mingw-prefix }}
       MINGW_PACKAGE_PREFIX: ${{ needs.pkg.outputs.mingw_package_prefix }}
       SDK_REPO_ARCH: ${{ needs.pkg.outputs.sdk_repo_arch }}
+      RELEASE_BRANCH: ${{ needs.pkg.outputs.release-branch }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.pkg.outputs.artifact_matrix) }}
@@ -389,9 +423,21 @@ jobs:
           name: bundle-artifacts
           path: bundle-artifacts
       - uses: git-for-windows/setup-git-for-windows-sdk@v1
+        if: env.OWNER == 'git-for-windows' && env.RELEASE_BRANCH == 'main'
         with:
           flavor: build-installers
           architecture: ${{env.ARCHITECTURE}}
+      - name: Set up Git for Windows SDK ${{ env.architecture }} (${{ env.RELEASE_BRANCH }})
+        if: env.OWNER != 'git-for-windows' || env.RELEASE_BRANCH != 'main'
+        shell: bash
+        run: |
+          git -c checkout.workers=56 \
+            clone --single-branch -b "$RELEASE_BRANCH" --depth 1 \
+            https://github.com/git-for-windows/git-sdk-$SDK_REPO_ARCH D:/git-sdk-$SDK_REPO_ARCH &&
+
+          cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/usr/bin/core_perl >>$GITHUB_PATH &&
+          cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/usr/bin >>$GITHUB_PATH &&
+          cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/${MSYSTEM,,?}/bin >>$GITHUB_PATH
       - name: Configure user
         run:
           USER_NAME="${{github.actor}}" &&
@@ -405,18 +451,15 @@ jobs:
           d=/usr/src/build-extra &&
           if test ! -d $d/.git
           then
-            git clone --single-branch -b main https://github.com/git-for-windows/build-extra $d
+            git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/git-for-windows/build-extra $d
           else
-            git -C $d fetch https://github.com/git-for-windows/build-extra main &&
-            git -C $d switch -C main FETCH_HEAD
+            git -C $d fetch https://github.com/git-for-windows/build-extra "$RELEASE_BRANCH" &&
+            git -C $d switch -C "$RELEASE_BRANCH" FETCH_HEAD
           fi &&
           echo "result=$(cygpath -am "$d")" >> $GITHUB_OUTPUT &&
-          if test -z "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
+          if test -z "$EXISTING_GIT_TAG"
           then
-            git -C $d -c pull.rebase=false pull "$PWD"/bundle-artifacts/build-extra.bundle main
-          else
-            git -C $d fetch origin "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" &&
-            git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
+            git -C $d -c pull.rebase=false pull "$PWD"/bundle-artifacts/build-extra.bundle "$RELEASE_BRANCH"
           fi
       - name: Prepare home directory for code-signing
         env:

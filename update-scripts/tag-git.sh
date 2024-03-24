@@ -8,22 +8,25 @@ die () {
 git_git_dir=/usr/src/git/.git &&
 build_extra_dir=/usr/src/build-extra &&
 artifacts_dir= &&
+release_branch=main &&
 snapshot_version=t &&
 while case "$1" in
 --git-dir=*) git_git_dir="${1#*=}";;
 --build-extra-dir=*) build_extra_dir="${1#*=}";;
 --artifacts-dir=*) artifacts_dir="${1#*=}";;
+--release-branch=*) release_branch="${1#*=}";;
 --full|--full-version|--no-snapshot|--no-snapshot-version) snapshot_version=;;
 *) break;;
-esac; do shift; done
+esac; do shift; done ||
+die "Could not parse command-line options: $*"
 
 test $# = 1 ||
 die "Usage: $0 [--no-snapshot-version] [--git-dir=<dir>] [--build-extra-dir=<dir>] [--artifacts-dir=<dir>] <git-rev>"
 
 git_rev="$1"
 
-test "refs/heads/main" = "$(git -C "$build_extra_dir" symbolic-ref HEAD)" ||
-die "Need the current branch in '$build_extra_dir' to be 'main'"
+test "refs/heads/$release_branch" = "$(git -C "$build_extra_dir" symbolic-ref HEAD)" ||
+die "Need the current branch in '$build_extra_dir' to be '$release_branch'"
 
 mkdir -p "$artifacts_dir" &&
 if test -n "$snapshot_version"
@@ -136,6 +139,6 @@ echo "$tag_message" >"$artifacts_dir"/tag-message &&
 git -C "$git_git_dir" rev-parse --verify "$git_rev"^0 >"$artifacts_dir"/git-commit-oid &&
 
 git -C "$git_git_dir" tag $(test -z "$GPGKEY" || echo " -s") -m "$tag_message" "$tag_name" "$git_rev" &&
-git -C "$git_git_dir" bundle create "$artifacts_dir"/git.bundle origin/main.."$tag_name" &&
+git -C "$git_git_dir" bundle create "$artifacts_dir"/git.bundle origin/$release_branch.."$tag_name" &&
 
-git -C "$build_extra_dir" bundle create "$artifacts_dir"/build-extra.bundle origin/main..main
+git -C "$build_extra_dir" bundle create "$artifacts_dir"/build-extra.bundle origin/$release_branch..$release_branch
