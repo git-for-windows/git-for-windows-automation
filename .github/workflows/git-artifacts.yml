@@ -37,6 +37,7 @@ env:
   TAG_GIT_WORKFLOW_RUN_ID: "${{github.event.inputs.tag_git_workflow_run_id}}"
   EXISTING_GIT_TAG: "${{github.event.inputs.existing_git_tag}}"
   RELEASE_BRANCH: "${{github.event.inputs.release_branch}}"
+  GIT_OR_MINGIT: "Git"
 
 defaults:
   run:
@@ -68,11 +69,23 @@ jobs:
           test -z "$TAG_GIT_WORKFLOW_RUN_ID" ||
           die 'existing_git_tag cannot be used with tag_git_workflow_run_id!'
 
+          if test mingit = "$ARTIFACTS_TO_BUILD" || test "mingit mingit-busybox" = "$ARTIFACTS_TO_BUILD"
+          then
+            GIT_OR_MINGIT=MinGit
+            echo "GIT_OR_MINGIT=MinGit" >>$GITHUB_ENV
+          fi
+
           if test -n "$RELEASE_BRANCH"
           then
-            RELEASE_BRANCH="${EXISTING_GIT_TAG%%.windows.*}" &&
-            RELEASE_BRANCH=git-"${RELEASE_BRANCH#v}" &&
-            test git- != "$RELEASE_BRANCH" ||
+            if test MinGit = "$GIT_OR_MINGIT"
+            then
+              RELEASE_BRANCH=mingit-"$(expr "$EXISTING_GIT_TAG" : 'v\?\([0-9]\+\.[0-9]\+\)\.\{0,1\}[0-9]*\(\.windows\.[0-9]*\)\?$')".x-releases &&
+              test mingit-.x-releases != "$RELEASE_BRANCH"
+            else
+              RELEASE_BRANCH="${EXISTING_GIT_TAG%%.windows.*}" &&
+              RELEASE_BRANCH=git-"${RELEASE_BRANCH#v}" &&
+              test git- != "$RELEASE_BRANCH"
+            fi ||
             die "Could not determine release branch from '$EXISTING_GIT_TAG'"
             echo "RELEASE_BRANCH=$RELEASE_BRANCH" >>$GITHUB_ENV
           fi
@@ -134,8 +147,8 @@ jobs:
           repo: ${{ env.REPO }}
           rev: ${{ env.GIT_REV }}
           check-run-name: "git-artifacts-${{ env.ARCHITECTURE }}"
-          title: "Build Git ${{ env.GIT_VERSION }} artifacts"
-          summary: "Build Git ${{ env.GIT_VERSION }} artifacts from commit ${{ env.GIT_REV }}${{ env.TAG_GIT_WORKFLOW_RUN_ID && format(' (tag-git run #{0})', env.TAG_GIT_WORKFLOW_RUN_ID) || '' }}"
+          title: "Build ${{ env.GIT_OR_MINGIT }} ${{ env.GIT_VERSION }} artifacts"
+          summary: "Build ${{ env.GIT_OR_MINGIT }} ${{ env.GIT_VERSION }} artifacts from commit ${{ env.GIT_REV }}${{ env.TAG_GIT_WORKFLOW_RUN_ID && format(' (tag-git run #{0})', env.TAG_GIT_WORKFLOW_RUN_ID) || '' }}"
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: Re-publish bundle-artifacts so the next job can easily use it
