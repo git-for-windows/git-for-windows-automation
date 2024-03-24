@@ -16,6 +16,10 @@ on:
         description: 'Optionally override from where to fetch the specified rev'
         required: true
         default: git
+      release-branch:
+        description: 'The branch name to use for this release'
+        required: false
+        default: main
       snapshot:
         description: 'A flag indicating whether this is a snapshot or a full Git for Windows release'
         required: true
@@ -26,6 +30,7 @@ env:
   OWNER: "${{github.event.inputs.owner}}"
   REPO: "${{github.event.inputs.repo}}"
   REV: "${{github.event.inputs.rev}}"
+  RELEASE_BRANCH: "${{github.event.inputs.release-branch}}"
   SNAPSHOT: "${{github.event.inputs.snapshot}}"
   CREATE_CHECK_RUN: "true"
   NODEJS_VERSION: 16
@@ -64,14 +69,14 @@ jobs:
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: Configure user
-        run:
+        run: |
           USER_NAME="${{github.actor}}" &&
           USER_EMAIL="${{github.actor}}@users.noreply.github.com" &&
           git config --global user.name "$USER_NAME" &&
           git config --global user.email "$USER_EMAIL" &&
           echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >> $GITHUB_ENV
       - name: Clone build-extra
-        run: git clone --single-branch -b main https://github.com/git-for-windows/build-extra $RUNNER_TEMP/build-extra
+        run: git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/git-for-windows/build-extra $RUNNER_TEMP/build-extra
       - name: Prepare home directory for GPG signing
         if: env.GPGKEY != ''
         run: |
@@ -93,14 +98,17 @@ jobs:
           GPGKEY: ${{secrets.GPGKEY}}
         run: |
           git clone --bare --filter=blob:none https://github.com/git/git &&
-          git -C git.git fetch --tags --filter=blob:none "https://github.com/$OWNER/$REPO" main:refs/remotes/origin/main "$REV" &&
+          git -C git.git fetch --tags --filter=blob:none "https://github.com/$OWNER/$REPO" "$RELEASE_BRANCH:refs/remotes/origin/$RELEASE_BRANCH" "$REV" &&
 
           sh -x "$GITHUB_WORKSPACE/update-scripts/tag-git.sh" \
             ${{ env.SNAPSHOT != 'true' && '--no-snapshot-version' || ''}} \
             --git-dir="git.git" \
             --build-extra-dir="$RUNNER_TEMP/build-extra" \
             --artifacts-dir="$GITHUB_WORKSPACE/bundle-artifacts" \
+            --release-branch="$RELEASE_BRANCH" \
             "$REV" &&
+
+          echo "$RELEASE_BRANCH" >bundle-artifacts/release-branch &&
 
           echo "tag-name=$(cat bundle-artifacts/next_version)" >>$GITHUB_OUTPUT &&
           echo "Tag name: \`$(cat bundle-artifacts/next_version)\`" >>$GITHUB_STEP_SUMMARY
