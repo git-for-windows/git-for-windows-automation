@@ -57,6 +57,53 @@ jobs:
     steps:
       - name: clone git-for-windows-automation
         uses: actions/checkout@v5
+      - name: configure token
+        if: github.repository_visibility == 'private'
+        id: token
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const fs = require('fs')
+            if (!fs.existsSync(process.env.HOME)) fs.mkdirSync(process.env.HOME)
+            const { callGit, getPushAuthorizationHeader } = require('./repository-updates.js')
+            for (const repo of [
+              'build-extra',
+              'git',
+              'git-sdk-${{ env.ARCHITECTURE == 'x86_64' && '64' || (env.ARCHITECTURE == 'aarch64' && 'arm64' || '32') }}',
+              'MINGW-packages'
+            ]) {
+              const header = await getPushAuthorizationHeader(
+                console,
+                core.setSecret,
+                ${{ secrets.GH_APP_ID }},
+                ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                process.env.OWNER,
+                repo
+              )
+              console.log(callGit(['config', '--global', `http.https://github.com/${process.env.OWNER}/${repo}.extraHeader`, header]))
+            }
+
+            // return an access token for use in the "wait if workflow run has not finished yet" step
+            if (process.env.EXISTING_GIT_TAG) return ''
+            const getAppInstallationId = require('./get-app-installation-id')
+            const installationId = await getAppInstallationId(
+              console,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              context.repo.owner,
+              context.repo.repo
+            )
+
+            const getInstallationAccessToken = require('./get-installation-access-token')
+            const { token: accessToken } = await getInstallationAccessToken(
+              console,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              installationId
+            )
+            core.setSecret(accessToken)
+            return accessToken
       - name: Construct bundle-artifacts from existing tag
         id: handle-existing-git-tag
         if: env.EXISTING_GIT_TAG != ''
@@ -109,7 +156,7 @@ jobs:
             const { waitForWorkflowRunToFinish } = require('./workflow-runs')
             await waitForWorkflowRunToFinish(
               console,
-              '${{ secrets.GITHUB_TOKEN }}',
+              '${{ steps.token.outputs.result || secrets.GITHUB_TOKEN }}',
               context.repo.owner,
               context.repo.repo,
               process.env.TAG_GIT_WORKFLOW_RUN_ID
@@ -119,6 +166,7 @@ jobs:
         if: env.TAG_GIT_WORKFLOW_RUN_ID != ''
         id: get-bundle-artifacts-url
         with:
+          github-token: ${{ steps.token.outputs.result || secrets.GITHUB_TOKEN }}
           script: |
             if (process.env.EXISTING_GIT_TAG) {
               throw new Error('tag_git_workflow_run_id cannot be used with existing_git_tag!')
@@ -215,7 +263,7 @@ jobs:
         run:
           USER_NAME="${{github.actor}}" &&
           USER_EMAIL="${{github.actor}}@users.noreply.github.com" &&
-          mkdir "$HOME" &&
+          mkdir -p "$HOME" &&
           git config --global user.name "$USER_NAME" &&
           git config --global user.email "$USER_EMAIL" &&
           echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >> $GITHUB_ENV
@@ -328,6 +376,7 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
           append-text: 'About to build the `${{env.MINGW_PACKAGE_PREFIX}}-git` package'
       - name: Build ${{env.MINGW_PACKAGE_PREFIX}}-git
         timeout-minutes: 60
@@ -385,6 +434,7 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
           append-text: 'The `${{env.MINGW_PACKAGE_PREFIX}}-git` package was built successfully'
       - name: Publish ${{env.MINGW_PACKAGE_PREFIX}}-git
         uses: actions/upload-artifact@v4
@@ -401,6 +451,7 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
           append-text: "${{ format('Completed: {0}', job.status) }}."
           conclusion: ${{ job.status }}
   artifacts:
@@ -441,6 +492,25 @@ jobs:
         with:
           flavor: build-installers
           architecture: ${{env.ARCHITECTURE}}
+      - name: configure token
+        if: github.repository_visibility == 'private'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            if (!fs.existsSync(process.env.HOME)) fs.mkdirSync(process.env.HOME)
+            const { callGit, getPushAuthorizationHeader } = require('./repository-updates.js')
+            for (const repo of ['build-extra', 'git-sdk-${{ env.ARCHITECTURE == 'x86_64' && '64' || (env.ARCHITECTURE == 'aarch64' && 'arm64' || '32') }}']) {
+              const header = await getPushAuthorizationHeader(
+                console,
+                core.setSecret,
+                ${{ secrets.GH_APP_ID }},
+                ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                process.env.OWNER,
+                repo
+              )
+              console.log(callGit(['config', '--global', `http.https://github.com/${process.env.OWNER}/${repo}.extraHeader`, header]))
+            }
       - name: Set up Git for Windows SDK ${{ env.architecture }} (${{ env.RELEASE_BRANCH }})
         if: env.OWNER != 'git-for-windows' || env.RELEASE_BRANCH != 'main'
         shell: bash
@@ -456,7 +526,7 @@ jobs:
         run:
           USER_NAME="${{github.actor}}" &&
           USER_EMAIL="${{github.actor}}@users.noreply.github.com" &&
-          mkdir "$HOME" &&
+          mkdir -p "$HOME" &&
           git config --global user.name "$USER_NAME" &&
           git config --global user.email "$USER_EMAIL"
       - name: Clone and update build-extra
@@ -579,6 +649,7 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
           append-text: 'Built ${{ matrix.artifact.name }}'
       - name: Run the installer
         if: matrix.artifact.name == 'installer'
@@ -627,6 +698,7 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
           append-text: "${{ format('Completed: {0}', job.status) }}."
           conclusion: ${{ job.status }}
   sha256sums:
@@ -661,5 +733,6 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
           append-text: "${{ job.status == 'success' && 'Done!' || format('Completed: {0}', job.status) }}."
           conclusion: ${{ job.status }}
