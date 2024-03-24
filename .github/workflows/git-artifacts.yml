@@ -32,7 +32,7 @@ env:
   USERPROFILE: "${{github.workspace}}\\home"
   ARTIFACTS_TO_BUILD: "${{github.event.inputs.artifacts}}"
   ARCHITECTURE: "${{github.event.inputs.architecture}}"
-  OWNER: git-for-windows
+  OWNER: ${{ github.repository_owner }}
   REPO: git
   TAG_GIT_WORKFLOW_RUN_ID: "${{github.event.inputs.tag_git_workflow_run_id}}"
   EXISTING_GIT_TAG: "${{github.event.inputs.existing_git_tag}}"
@@ -230,7 +230,7 @@ jobs:
         run: |
           git -c checkout.workers=56 \
             clone --single-branch -b "$RELEASE_BRANCH" --depth 1 \
-            https://github.com/git-for-windows/git-sdk-$SDK_REPO_ARCH D:/git-sdk-$SDK_REPO_ARCH &&
+            https://github.com/$OWNER/git-sdk-$SDK_REPO_ARCH D:/git-sdk-$SDK_REPO_ARCH &&
 
           cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/usr/bin/core_perl >>$GITHUB_PATH &&
           cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/usr/bin >>$GITHUB_PATH &&
@@ -261,32 +261,33 @@ jobs:
           d=/usr/src/build-extra &&
           if test ! -d $d/.git
           then
-            git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/git-for-windows/build-extra $d
+            git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/$OWNER/build-extra $d
           else
-            git -C $d fetch https://github.com/git-for-windows/build-extra "$RELEASE_BRANCH" &&
+            git -C $d fetch https://github.com/$OWNER/build-extra "$RELEASE_BRANCH" &&
             git -C $d switch -C "$RELEASE_BRANCH" FETCH_HEAD
           fi &&
           if test -z "$EXISTING_GIT_TAG"
           then
             git -C $d -c pull.rebase=false pull "$PWD"/bundle-artifacts/build-extra.bundle "$RELEASE_BRANCH"
           fi
-      - name: Prepare git-for-windows/git clone with the tag
+      - name: Prepare ${{ env.OWNER }}/git clone with the tag
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
           set -x
           if test ! -d /usr/src/MINGW-packages
           then
             git clone --depth 1 --single-branch -b "$RELEASE_BRANCH" \
-              https://github.com/git-for-windows/MINGW-packages /usr/src/MINGW-packages
+              https://github.com/$OWNER/MINGW-packages /usr/src/MINGW-packages
           fi &&
           cd /usr/src/MINGW-packages/mingw-w64-git &&
           if test ! -d git
           then
+            # Must be a clone of git-for-windows/git.git, otherwise `makepkg-mingw` will complain
             git clone --bare https://github.com/git-for-windows/git.git git
           fi &&
           if test ! -d src/git
           then
-            git clone --reference git https://github.com/git-for-windows/git src/git &&
+            git clone --reference git https://github.com/$OWNER/$REPO src/git &&
             echo ../../../../git/objects >src/git/.git/objects/info/alternates
           fi &&
           cd src/git &&
@@ -446,7 +447,7 @@ jobs:
         run: |
           git -c checkout.workers=56 \
             clone --single-branch -b "$RELEASE_BRANCH" --depth 1 \
-            https://github.com/git-for-windows/git-sdk-$SDK_REPO_ARCH D:/git-sdk-$SDK_REPO_ARCH &&
+            https://github.com/$OWNER/git-sdk-$SDK_REPO_ARCH D:/git-sdk-$SDK_REPO_ARCH &&
 
           cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/usr/bin/core_perl >>$GITHUB_PATH &&
           cygpath -aw D:/git-sdk-$SDK_REPO_ARCH/usr/bin >>$GITHUB_PATH &&
@@ -464,9 +465,9 @@ jobs:
           d=/usr/src/build-extra &&
           if test ! -d $d/.git
           then
-            git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/git-for-windows/build-extra $d
+            git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/$OWNER/build-extra $d
           else
-            git -C $d fetch https://github.com/git-for-windows/build-extra "$RELEASE_BRANCH" &&
+            git -C $d fetch https://github.com/$OWNER/build-extra "$RELEASE_BRANCH" &&
             git -C $d switch -C "$RELEASE_BRANCH" FETCH_HEAD
           fi &&
           echo "result=$(cygpath -am "$d")" >> $GITHUB_OUTPUT &&
