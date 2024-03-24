@@ -186,6 +186,7 @@ jobs:
           unzip bundle-artifacts.zip -d bundle-artifacts
           echo "GIT_VERSION=$(cat bundle-artifacts/next_version)" >> $GITHUB_ENV
           echo "GIT_REV=$(cat bundle-artifacts/git-commit-oid)" >>$GITHUB_ENV
+          test ! -f bundle-artifacts/mingit-only || echo "GIT_OR_MINGIT=MinGit" >>$GITHUB_ENV
       - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
         uses: ./.github/actions/check-run-action
         with:
@@ -241,9 +242,11 @@ jobs:
           echo "SDK_REPO_ARCH=$SDK_REPO_ARCH" >> $GITHUB_OUTPUT
           test -n "$ARTIFACTS_TO_BUILD" || {
             ARTIFACTS_TO_BUILD="mingit"
-            test "$ARCHITECTURE" = i686 || ARTIFACTS_TO_BUILD="installer portable archive $ARTIFACTS_TO_BUILD"
             test "$ARCHITECTURE" = aarch64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD mingit-busybox"
-            test "$ARCHITECTURE" != x86_64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD nuget"
+            test -f bundle-artifacts/mingit-only || {
+              test "$ARCHITECTURE" = i686 || ARTIFACTS_TO_BUILD="installer portable archive $ARTIFACTS_TO_BUILD"
+              test "$ARCHITECTURE" != x86_64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD nuget"
+            }
           }
           echo "ARTIFACTS_TO_BUILD=$ARTIFACTS_TO_BUILD" >> $GITHUB_ENV
           echo "PKG_CACHE_KEY=pkg-$GIT_VERSION-$ARCHITECTURE-$TAG_GIT_WORKFLOW_RUN_ID" >> $GITHUB_ENV

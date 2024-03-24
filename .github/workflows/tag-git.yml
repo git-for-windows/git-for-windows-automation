@@ -1,5 +1,5 @@
 name: tag-git
-run-name: "Tag Git ${{ inputs.snapshot == 'true' && 'snapshot ' || '' }}at ${{ inputs.owner }}/${{ inputs.repo }}@${{ inputs.rev }}"
+run-name: "Tag ${{ inputs.mingit-only == 'true' && 'Min' || '' }}Git ${{ inputs.snapshot == 'true' && 'snapshot ' || '' }}at ${{ inputs.owner }}/${{ inputs.repo }}@${{ inputs.rev }}"
 
 on:
   workflow_dispatch:
@@ -24,6 +24,10 @@ on:
         description: 'A flag indicating whether this is a snapshot or a full Git for Windows release'
         required: true
         default: "true"
+      mingit-only:
+        description: 'A flag indicating whether this is a MinGit-only release (AKA MinGit backport)'
+        required: false
+        default: "false"
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
@@ -32,6 +36,7 @@ env:
   REV: "${{github.event.inputs.rev}}"
   RELEASE_BRANCH: "${{github.event.inputs.release-branch}}"
   SNAPSHOT: "${{github.event.inputs.snapshot}}"
+  MINGIT_ONLY: "${{github.event.inputs.mingit-only}}"
   CREATE_CHECK_RUN: "true"
   NODEJS_VERSION: 16
 
@@ -64,8 +69,8 @@ jobs:
           repo: ${{ env.REPO }}
           rev: ${{ env.REV }}
           check-run-name: "tag-git"
-          title: "Tag Git @${{ env.REV }}"
-          summary: "Tag Git @${{ env.REV }}"
+          title: "Tag ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git @${{ env.REV }}"
+          summary: "Tag ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git @${{ env.REV }}"
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: Configure user
@@ -106,9 +111,14 @@ jobs:
             --build-extra-dir="$RUNNER_TEMP/build-extra" \
             --artifacts-dir="$GITHUB_WORKSPACE/bundle-artifacts" \
             --release-branch="$RELEASE_BRANCH" \
+            $(test "$MINGIT_ONLY" = 'true' && echo '--mingit') \
             "$REV" &&
 
           echo "$RELEASE_BRANCH" >bundle-artifacts/release-branch &&
+          if test true = "$MINGIT_ONLY"
+          then
+            >bundle-artifacts/mingit-only
+          fi &&
 
           echo "tag-name=$(cat bundle-artifacts/next_version)" >>$GITHUB_OUTPUT &&
           echo "Tag name: \`$(cat bundle-artifacts/next_version)\`" >>$GITHUB_STEP_SUMMARY
@@ -118,9 +128,9 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          title: "Tag Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
-          summary: "Tag Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
-          append-text: 'Tagged Git ${{ steps.generate.outputs.tag-name }}'
+          title: "Tag ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
+          summary: "Tag ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
+          append-text: "Tagged ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git ${{ steps.generate.outputs.tag-name }}"
       - name: 'Publish Pipeline Artifact: bundle-artifacts'
         uses: actions/upload-artifact@v4
         with:
