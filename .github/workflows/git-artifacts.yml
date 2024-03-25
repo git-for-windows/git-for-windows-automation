@@ -318,6 +318,7 @@ jobs:
           then
             echo "::warning::Uncommitted changes after build!" >&2 &&
             git diff >&2 &&
+            git commit -s -m "mingw-w64-git: new version ($version)" PKGBUILD &&
             git bundle create "$b"/MINGW-packages.bundle main^..main
           fi)
       - name: Cache ${{env.MINGW_PACKAGE_PREFIX}}-git
