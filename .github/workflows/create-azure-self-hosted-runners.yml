@@ -39,6 +39,7 @@ env:
   # For more information, see https://learn.microsoft.com/en-us/azure/virtual-machines/dplsv5-dpldsv5-series (which
   # unfortunately does not have more information about price by region)
   AZURE_VM_REGION: westus2
+  AZURE_VM_IMAGE: win11-23h2-ent
 
 # The following secrets are required for this workflow to run:
 # AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
@@ -130,6 +131,7 @@ jobs:
           githubActionsRunnerRegistrationUrl="$ACTIONS_RUNNER_REGISTRATION_URL"
           githubActionsRunnerToken="$ACTIONS_RUNNER_TOKEN"
           postDeploymentPsScriptUrl="$POST_DEPLOYMENT_SCRIPT_URL"
+          virtualMachineImage="$AZURE_VM_IMAGE"
           virtualMachineName="${{ steps.generate-vm-name.outputs.vm_name }}"
           virtualMachineSize="$AZURE_VM_TYPE"
           publicIpAddressName1="${{ steps.generate-vm-name.outputs.vm_name }}-ip"

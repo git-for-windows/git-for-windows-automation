@@ -81,6 +81,9 @@
         "osDiskDeleteOption": {
             "type": "string"
         },
+        "virtualMachineImage": {
+            "type": "string"
+        },
         "virtualMachineSize": {
             "type": "string"
         },
@@ -209,7 +212,7 @@
                     "imageReference": {
                         "publisher": "microsoftwindowsdesktop",
                         "offer": "windows11preview-arm64",
-                        "sku": "win11-22h2-ent",
+                        "sku": "[parameters('virtualMachineImage')]",
                         "version": "latest"
                     }
                 },
