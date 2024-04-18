@@ -287,7 +287,10 @@ jobs:
           set -x
           BUILD_SRC=$(test x86_64 != "$ARCHITECTURE" || echo "--build-src-pkg")
           # Make sure that there is a `/usr/bin/git` that can be used by `makepkg-mingw`
-          printf '#!/bin/sh\n\nexec '$MINGW_PREFIX'/bin/git.exe "$@"\n' >/usr/bin/git &&
+          if test ! -x /usr/bin/git
+          then
+            printf '#!/bin/sh\n\nexec '$MINGW_PREFIX'/bin/git.exe "$@"\n' >/usr/bin/git
+          fi &&
           (
             cd /usr/src/MINGW-packages/mingw-w64-git/src/git &&
             /usr/src/build-extra/please.sh build-mingw-w64-git --reset-pkgrel --only-$ARCHITECTURE $BUILD_SRC \
