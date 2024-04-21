@@ -11,7 +11,7 @@ on:
       owner:
         description: 'Optionally override from where to fetch the specified rev'
         required: true
-        default: git-for-windows
+        default:
       repo:
         description: 'Optionally override from where to fetch the specified rev'
         required: true
@@ -31,7 +31,7 @@ on:
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
-  OWNER: "${{github.event.inputs.owner}}"
+  OWNER: "${{github.event.inputs.owner || github.repository_owner }}"
   REPO: "${{github.event.inputs.repo}}"
   REV: "${{github.event.inputs.rev}}"
   RELEASE_BRANCH: "${{github.event.inputs.release-branch}}"
@@ -81,7 +81,7 @@ jobs:
           git config --global user.email "$USER_EMAIL" &&
           echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >> $GITHUB_ENV
       - name: Clone build-extra
-        run: git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/git-for-windows/build-extra $RUNNER_TEMP/build-extra
+        run: git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/$OWNER/build-extra $RUNNER_TEMP/build-extra
       - name: Prepare home directory for GPG signing
         if: env.GPGKEY != ''
         run: |
