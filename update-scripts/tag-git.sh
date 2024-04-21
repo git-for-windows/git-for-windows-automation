@@ -85,6 +85,7 @@ else
 	raw_notes="$(sed -n "/^## Changes since/,\${:1;p;n;/^## Changes/q;b1}" \
 			<"$build_extra_dir"/ReleaseNotes.md)" &&
 	notes="$(echo "$raw_notes" |
+		sed '1s/^## Changes since.*/&:/' |
 		markdown |
 		LC_CTYPE=C w3m -dump -cols 72 -T text/html)" &&
 	tag_message="$(printf "%s\n\n%s" \
