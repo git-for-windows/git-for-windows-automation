@@ -31,9 +31,9 @@ die "Need the current branch in '$build_extra_dir' to be '$release_branch'"
 mkdir -p "$artifacts_dir" &&
 if test -n "$snapshot_version"
 then
-	tag_name="$(git -C "$git_git_dir" describe --match 'v[0-9]*' --exclude='*-[0-9]*' "$git_rev")-$(date +%Y%m%d%H%M%S)" &&
+	tag_name="$(git --git-dir "$git_git_dir" describe --match 'v[0-9]*' --exclude='*-[0-9]*' "$git_rev")-$(date +%Y%m%d%H%M%S)" &&
 	tag_message="Snapshot build" &&
-	release_note="Snapshot of $(git -C "$git_git_dir" show -s --pretty='tformat:%h (%s, %ad)' --date=short "$git_rev")" &&
+	release_note="Snapshot of $(git --git-dir "$git_git_dir" show -s --pretty='tformat:%h (%s, %ad)' --date=short "$git_rev")" &&
 	(cd "$build_extra_dir" && node ./add-release-note.js --commit feature "$release_note") &&
 	display_version=${tag_name#v} &&
 	ver=prerelease-${tag_name#v}
@@ -43,7 +43,7 @@ else
 		die "Need 'w3m' to render release notes"
 	fi
 
-	desc="$(git -C "$git_git_dir" describe --match 'v[0-9]*[0-9]' --exclude='*-[0-9]*' --first-parent "$git_rev")" &&
+	desc="$(git --git-dir "$git_git_dir" describe --match 'v[0-9]*[0-9]' --exclude='*-[0-9]*' --first-parent "$git_rev")" &&
 	base_tag=${desc%%-[1-9]*} &&
 	case "$base_tag" in
 	"$desc") die "Revision '$git_rev' already tagged as $base_tag";;
@@ -141,9 +141,9 @@ echo "$ver" >"$artifacts_dir"/ver &&
 echo "$display_version" >"$artifacts_dir"/display_version &&
 echo "$tag_name" >"$artifacts_dir"/next_version &&
 echo "$tag_message" >"$artifacts_dir"/tag-message &&
-git -C "$git_git_dir" rev-parse --verify "$git_rev"^0 >"$artifacts_dir"/git-commit-oid &&
+git --git-dir "$git_git_dir" rev-parse --verify "$git_rev"^0 >"$artifacts_dir"/git-commit-oid &&
 
-git -C "$git_git_dir" tag $(test -z "$GPGKEY" || echo " -s") -m "$tag_message" "$tag_name" "$git_rev" &&
-git -C "$git_git_dir" bundle create "$artifacts_dir"/git.bundle origin/$release_branch.."$tag_name" &&
+git --git-dir "$git_git_dir" tag $(test -z "$GPGKEY" || echo " -s") -m "$tag_message" "$tag_name" "$git_rev" &&
+git --git-dir "$git_git_dir" bundle create "$artifacts_dir"/git.bundle origin/$release_branch.."$tag_name" &&
 
 git -C "$build_extra_dir" bundle create "$artifacts_dir"/build-extra.bundle origin/$release_branch..$release_branch
