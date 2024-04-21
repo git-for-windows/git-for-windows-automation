@@ -1,5 +1,5 @@
 name: git-artifacts
-run-name: Build git-artifacts (${{ inputs.architecture }})
+run-name: Build git-artifacts (${{ inputs.artifacts != '' && format('{0} ', inputs.artifacts) || '' }}${{ inputs.architecture }})
 
 on:
   workflow_dispatch:
