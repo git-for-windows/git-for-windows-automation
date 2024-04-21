@@ -43,7 +43,7 @@ else
 		die "Need 'w3m' to render release notes"
 	fi
 
-	desc="$(git --git-dir "$git_git_dir" describe --match 'v[0-9]*[0-9]' --exclude='*-[0-9]*' --first-parent "$git_rev")" &&
+	desc="$(git --git-dir "$git_git_dir" describe --match 'v[0-9]*[0-9]' --exclude='*-[0-9]*' --exclude='*.windows.*' "$git_rev")" &&
 	base_tag=${desc%%-[1-9]*} &&
 	case "$base_tag" in
 	"$desc") die "Revision '$git_rev' already tagged as $base_tag";;
