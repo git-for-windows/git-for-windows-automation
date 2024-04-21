@@ -73,6 +73,25 @@ jobs:
           summary: "Tag ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git @${{ env.REV }}"
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+      - name: configure token
+        if: github.repository_visibility == 'private'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            if (!fs.existsSync(process.env.HOME)) fs.mkdirSync(process.env.HOME)
+            const { callGit, getPushAuthorizationHeader } = require('./repository-updates.js')
+            for (const repo of ['build-extra', process.env.REPO]) {
+              const header = await getPushAuthorizationHeader(
+                console,
+                core.setSecret,
+                ${{ secrets.GH_APP_ID }},
+                ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                process.env.OWNER,
+                repo
+              )
+              console.log(callGit(['config', '--global', `http.https://github.com/${process.env.OWNER}/${repo}.extraHeader`, header]))
+            }
       - name: Configure user
         run: |
           USER_NAME="${{github.actor}}" &&
@@ -103,6 +122,10 @@ jobs:
           GPGKEY: ${{secrets.GPGKEY}}
         run: |
           git clone --bare --filter=blob:none https://github.com/git/git &&
+          if test git-for-windows != "$OWNER"
+          then
+            git --git-dir=git.git fetch --tags --filter=blob:none https://github.com/git-for-windows/git
+          fi &&
           git -C git.git fetch --tags --filter=blob:none "https://github.com/$OWNER/$REPO" "$RELEASE_BRANCH:refs/remotes/origin/$RELEASE_BRANCH" "$REV" &&
 
           sh -x "$GITHUB_WORKSPACE/update-scripts/tag-git.sh" \
