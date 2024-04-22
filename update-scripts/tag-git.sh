@@ -11,6 +11,7 @@ artifacts_dir= &&
 release_branch=main &&
 git_or_mingit="Git for Windows" &&
 snapshot_version=t &&
+release_date= &&
 while case "$1" in
 --git-dir=*) git_git_dir="${1#*=}";;
 --build-extra-dir=*) build_extra_dir="${1#*=}";;
@@ -18,6 +19,7 @@ while case "$1" in
 --release-branch=*) release_branch="${1#*=}";;
 --mingit) git_or_mingit="MinGit for Windows";;
 --full|--full-version|--no-snapshot|--no-snapshot-version) snapshot_version=;;
+--release-date=*) release_date="${1#*=}";;
 *) break;;
 esac; do shift; done ||
 die "Could not parse command-line options: $*"
@@ -70,6 +72,9 @@ version_compare () {
 mkdir -p "$artifacts_dir" &&
 if test -n "$snapshot_version"
 then
+	test -z "$release_date" ||
+	die 'Cannot specify --release-date with --no-snapshot-version'
+
 	tag_name="$(git --git-dir "$git_git_dir" describe --match 'v[0-9]*' --exclude='*-[0-9]*' "$git_rev")-$(date +%Y%m%d%H%M%S)" &&
 	tag_message="Snapshot build" &&
 	release_note="Snapshot of $(git --git-dir "$git_git_dir" show -s --pretty='tformat:%h (%s, %ad)' --date=short "$git_rev")" &&
@@ -118,10 +123,13 @@ else
 	ver="$(echo "${tag_name#v}" | sed -n \
 		's/^\([0-9]*\.[0-9]*\.[0-9]*\(-rc[0-9]*\)\?\)\.windows\(\.1\|\(\.[0-9]*\)\)$/\1\4/p')" &&
 
-	release_date="$(LC_ALL=C date +"%B %-d %Y" |
-		sed -e 's/\( [2-9]\?[4-90]\| 1[0-9]\) /\1th /' \
-			-e 's/1 /1st /' -e 's/2 /2nd /' -e 's/3 /3rd /'
-	)" &&
+	if test -z "$release_date"
+	then
+		release_date="$(LC_ALL=C date +"%B %-d %Y" |
+			sed -e 's/\( [2-9]\?[4-90]\| 1[0-9]\) /\1th /' \
+				-e 's/1 /1st /' -e 's/2 /2nd /' -e 's/3 /3rd /'
+		)"
+	fi &&
 	sed -i -e "1s/.*/# $git_or_mingit v$display_version Release Notes/" \
 		-e "2s/.*/Latest update: $release_date/" \
 		"$build_extra_dir"/ReleaseNotes.md &&
