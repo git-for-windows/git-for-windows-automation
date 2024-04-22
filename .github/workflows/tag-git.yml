@@ -20,6 +20,9 @@ on:
         description: 'The branch name to use for this release'
         required: false
         default: main
+      release-date:
+        description: 'Override the release date (defaults to today)'
+        required: false
       snapshot:
         description: 'A flag indicating whether this is a snapshot or a full Git for Windows release'
         required: true
@@ -35,6 +38,7 @@ env:
   REPO: "${{github.event.inputs.repo}}"
   REV: "${{github.event.inputs.rev}}"
   RELEASE_BRANCH: "${{github.event.inputs.release-branch}}"
+  RELEASE_DATE: "${{github.event.inputs.release-date}}"
   SNAPSHOT: "${{github.event.inputs.snapshot}}"
   MINGIT_ONLY: "${{github.event.inputs.mingit-only}}"
   CREATE_CHECK_RUN: "true"
@@ -134,6 +138,7 @@ jobs:
             --build-extra-dir="$RUNNER_TEMP/build-extra" \
             --artifacts-dir="$GITHUB_WORKSPACE/bundle-artifacts" \
             --release-branch="$RELEASE_BRANCH" \
+            --release-date="$RELEASE_DATE" \
             $(test "$MINGIT_ONLY" = 'true' && echo '--mingit') \
             "$REV" &&
 
