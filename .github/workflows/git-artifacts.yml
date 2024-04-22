@@ -268,7 +268,8 @@ jobs:
           echo '${{secrets.PRIVGPGKEY}}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
           info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
           git config --global user.name "${info% <*}" &&
-          git config --global user.email "<${info#*<}"
+          git config --global user.email "<${info#*<}" &&
+          echo "PACKAGER=$info" >>$GITHUB_ENV
         env:
           GPGKEY: ${{secrets.GPGKEY}}
       - name: update check-run
