@@ -58,16 +58,28 @@ const getWorkflowRunArtifactsURLs = async (context, token, owner, repo, workflow
   }, {})
 }
 
-const downloadAndUnZip = async (token, url, name) => {
+const download = async (token, url, outputFile) => {
   const { spawnSync } = require('child_process')
   const auth = token ? ['-H', `Authorization: Bearer ${token}`] : []
-  const tmpFile = `${process.env.RUNNER_TEMP || process.env.TEMP || '/tmp'}/${name}.zip`
-  const curl = spawnSync('curl', [...auth, '-Lo', tmpFile, url])
+  const curl = spawnSync('curl', [...auth, '-Lo', outputFile, url])
   if (curl.error) throw curl.error
-  const { mkdirSync, rmSync } = require('fs')
-  await mkdirSync(name, { recursive: true })
-  const unzip = spawnSync('unzip', ['-d', name, tmpFile])
+}
+
+const unzip = async (zipFile, outputDirectory) => {
+  const { mkdirSync } = require('fs')
+  await mkdirSync(outputDirectory, { recursive: true })
+  const { spawnSync } = require('child_process')
+  const unzip = spawnSync('unzip', ['-d', outputDirectory, zipFile])
   if (unzip.error) throw unzip.error
+}
+
+const getTempFile = (name) => `${process.env.RUNNER_TEMP || process.env.TEMP || '/tmp'}/${name}`
+
+const downloadAndUnZip = async (token, url, name) => {
+  const tmpFile = getTempFile(`${name}.zip`)
+  await download(token, url, tmpFile)
+  await unzip(tmpFile, name)
+  const { rmSync } = require('fs')
   rmSync(tmpFile)
 }
 
@@ -292,6 +304,9 @@ module.exports = {
   updateRelease,
   uploadReleaseAsset,
   getWorkflowRunArtifactsURLs,
+  download,
+  unzip,
+  getTempFile,
   downloadAndUnZip,
   downloadBundleArtifacts,
   getGitArtifacts,
