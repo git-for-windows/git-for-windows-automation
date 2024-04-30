@@ -29,28 +29,30 @@ const getWorkflowRunArtifact = async (context, token, owner, repo, workflowRunId
 }
 
 const mergeBundle = (gitDir, worktree, bundlePath, refName) => {
-  callGit(['--git-dir', gitDir, 'fetch', bundlePath, refName])
+  callGit(['--git-dir', gitDir, 'fetch', bundlePath, refName.startsWith('refs/tags/') ? `${refName}:${refName}` : refName])
   // If there is nothing to merge, return early
-  if (callGit(['--git-dir', gitDir, 'rev-list', '--count', `${refName}..FETCH_HEAD`]) === '0') return
+  if (callGit(['--git-dir', gitDir, 'rev-list', '--count', 'HEAD..FETCH_HEAD']) === '0') return
 
   if (worktree) {
     callGit(['branch', '-M', refName], worktree)
     callGit(['merge', '--no-edit', 'FETCH_HEAD'], worktree)
   } else {
     // If it fast-forwards, we do not need a worktree
-    if (callGit(['--git-dir', gitDir, 'rev-list', '--count', `FETCH_HEAD..${refName}`]) === '0') {
-      callGit(['--git-dir', gitDir, 'update-ref', `refs/heads/${refName}`, 'FETCH_HEAD'])
+    if (callGit(['--git-dir', gitDir, 'rev-list', '--count', `FETCH_HEAD..HEAD`]) === '0') {
+      callGit(['--git-dir', gitDir, 'update-ref', `HEAD`, 'FETCH_HEAD^{commit}'])
     } else {
       // Fine. We need a worktree. But we don't have one. So let's create one.
       worktree = `${gitDir}/tmp-worktree`
       callGit(['--git-dir', gitDir, 'worktree', 'add', '--no-checkout', worktree])
       // No need for a full checkout, it's not as if we want to resolve any merge conflicts...
       callGit(['sparse-checkout', 'set'], worktree)
-      callGit(['switch', '-d', refName], worktree)
+      let head = callGit(['--git-dir', gitDir, 'rev-parse', 'HEAD'])
+      callGit(['switch', '-d', 'HEAD'], worktree)
       // Perform the merge
       callGit(['fetch', bundlePath, refName], worktree)
       callGit(['merge', '--no-edit', 'FETCH_HEAD'], worktree)
-      callGit(['update-ref', `refs/heads/${refName}`, 'HEAD'], worktree)
+      head = callGit(['rev-parse', 'HEAD'], worktree)
+      callGit(['--git-dir', gitDir, 'update-ref', 'HEAD', head])
     }
   }
 }
