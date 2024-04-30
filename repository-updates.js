@@ -84,12 +84,11 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
 
   // Updates to `build-extra` and `git-for-windows.github.io` need a worktree
   const bare = ['build-extra', 'git-for-windows.github.io'].includes(repo) ? '' : ['--bare']
-  const gitDir = `${repo}${bare ? '' : '/.git'}`
+  const branchOption = ['--single-branch', '--branch', refName, '--depth', '50']
+  const url = `https://github.com/${owner}/${repo}`
+  callGit(['clone', ...bare, ...branchOption, url, repo])
 
-  callGit(['clone', ...bare,
-    '--single-branch', '--branch', 'main', '--depth', '50',
-    `https://github.com/${owner}/${repo}`, repo
-  ])
+  const gitDir = `${repo}${bare ? '' : '/.git'}`
 
   if (bundlePath) {
     // Allow Git to fetch non-local objects by pretending to be a partial clone
