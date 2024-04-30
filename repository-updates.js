@@ -81,7 +81,8 @@ const getPushAuthorizationHeader = async (context, setSecret, appId, privateKey,
   return `Authorization: Basic ${auth}`
 }
 
-const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner, repo, refName, bundlePath) => {
+const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner, repo, refName, bundlePath, options) => {
+  options ||= {}
   context.log(`Pushing updates to ${owner}/${repo}`)
 
   // Updates to `build-extra` and `git-for-windows.github.io` need a worktree
@@ -96,7 +97,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
     // Allow Git to fetch non-local objects by pretending to be a partial clone
     callGit(['--git-dir', gitDir, 'config', 'remote.origin.promisor', 'true'])
     callGit(['--git-dir', gitDir, 'config', 'remote.origin.partialCloneFilter', 'blob:none'])
-    mergeBundle(gitDir, !bare && repo, bundlePath, refName)
+    mergeBundle(gitDir, !bare && repo, bundlePath, options.extraPushRefs ? options.extraPushRefs[0] : refName)
   }
 
   if (repo === 'build-extra') {
@@ -140,7 +141,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   const authorizationHeader = await getPushAuthorizationHeader(context, setSecret, appId, privateKey, owner, repo)
   callGit(['--git-dir', gitDir,
     '-c', `http.extraHeader=${authorizationHeader}`,
-    'push', `https://github.com/${owner}/${repo}`, refName
+    'push', `https://github.com/${owner}/${repo}`, refName, ...(options.extraPushRefs || [])
   ])
   context.log(`Done pushing ref ${refName} to ${owner}/${repo}`)
 }
