@@ -111,6 +111,45 @@ catch {
     exit 1
 }
 
+# =================================
+# Obtain the latest pwsh binary and other pwsh information
+# =================================
+#
+# This will install pwsh on the machine, because it's not installed by default.
+# It contains a bunch of new features compared to "powershell" and is sometimes more stable as well.
+#
+# url for Github API to get the latest release of pwsh
+#
+# TODO update this to /releases/latest once 7.5.0 is out, as it adds support for arm64 MSIs
+[string]$PwshUrl = "https://api.github.com/repos/PowerShell/PowerShell/releases/tags/v7.5.0-preview.2"
+
+# Name of the MSI file that should be verified and downloaded
+[string]$PwshMsiName = "PowerShell-.*-win-arm64.msi"
+
+try {
+    [System.Object]$PwshRestData = Invoke-RestMethod -Uri $PwshUrl -Method Get -Headers $GithubHeaders -TimeoutSec 10 | Select-Object -Property assets, body
+    [System.Object]$PwshAsset = $PwshRestData.assets | Where-Object { $_.name -match $PwshMsiName }
+    if ($PwshRestData.body -match "\b$([Regex]::Escape($PwshAsset.name))\r\n.*?([a-zA-Z0-9]{64})" -eq $True) {
+        [System.Object]$GitHubPwsh = [PSCustomObject]@{
+            DownloadUrl = [string]$PwshAsset.browser_download_url
+            Hash        = [string]$Matches[1].ToUpper()
+            OutFile     = "./pwsh-installer.msi"
+        }
+    }
+    else {
+        Write-Error "Could not find hash for $PwshMsiName"
+        exit 1
+    }
+}
+catch {
+    Write-Error @"
+   "Message: "$($_.Exception.Message)`n
+   "Error Line: "$($_.InvocationInfo.Line)`n
+   "Line Number: "$($_.InvocationInfo.ScriptLineNumber)`n
+"@
+    exit 1
+}
+
 # ======================
 # WINDOWS DEVELOPER MODE
 # ======================
@@ -172,6 +211,38 @@ EnableFSMonitor=Disabled
 Start-Process -Wait $GitHubGit.OutFile '/VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /LOADINF="./git-installer-config.inf"'
 
 Write-Output "Finished installing Git for Windows."
+
+# ======================
+# PWSH (PowerShell)
+# ======================
+
+Write-Output "Downloading pwsh..."
+
+$ProgressPreference = 'SilentlyContinue'
+Invoke-WebRequest -UseBasicParsing -Uri $GitHubPwsh.DownloadUrl -OutFile $GitHubPwsh.OutFile
+$ProgressPreference = 'Continue'
+
+if ((Get-FileHash -Path $GitHubPwsh.OutFile -Algorithm SHA256).Hash.ToUpper() -ne $GitHubPwsh.Hash) {
+    Write-Error "Computed checksum for $($GitHubPwsh.OutFile) did not match $($GitHubPwsh.Hash)"
+    exit 1
+}
+
+Write-Output "Installing pwsh..."
+
+# Get the full path to the MSI in the current working directory
+$MsiPath = Resolve-Path $GitHubPwsh.OutFile
+
+# Define arguments for silent installation
+$MsiArguments = "/qn /i  `"$MsiPath`" ADD_PATH=1"
+
+# Install pwsh using msiexec
+Start-Process msiexec.exe -Wait -ArgumentList $MsiArguments
+
+# TODO remove once 7.5.0 is out
+Write-Output "Copying pwsh-preview.cmd to pwsh.cmd as a temporary measure until 7.5.0 is out..."
+Copy-Item "C:\Program Files\PowerShell\7-preview\preview\pwsh-preview.cmd" "C:\Program Files\PowerShell\7-preview\preview\pwsh.cmd"  
+
+Write-Output "Finished installing pwsh."
 
 # ======================
 # GITHUB ACTIONS RUNNER
