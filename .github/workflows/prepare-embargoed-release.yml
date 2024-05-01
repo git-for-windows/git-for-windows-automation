@@ -88,6 +88,8 @@ jobs:
             const displayVersion = fs.readFileSync('bundle-artifacts-x86_64/display_version', 'utf8').trim()
             const releaseNotes = fs.readFileSync(`bundle-artifacts-x86_64/release-notes-${ver}`, 'utf8').trim()
             core.setOutput('release-notes', releaseNotes)
+            const mingitOnly = fs.existsSync('bundle-artifacts-x86_64/mingit-only')
+            core.setOutput('mingit-only', mingitOnly ? 'true' : 'false')
 
             const gitCommitOID = fs.readFileSync('bundle-artifacts-x86_64/git-commit-oid').toString().trim()
             core.setOutput('git-rev', gitCommitOID)
@@ -133,7 +135,7 @@ jobs:
             const releaseBranch = '${{ steps.info.outputs.release-branch }}'
             const tagName = '${{ steps.info.outputs.tag-name }}'
             await doPush('git', releaseBranch, 'bundle-artifacts-x86_64/git.bundle', { extraPushRefs: [`refs/tags/${tagName}`] })
-            await doPush('build-extra', releaseBranch, 'bundle-artifacts-x86_64/build-extra.bundle')
+            await doPush('build-extra', releaseBranch, 'bundle-artifacts-x86_64/build-extra.bundle', { mingitOnly: ${{ steps.info.outputs.mingit-only }} })
             await doPush('MINGW-packages', releaseBranch, 'pkg-x86_64/MINGW-packages.bundle')
       - name: create release and upload release assets
         uses: actions/github-script@v7
@@ -167,7 +169,7 @@ jobs:
               process.env.REPO,
               '${{ steps.info.outputs.tag-name }}',
               '${{ steps.info.outputs.git-rev }}',
-              'Git for Windows ${{ steps.info.outputs.display-version }}',
+              '${{ steps.info.outputs.mingit-only == 'true' && 'Min' || '' }}Git for Windows ${{ steps.info.outputs.display-version }}',
               ${{ toJSON(steps.info.outputs.release-notes) }}
             )
             await state.refreshToken()
@@ -183,10 +185,12 @@ jobs:
               name: `package-versions-${ver}-MinGit.txt`,
               path: 'mingit-x86_64/package-versions.txt'
             })
-            artifacts.push({
-              name: `package-versions-${ver}.txt`,
-              path: 'installer-x86_64/package-versions.txt'
-            })
+            if ('${{ steps.info.outputs.mingit-only }}' !== 'true') {
+              artifacts.push({
+                name: `package-versions-${ver}.txt`,
+                path: 'installer-x86_64/package-versions.txt'
+              })
+            }
 
             // Add Pacman packages
             const fs = require('fs')

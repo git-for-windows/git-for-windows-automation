@@ -104,30 +104,38 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
     // Add `versions/package-versions-$ver*.txt`
     const fs = require('fs')
     if (fs.existsSync('bundle-artifacts/ver')) {
+      const filesToCommit = []
       const ver = fs.readFileSync('bundle-artifacts/ver').toString().trim()
-      fs.renameSync(
-        'installer-x86_64/package-versions.txt',
-        `${repo}/versions/package-versions-${ver}.txt`
-      )
+      if (!options.mingitOnly) {
+        fs.renameSync(
+          'installer-x86_64/package-versions.txt',
+          `${repo}/versions/package-versions-${ver}.txt`
+        )
+        callGit([
+          'add',
+          `versions/package-versions-${ver}.txt`
+        ], repo)
+        filesToCommit.push(`versions/package-versions-${ver}.txt`)
+      }
       fs.renameSync(
         'mingit-x86_64/package-versions.txt',
         `${repo}/versions/package-versions-${ver}-MinGit.txt`
       )
       callGit([
         'add',
-        `versions/package-versions-${ver}.txt`,
         `versions/package-versions-${ver}-MinGit.txt`
       ], repo)
+      filesToCommit.push(`versions/package-versions-${ver}-MinGit.txt`)
       callGit([
         'commit',
         '-s',
         '-m', `versions: add v${ver}`,
-        `versions/package-versions-${ver}.txt`,
-        `versions/package-versions-${ver}-MinGit.txt`
+        '--',
+        ...filesToCommit
       ], repo)
     }
 
-    if (owner === 'git-for-windows' && refName === 'main') {
+    if (!options.mingitOnly && owner === 'git-for-windows' && refName === 'main') {
       // Update `download-stats.sh`
       callProg('sh', ['./download-stats.sh', '--update'], repo)
       callGit(['commit', '-s', '-m', 'download-stats: new Git for Windows version', './download-stats.sh'], repo)
