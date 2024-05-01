@@ -77,6 +77,12 @@ const unzip = async (zipFile, outputDirectory) => {
   if (unzip.error) throw unzip.error
 }
 
+const zip = async (items, zipFile) => {
+  const { spawnSync } = require('child_process')
+  const unzip = spawnSync('zip', ['-r', zipFile, ...items])
+  if (unzip.error) throw unzip.error
+}
+
 const getTempFile = (name) => `${process.env.RUNNER_TEMP || process.env.TEMP || '/tmp'}/${name}`
 
 const downloadAndUnZip = async (token, url, name) => {
@@ -113,6 +119,63 @@ const artifactName2Rank = (name) => {
   return rank
 }
 
+const processBundleArtifacts = () => {
+  const fs = require('fs')
+
+  const result = {
+    tagName: fs.readFileSync('bundle-artifacts-x86_64/next_version').toString().trim(),
+    displayVersion: fs.readFileSync('bundle-artifacts-x86_64/next_version').toString().trim(),
+    ver: fs.readFileSync('bundle-artifacts-x86_64/ver').toString().trim(),
+    gitCommitOID: fs.readFileSync('bundle-artifacts-x86_64/git-commit-oid').toString().trim(),
+    sha256sums: {}
+  }
+
+  for (const architecture of architectures) {
+    if (architecture.name === 'aarch64' && !fs.existsSync(`sha256sums-${architecture.name}/sha256sums.txt`)) continue
+    fs.readFileSync(`sha256sums-${architecture.name}/sha256sums.txt`)
+      .toString()
+      .split('\n')
+      .forEach(line => {
+        const pair = line.split(/\s+\*?/)
+        if (pair && pair.length === 2) result.sha256sums[pair[1]] = pair[0]
+      })
+  }
+
+  const artifactNames = Object.keys(result.sha256sums).filter(name => !name.endsWith('.nupkg'))
+  artifactNames.sort((a, b) => artifactName2Rank(b) - artifactName2Rank(a))
+  const checksums = artifactNames
+    .map(name => `${name} | ${result.sha256sums[name]}`)
+    .join('\n')
+
+  fs.writeFileSync('bundle-artifacts-x86_64/sha256sums', checksums)
+
+  // Work around out-of-band versions' announcement file containing parentheses
+  const withParens = result.ver.replace(/^(\d+\.\d+\.\d+)\.(\d+)$/, '$1($2)')
+  console.log(`withParens: ${withParens}`)
+  if (result.ver !== withParens) {
+    if (!fs.existsSync(`bundle-artifacts-x86_64/announce-${result.ver}`)) {
+      fs.renameSync(`bundle-artifacts-x86_64/announce-${withParens}`, `bundle-artifacts-x86_64/announce-${result.ver}`)
+    }
+    if (!fs.existsSync(`bundle-artifacts-x86_64/release-notes-${result.ver}`)) {
+      fs.renameSync(`bundle-artifacts-x86_64/release-notes-${withParens}`, `bundle-artifacts-x86_64/release-notes-${result.ver}`)
+    }
+  }
+
+  result.announcement = fs
+    .readFileSync(`bundle-artifacts-x86_64/announce-${result.ver}`)
+    .toString()
+    .replace('@@CHECKSUMS@@', checksums)
+  result.releaseNotes = fs
+    .readFileSync(`bundle-artifacts-x86_64/release-notes-${result.ver}`)
+    .toString()
+    .replace('@@CHECKSUMS@@', checksums)
+
+  fs.writeFileSync(`bundle-artifacts-x86_64/announce-${result.ver}`, result.announcement)
+  fs.writeFileSync(`bundle-artifacts-x86_64/release-notes-${result.ver}`, result.releaseNotes)
+
+  return result
+}
+
 const downloadBundleArtifacts = async (
   context,
   token,
@@ -129,63 +192,11 @@ const downloadBundleArtifacts = async (
       aarch64: git_artifacts_aarch64_workflow_run_id
     }[architecture.name]
     const downloadURLs = await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
-    if (architecture.name === 'x86_64') await downloadAndUnZip(token, downloadURLs['bundle-artifacts'], 'bundle-artifacts')
-    await downloadAndUnZip(token, downloadURLs['sha256sums'], `${architecture.name}-sha256sums`)
+    if (architecture.name === 'x86_64') await downloadAndUnZip(token, downloadURLs['bundle-artifacts'], 'bundle-artifacts-x86_64')
+    await downloadAndUnZip(token, downloadURLs['sha256sums'], `sha256sums-${architecture.name}`)
   }
 
-  const fs = require('fs')
-
-  const result = {
-    tagName: fs.readFileSync('bundle-artifacts/next_version').toString().trim(),
-    displayVersion: fs.readFileSync('bundle-artifacts/next_version').toString().trim(),
-    ver: fs.readFileSync('bundle-artifacts/ver').toString().trim(),
-    gitCommitOID: fs.readFileSync('bundle-artifacts/git-commit-oid').toString().trim(),
-    sha256sums: {}
-  }
-
-  for (const architecture of architectures) {
-    fs.readFileSync(`${architecture.name}-sha256sums/sha256sums.txt`)
-      .toString()
-      .split('\n')
-      .forEach(line => {
-        const pair = line.split(/\s+\*?/)
-        if (pair && pair.length === 2) result.sha256sums[pair[1]] = pair[0]
-      })
-  }
-
-  const artifactNames = Object.keys(result.sha256sums).filter(name => !name.endsWith('.nupkg'))
-  artifactNames.sort((a, b) => artifactName2Rank(b) - artifactName2Rank(a))
-  const checksums = artifactNames
-    .map(name => `${name} | ${result.sha256sums[name]}`)
-    .join('\n')
-
-  fs.writeFileSync('bundle-artifacts/sha256sums', checksums)
-
-  // Work around out-of-band versions' announcement file containing parentheses
-  const withParens = result.ver.replace(/^(\d+\.\d+\.\d+)\.(\d+)$/, '$1($2)')
-  console.log(`withParens: ${withParens}`)
-  if (result.ver !== withParens) {
-    if (!fs.existsSync(`bundle-artifacts/announce-${result.ver}`)) {
-      fs.renameSync(`bundle-artifacts/announce-${withParens}`, `bundle-artifacts/announce-${result.ver}`)
-    }
-    if (!fs.existsSync(`bundle-artifacts/release-notes-${result.ver}`)) {
-      fs.renameSync(`bundle-artifacts/release-notes-${withParens}`, `bundle-artifacts/release-notes-${result.ver}`)
-    }
-  }
-
-  result.announcement = fs
-    .readFileSync(`bundle-artifacts/announce-${result.ver}`)
-    .toString()
-    .replace('@@CHECKSUMS@@', checksums)
-  result.releaseNotes = fs
-    .readFileSync(`bundle-artifacts/release-notes-${result.ver}`)
-    .toString()
-    .replace('@@CHECKSUMS@@', checksums)
-
-  fs.writeFileSync(`bundle-artifacts/announce-${result.ver}`, result.announcement)
-  fs.writeFileSync(`bundle-artifacts/release-notes-${result.ver}`, result.releaseNotes)
-
-  return result
+  return processBundleArtifacts()
 }
 
 const getGitArtifacts = async (
@@ -206,13 +217,15 @@ const getGitArtifacts = async (
       aarch64: git_artifacts_aarch64_workflow_run_id
     }[architecture.name]
 
-    const urls = await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
+    const urls = workflowRunId && await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
     for (const artifact of artifacts) {
       if (architecture.name === 'aarch64' && artifact.name === 'mingit-busybox') continue
       const name = `${artifact.name}-${architecture.name}`
       if (architecture.name === 'i686' && !artifact.name.startsWith('mingit') && !urls && !fs.existsSync(name)) continue
-      context.log(`Downloading ${name}`)
-      await downloadAndUnZip(token, urls[name], name)
+      if (urls) {
+        context.log(`Downloading ${name}`)
+        await downloadAndUnZip(token, urls[name], name)
+      } else if (!fs.existsSync(name)) continue
 
       for (const fileName of fs.readdirSync(name)) {
         if (fileName.endsWith('.exe') || fileName.endsWith('.zip') || fileName.endsWith('.tar.bz2')) {
@@ -339,9 +352,11 @@ module.exports = {
   getWorkflowRunArtifactsURLs,
   download,
   unzip,
+  zip,
   getTempFile,
   downloadAndUnZip,
   downloadBundleArtifacts,
+  processBundleArtifacts,
   getGitArtifacts,
   sha256sumsFromReleaseNotes,
   calculateSHA256ForFile,
