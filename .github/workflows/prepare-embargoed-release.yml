@@ -1,0 +1,232 @@
+name: Prepare embargoed Git for Windows release
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_artifacts_i686_workflow_run_id:
+        description: 'ID of the git-artifacts (i686) workflow run'
+        required: true
+      git_artifacts_x86_64_workflow_run_id:
+        description: 'ID of the git-artifacts (x86_64) workflow run'
+        required: true
+
+env:
+  GIT_CONFIG_PARAMETERS: "'user.name=gitforwindowshelper-bot' 'user.email=gitforwindowshelper-bot@users.noreply.github.com'"
+  HOME: "${{github.workspace}}/home"
+  OWNER: "${{ github.repository_owner }}"
+  REPO: git
+  I686_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_i686_workflow_run_id }}"
+  X86_64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_x86_64_workflow_run_id }}"
+
+jobs:
+  prepare-github-release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download workflow run artifacts and process them
+        id: download-artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const [owner, repo] = '${{ github.repository }}'.split('/')
+            const appId = ${{ secrets.GH_APP_ID }}
+            const privateKey = `${{ secrets.GH_APP_PRIVATE_KEY }}`
+
+            const getAppInstallationId = require('./get-app-installation-id')
+            const installationId = await getAppInstallationId(
+              console,
+              appId,
+              privateKey,
+              owner,
+              repo
+            )
+
+            const getInstallationAccessToken = require('./get-installation-access-token')
+            const { token } = await getInstallationAccessToken(
+              console,
+              appId,
+              privateKey,
+              installationId
+            )
+            core.setSecret(token)
+
+            const {
+              getWorkflowRunArtifactsURLs,
+              downloadAndUnZip,
+              processBundleArtifacts,
+              architectures
+            } = require('./github-release')
+
+            const directories = []
+            for (const arch of architectures) {
+              const architecture = arch.name
+              console.error(`Processing architecture: ${architecture}`)
+              const workflowRunId = process.env[`${architecture.toUpperCase()}_WORKFLOW_RUN_ID`]
+              const urls = await getWorkflowRunArtifactsURLs(console, token, owner, repo, workflowRunId)
+              for (const name of Object.keys(urls)) {
+                const outputDirectory = name.endsWith(`-${architecture}`) ? name : `${name}-${architecture}`
+                console.log(`Downloading ${name} and extracting to ${outputDirectory}/`)
+                await downloadAndUnZip(token, urls[name], outputDirectory)
+                directories.push(outputDirectory)
+              }
+            }
+
+            await processBundleArtifacts(directories)
+            return directories
+      - name: Extract some information
+        id: info
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const fs = require('fs')
+            core.setOutput('release-branch', fs.readFileSync('bundle-artifacts-x86_64/release-branch', 'utf8').trim())
+            const result = fs.readFileSync('bundle-artifacts-x86_64/next_version', 'utf8').trim()
+            core.setOutput('tag-name', result)
+            const ver = fs.readFileSync('bundle-artifacts-x86_64/ver', 'utf8').trim()
+            core.setOutput('ver', ver)
+            const displayVersion = fs.readFileSync('bundle-artifacts-x86_64/display_version', 'utf8').trim()
+            const releaseNotes = fs.readFileSync(`bundle-artifacts-x86_64/release-notes-${ver}`, 'utf8').trim()
+            core.setOutput('release-notes', releaseNotes)
+
+            const gitCommitOID = fs.readFileSync('bundle-artifacts-x86_64/git-commit-oid').toString().trim()
+            core.setOutput('git-rev', gitCommitOID)
+            core.setOutput('display-version', displayVersion)
+      - name: configure token
+        if: github.repository_visibility == 'private'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            if (!fs.existsSync(process.env.HOME)) fs.mkdirSync(process.env.HOME)
+            const { callGit, getPushAuthorizationHeader } = require('./repository-updates.js')
+            for (const repo of ['git', 'build-extra', 'MINGW-packages']) {
+              const header = await getPushAuthorizationHeader(
+                console,
+                core.setSecret,
+                ${{ secrets.GH_APP_ID }},
+                ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                process.env.OWNER,
+                repo
+              )
+              console.log(callGit(['config', '--global', `http.https://github.com/${process.env.OWNER}/${repo}.extraHeader`, header]))
+            }
+      - name: push repository updates
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { pushRepositoryUpdate } = require('./repository-updates.js')
+            const doPush = async (repo, refName, bundlePath, extraPushRefs) => {
+              await pushRepositoryUpdate(
+                console,
+                core.setSecret,
+                ${{ secrets.GH_APP_ID || 1 }},
+                ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                owner,
+                repo,
+                refName,
+                bundlePath,
+                extraPushRefs
+              )
+            }
+            const owner = process.env.OWNER
+            const releaseBranch = '${{ steps.info.outputs.release-branch }}'
+            const tagName = '${{ steps.info.outputs.tag-name }}'
+            await doPush('git', releaseBranch, 'bundle-artifacts-x86_64/git.bundle', { extraPushRefs: [`refs/tags/${tagName}`] })
+            await doPush('build-extra', releaseBranch, 'bundle-artifacts-x86_64/build-extra.bundle')
+            await doPush('MINGW-packages', releaseBranch, 'pkg-x86_64/MINGW-packages.bundle')
+      - name: create release and upload release assets
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // TODO: also draft releases in `git-for-windows/git`, but do _not_ push the tag there yet!
+            const {
+              createRelease,
+              uploadGitArtifacts,
+              pushGitTag,
+              updateRelease,
+              getGitArtifacts,
+              zip,
+              architectures,
+            } = require('./github-release')
+
+            const { initCheckRunState } = require('./check-runs')
+            const state = await initCheckRunState(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              process.env.OWNER,
+              process.env.REPO)
+            await state.refreshToken()
+
+            const release = await createRelease(
+              console,
+              state.accessToken,
+              process.env.OWNER,
+              process.env.REPO,
+              '${{ steps.info.outputs.tag-name }}',
+              '${{ steps.info.outputs.git-rev }}',
+              'Git for Windows ${{ steps.info.outputs.display-version }}',
+              ${{ toJSON(steps.info.outputs.release-notes) }}
+            )
+            await state.refreshToken()
+
+            const ver = '${{ steps.info.outputs.ver }}'
+
+            const artifacts = await getGitArtifacts()
+            artifacts.push({
+              name: `release-notes-${ver}`,
+              path: `bundle-artifacts-x86_64/release-notes-${ver}`
+            })
+            artifacts.push({
+              name: `package-versions-${ver}-MinGit.txt`,
+              path: 'mingit-x86_64/package-versions.txt'
+            })
+            artifacts.push({
+              name: `package-versions-${ver}.txt`,
+              path: 'installer-x86_64/package-versions.txt'
+            })
+
+            // Add Pacman packages
+            const fs = require('fs')
+            for (const arch of architectures) {
+              const architecture = arch.name
+              const pkgDir = `pkg-${architecture}`
+              for (const fileName of fs.readdirSync(pkgDir)) {
+                if (fileName.indexOf('.tar.') > 0) artifacts.push({
+                  name: fileName,
+                  path: `${pkgDir}/${fileName}`,
+                })
+              }
+            }
+
+            await zip(${{ steps.download-artifacts.outputs.result }}, 'all-artifacts.zip')
+            artifacts.push({
+              name: 'all-artifacts.zip',
+              path: 'all-artifacts.zip'
+            })
+
+            await uploadGitArtifacts(
+              console,
+              state.accessToken,
+              process.env.OWNER,
+              process.env.REPO,
+              release.id,
+              artifacts
+            )
+            await state.refreshToken()
+
+            console.log('Publishing release')
+            await updateRelease(
+              console,
+              state.accessToken,
+              process.env.OWNER,
+              process.env.REPO,
+              release.id, {
+                draft: false,
+                prerelease: true,
+                make_latest : false
+              }
+            )
+            core.notice(`Release ${release.name} is available at ${release.html_url}`)

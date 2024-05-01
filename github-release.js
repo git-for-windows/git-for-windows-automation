@@ -77,6 +77,12 @@ const unzip = async (zipFile, outputDirectory) => {
   if (unzip.error) throw unzip.error
 }
 
+const zip = async (items, zipFile) => {
+  const { spawnSync } = require('child_process')
+  const unzip = spawnSync('zip', ['-r', zipFile, ...items])
+  if (unzip.error) throw unzip.error
+}
+
 const getTempFile = (name) => `${process.env.RUNNER_TEMP || process.env.TEMP || '/tmp'}/${name}`
 
 const downloadAndUnZip = async (token, url, name) => {
@@ -339,6 +345,7 @@ module.exports = {
   getWorkflowRunArtifactsURLs,
   download,
   unzip,
+  zip,
   getTempFile,
   downloadAndUnZip,
   downloadBundleArtifacts,
