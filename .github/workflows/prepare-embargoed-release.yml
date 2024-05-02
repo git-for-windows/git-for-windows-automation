@@ -90,10 +90,22 @@ jobs:
             core.setOutput('release-notes', releaseNotes)
             const mingitOnly = fs.existsSync('bundle-artifacts-x86_64/mingit-only')
             core.setOutput('mingit-only', mingitOnly ? 'true' : 'false')
-
             const gitCommitOID = fs.readFileSync('bundle-artifacts-x86_64/git-commit-oid').toString().trim()
             core.setOutput('git-rev', gitCommitOID)
             core.setOutput('display-version', displayVersion)
+      - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          rev: ${{ steps.info.outputs.git-rev }}
+          check-run-name: "prepare-github-release"
+          title: "Prepare embargoed ${{ steps.info.outputs.mingit-only == 'true' && 'Min' || '' }}Git for Windows ${{ steps.info.outputs.display-version }} updates to the various repositories"
+          summary: "Downloading the ${{ steps.info.outputs.mingit-only == 'true' && 'Min' || '' }}Git artifacts from ${{ env.X86_64_WORKFLOW_RUN_ID }} and ${{ env.I686_WORKFLOW_RUN_ID }} and publishing them as a new embargoed GitHub Release at ${{ env.OWNER }}/${{ env.REPO }}."
+          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: configure token
         if: github.repository_visibility == 'private'
         uses: actions/github-script@v7
@@ -138,6 +150,7 @@ jobs:
             await doPush('build-extra', releaseBranch, 'bundle-artifacts-x86_64/build-extra.bundle', { mingitOnly: ${{ steps.info.outputs.mingit-only }} })
             await doPush('MINGW-packages', releaseBranch, 'pkg-x86_64/MINGW-packages.bundle')
       - name: create release and upload release assets
+        id: release
         uses: actions/github-script@v7
         with:
           script: |
@@ -162,7 +175,7 @@ jobs:
               process.env.REPO)
             await state.refreshToken()
 
-            const release = await createRelease(
+            let release = await createRelease(
               console,
               state.accessToken,
               process.env.OWNER,
@@ -222,7 +235,7 @@ jobs:
             await state.refreshToken()
 
             console.log('Publishing release')
-            await updateRelease(
+            release = await updateRelease(
               console,
               state.accessToken,
               process.env.OWNER,
@@ -234,3 +247,12 @@ jobs:
               }
             )
             core.notice(`Release ${release.name} is available at ${release.html_url}`)
+            return release.html_url
+      - name: update check-run
+        if: always()
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: "${{ job.status == 'success' && format('Done! The release is available at {0}', steps.release.outputs.result) || format('Completed: {0}', job.status) }}."
+          conclusion: ${{ job.status }}
