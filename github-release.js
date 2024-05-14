@@ -136,7 +136,7 @@ const downloadBundleArtifacts = async (
     }[architecture.name]
     const downloadURLs = await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
     if (architecture.name === 'x86_64') await downloadAndUnZip(token, downloadURLs['bundle-artifacts'], 'bundle-artifacts')
-    await downloadAndUnZip(token, downloadURLs['sha256sums'], `${architecture.name}-sha256sums`)
+    await downloadAndUnZip(token, downloadURLs['sha256sums'], `sha256sums-${architecture.name}`)
   }
 
   const fs = require('fs')
@@ -150,7 +150,7 @@ const downloadBundleArtifacts = async (
   }
 
   for (const architecture of architectures) {
-    fs.readFileSync(`${architecture.name}-sha256sums/sha256sums.txt`)
+    fs.readFileSync(`sha256sums-${architecture.name}/sha256sums.txt`)
       .toString()
       .split('\n')
       .forEach(line => {
