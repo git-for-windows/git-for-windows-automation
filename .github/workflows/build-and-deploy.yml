@@ -162,6 +162,7 @@ jobs:
           bash -lc "set -x && rebase -v -i /usr/lib/perl5/core_perl/auto/Cwd/Cwd.dll"
 
       - name: Get GPG key(s)
+        timeout-minutes: 5
         shell: bash
         env:
           CARCH: x86_64 # dummy, to allow sourcing cv2pdb's PKGBUILD as-is
