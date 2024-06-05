@@ -261,6 +261,7 @@ jobs:
           echo -n "$CODESIGN_PASS" >.sig/codesign.pass
           git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
       - name: Prepare home directory for GPG signing
+        timeout-minutes: 5
         if: env.GPGKEY != '' && steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
           echo '${{secrets.PRIVGPGKEY}}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
@@ -277,6 +278,7 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           append-text: 'About to build the `${{env.MINGW_PACKAGE_PREFIX}}-git` package'
       - name: Build ${{env.MINGW_PACKAGE_PREFIX}}-git
+        timeout-minutes: 60
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         env:
           GPGKEY: "${{secrets.GPGKEY}}"
