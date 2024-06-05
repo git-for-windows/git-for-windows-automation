@@ -23,7 +23,7 @@ on:
         type: string
         required: true
         description: Deallocate the runner immediately after creating it (useful for spinning up runners preemptively)
-        default: false
+        default: "false"
 
 env:
   ACTIONS_RUNNER_SCOPE: ${{ github.event.inputs.runner_scope }}
@@ -157,6 +157,7 @@ jobs:
         deploymentName: deploy-${{ steps.generate-vm-name.outputs.vm_name }}
         template: ./azure-self-hosted-runners/azure-arm-template.json
         parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json ${{ env.AZURE_ARM_PARAMETERS }}
+        scope: resourcegroup
     
     - name: Show post-deployment script output
       env:
