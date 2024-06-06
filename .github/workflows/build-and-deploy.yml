@@ -124,6 +124,7 @@ jobs:
         run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra /usr/src/build-extra
 
       - name: update the SDK ("pacman -Syyu")
+        timeout-minutes: 20
         shell: powershell
         run: |
           & ("${{ steps.setup-sdk.outputs.result }}\update-via-pacman.ps1")
@@ -162,6 +163,7 @@ jobs:
           bash -lc "set -x && rebase -v -i /usr/lib/perl5/core_perl/auto/Cwd/Cwd.dll"
 
       - name: Get GPG key(s)
+        timeout-minutes: 5
         shell: bash
         env:
           CARCH: x86_64 # dummy, to allow sourcing cv2pdb's PKGBUILD as-is
@@ -203,6 +205,7 @@ jobs:
           echo "SIGNTOOL=git signtool" >>$GITHUB_ENV
 
       - name: Build ${{env.PACKAGE_TO_BUILD}}
+        timeout-minutes: ${{ env.PACKAGE_TO_BUILD== 'mingw-w64-llvm' && 360 || 150 }}
         env:
           GPGKEY: ${{secrets.GPGKEY}}
           MAKEPKG: ${{ env.REPO != 'MSYS2-packages' && env.PACKAGE_TO_BUILD != 'git-for-windows-keyring' && 'makepkg-mingw' || 'makepkg' }}
