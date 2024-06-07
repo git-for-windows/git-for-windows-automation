@@ -13,7 +13,9 @@ runs:
       run: |
         git clone --bare --depth=1 --single-branch --branch=main --filter=blob:none \
           https://github.com/git-for-windows/git-sdk-64 .tmp &&
-        echo "rev=$(git -C .tmp rev-parse HEAD)" >>$GITHUB_OUTPUT
+        rev="$(git -C .tmp rev-parse HEAD)" &&
+        echo "rev=$rev" >>$GITHUB_OUTPUT &&
+        echo "cache-key=g4w-sdk-$rev" >>$GITHUB_OUTPUT
     - name: restore cached git-sdk-64 subset
       id: restore-g4w-sdk
       uses: actions/cache/restore@v4
@@ -21,7 +23,7 @@ runs:
         cache-name: cache-g4w-sdk
       with:
         path: .sdk
-        key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
+        key: ${{ steps.clone-g4w-sdk.outputs.cache-key }}
     - name: check out git-sdk-64 subset
       if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
       shell: bash
@@ -59,7 +61,7 @@ runs:
         cache-name: cache-g4w-sdk
       with:
         path: .sdk
-        key: g4w-sdk-${{ steps.clone-g4w-sdk.outputs.rev }}
+        key: ${{ steps.clone-g4w-sdk.outputs.cache-key }}
     - name: use git-sdk-64 subset
       id: use-sdk
       shell: bash
