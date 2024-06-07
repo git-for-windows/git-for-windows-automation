@@ -1,5 +1,10 @@
 name: 'Initialize Git for Windows SDK subset to run `pacman`'
 description: 'This composite GitHub Action initializes a subset of the Git for Windows SDK intended to run `pacman` and friends'
+inputs:
+  include-makepkg:
+    description: 'Whether to include a working `makepkg`'
+    required: false
+    default: 'false'
 outputs:
   result:
     description: 'The path to the subset of the SDK'
@@ -15,7 +20,7 @@ runs:
           https://github.com/git-for-windows/git-sdk-64 .tmp &&
         rev="$(git -C .tmp rev-parse HEAD)" &&
         echo "rev=$rev" >>$GITHUB_OUTPUT &&
-        echo "cache-key=g4w-sdk-$rev" >>$GITHUB_OUTPUT
+        echo "cache-key=g4w-sdk-$rev${{ inputs.include-makepkg != 'false' && '+makepkg' || '' }}" >>$GITHUB_OUTPUT
     - name: restore cached git-sdk-64 subset
       id: restore-g4w-sdk
       uses: actions/cache/restore@v4
@@ -50,10 +55,43 @@ runs:
         /usr/share/makepkg/
         /mingw64/bin/curl.exe
         EOF
+        if test false != '${{ inputs.include-makepkg }}'
+        then
+          printf "%s\n" >>"$sparse" \
+            /etc/pacman.conf \
+            /etc/pacman.d/ \
+            /var/lib/pacman/ \
+            /usr/bin/gpg.exe &&
+          # cheap `objdump -p | grep DLL.Name:` alternative
+          LC_CTYPE=C sed -n '
+            # surround MSYS DLL names with `<` and `>` and avoid false positives
+            s|[<>]||g
+            s|\(msys-[-a-z0-9.]*\.dll\)|<\1>|g
+
+            # remove everything except the MSYS DLL names
+            s|^[^<]*<*||
+            s|>*[^>]*$||
+            s|>[^<>]*<|\n|g
+
+            # skip empty lines
+            /^$/d
+
+            # prefix the MSYS DLL names with `/usr/bin/`
+            s|^|/usr/bin/|
+            s|\n|&/usr/bin/|g
+
+            # print the result
+            p' /usr/bin/gpg.exe >>"$sparse"
+        fi &&
         git checkout -- &&
 
-        # makepkg/updpkgsums expects `curl` to be present in `/usr/bin/`
-        printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >usr/bin/curl
+        # makepkg/updpkgsums expect `curl` to be present in `/usr/bin/`
+        printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >usr/bin/curl &&
+        {
+          # makepkg expects `git` to be present in `/usr/bin/`
+          test ! -x mingw64/bin/git.exe ||
+          printf '#!/bin/sh\n\nexec /mingw64/bin/git.exe "$@"' >usr/bin/git
+        }
     - name: cache git-sdk-64 subset
       if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
       uses: actions/cache/save@v4
