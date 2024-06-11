@@ -63,6 +63,8 @@ jobs:
             core.setOutput('token', accessToken)
       - name: Initialize Git for Windows SDK subset
         uses: ./.github/actions/init-g4w-sdk-for-pacman
+        with:
+          include-makepkg: true
       - name: Clone ${{ env.REPO }}
         id: clone
         shell: bash
