@@ -9,6 +9,7 @@ const createRelease = async (context, token, owner, repo, tagName, rev, name, bo
       target_commitish: rev,
       name,
       body,
+      discussion_category_name: 'Announcements',
       draft: draft === undefined ? true : draft,
       prerelease: prerelease === undefined ? true : prerelease
     }
