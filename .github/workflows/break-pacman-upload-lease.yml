@@ -1,0 +1,35 @@
+name: break-pacman-upload-lease
+run-name: Break pacman upload lease
+
+on:
+  workflow_dispatch:
+
+jobs:
+  break-lease:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone build-extra
+        shell: bash
+        run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra /usr/src/build-extra
+
+      - name: Prepare home directory
+        if: env.AZURE_BLOBS_TOKEN != ''
+        env:
+          AZURE_BLOBS_TOKEN: ${{secrets.AZURE_BLOBS_TOKEN}}
+        shell: bash
+        run: |
+          echo "::add-mask::$(echo "$AZURE_BLOBS_TOKEN" | base64 -w 0)" &&
+          echo "$AZURE_BLOBS_TOKEN" >"$HOME"/.azure-blobs-token
+
+      - name: Break the lease
+        if: env.AZURE_BLOBS_TOKEN != ''
+        shell: bash
+        env:
+          AZURE_BLOBS_TOKEN: ${{secrets.AZURE_BLOBS_TOKEN}}
+        run: /usr/src/build-extra/pacman-helper.sh break_lock
+
+      - name: Clean up temporary files
+        if: always()
+        shell: bash
+        run: |
+          { rm -rf "$HOME" || echo "Gracefully leaving files undeleted" >&2; }
