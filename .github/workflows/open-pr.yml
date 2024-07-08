@@ -121,7 +121,7 @@ jobs:
               PKGBUILD
           fi &&
           git update-index -q --refresh &&
-          if git diff-files --exit-code
+          if git diff-files --exit-code && git diff-index --quiet HEAD --
           then
             echo "::notice::$PACKAGE_TO_UPGRADE already at $UPGRADE_TO_VERSION"
             exit 0
