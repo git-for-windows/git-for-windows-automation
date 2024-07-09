@@ -1,0 +1,73 @@
+#!/bin/sh
+
+die () {
+    echo "$*" >&2
+    exit 1
+}
+
+hex1='[0-9a-fA-F]'
+hex8="$hex1$hex1$hex1$hex1$hex1$hex1$hex1$hex1"
+hex40="$hex8$hex8$hex8$hex8$hex8"
+revision=
+title=
+set -x
+echo "$1"
+case "$1" in
+# 40 hexadecimal characters
+$hex40) revision=$1;;
+*) die "Usage: $0 <revision>";;
+esac
+
+case "$revision" in
+$hex40) ;; # okay
+*) die "Invalid revision: $revision";;
+esac
+
+# `updpkgsums` requires the bare clone `msys2-runtime` to exist
+git init --bare msys2-runtime &&
+git --git-dir=msys2-runtime config remote.origin.url https://github.com/cygwin/cygwin &&
+git --git-dir=msys2-runtime fetch --tags https://github.com/cygwin/cygwin &&
+
+git clone --bare msys2-runtime src/msys2-runtime &&
+git --git-dir=src/msys2-runtime config remote.origin.url https://github.com/git-for-windows/msys2-runtime &&
+# pretend to be a partial clone
+git --git-dir=src/msys2-runtime config remote.origin.promisor true &&
+git --git-dir=src/msys2-runtime config remote.origin.partialCloneFilter blob:none ||
+die "Failed to initialize the src/msys2-runtime repository"
+
+git --git-dir=src/msys2-runtime reset --soft "$revision" &&
+previous_commit="$(cat msys2-runtime.commit)" && {
+    test 0 = $(git --git-dir=src/msys2-runtime rev-list --count "$revision..$previous_commit") ||
+    die "The revision $revision is not a direct descendant of $previous_commit"
+} &&
+
+# update pkgver if needed
+update_pkgver= &&
+pkgver=$(git --git-dir=src/msys2-runtime describe --match='cygwin-[0-9]*' "$revision") &&
+pkgver=${pkgver#cygwin-} &&
+pkgver=${pkgver%%-*} &&
+if test "$pkgver" != "$(sed -n 's/^pkgver=\(.*\)/\1/p' PKGBUILD)"
+then
+    update_pkgver=t
+    sed -i "s/^pkgver=.*/pkgver=$pkgver/" PKGBUILD &&
+    # the `update-patches.sh` script requires no uncommitted changes, but it also expects
+    # the `pkgver` to be set correctly.
+    git commit -sm 'msys2-runtime: WIP' PKGBUILD
+fi &&
+
+# pre-fetch the required blobs
+git --git-dir=src/msys2-runtime fetch origin \
+    $(git --git-dir=src/msys2-runtime -c core.abbrev=no \
+        log --format='%n' --raw "refs/tags/cygwin-$pkgver..$revision" ^"$revision^{/^Start.the.merging-rebase}" |
+        cut -d ' ' -f 3,4 |
+        tr ' ' '\n' |
+        grep -v '^0*$' |
+        sort |
+        uniq) &&
+
+sh -x ./update-patches.sh &&
+if test -n "$update_pkgver"
+then
+    git reset --soft HEAD^ &&
+    sed -i 's/^pkgrel=.*/pkgrel=1/' PKGBUILD
+fi

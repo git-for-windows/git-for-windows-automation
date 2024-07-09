@@ -121,7 +121,7 @@ jobs:
               PKGBUILD
           fi &&
           git update-index -q --refresh &&
-          if git diff-files --exit-code
+          if git diff-files --exit-code && git diff-index --quiet HEAD --
           then
             echo "::notice::$PACKAGE_TO_UPGRADE already at $UPGRADE_TO_VERSION"
             exit 0
@@ -167,10 +167,11 @@ jobs:
               else if (name === 'mingw-w64-pcre2') body = `See https://github.com/PCRE2Project/pcre2/blob/pcre2-${version}/ChangeLog for details.`
 
               const terms = 'type:issue repo:git-for-windows/git state:open author:app/github-actions label:component-update'
-              const { data } = await github.rest.search.issuesAndPullRequests({
-                q: `"[New ${name.replace(/^mingw-w64-/, '')} version]" (${version} OR v${version}) in:title ${terms}`,
-              })
-              if (data.total_count) body = `${body ? `${body}\n\n` : ''}This closes ${data.items[0].html_url}`
+              const [verb, q] = name === 'msys2-runtime'
+                ? ['corresponds to', `type:pr repo:git-for-windows/msys2-runtime state:open ${version}`]
+                : ['closes', `"[New ${name.replace(/^mingw-w64-/, '')} version]" (${version} OR v${version}) in:title ${terms}`]
+              const { data } = await github.rest.search.issuesAndPullRequests({ q })
+              if (data.total_count) body = `${body ? `${body}\n\n` : ''}This ${verb} ${data.items[0].html_url}`
             } catch (e) {
               console.log(e)
             }
