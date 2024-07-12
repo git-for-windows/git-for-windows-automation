@@ -35,6 +35,11 @@ jobs:
           mingw-w64-git-lfs|mingw-w64-git-sizer|mingw-w64-wintoast|\
           git-extra|git-for-windows-keyring) repo=build-extra;;
           mingw-w64-*) repo=MINGW-packages;;
+          innosetup)
+            repo=build-extra &&
+            echo "package_path=installer" >>$GITHUB_ENV &&
+            echo "skip-deployment-check=true" >>$GITHUB_OUTPUT
+            ;;
           *) repo=MSYS2-packages;;
           esac &&
           echo "REPO=$repo" >>$GITHUB_ENV &&
@@ -109,7 +114,7 @@ jobs:
         id: update
         shell: bash
         run: |
-          cd "/usr/src/$REPO/$PACKAGE_TO_UPGRADE" &&
+          cd "/usr/src/$REPO/${package_path-$PACKAGE_TO_UPGRADE}" &&
           update_script="$GITHUB_WORKSPACE/update-scripts/version/$PACKAGE_TO_UPGRADE"
           if test -f "$update_script"
           then
@@ -135,11 +140,12 @@ jobs:
             updpkgsums
           fi &&
           msg="$PACKAGE_TO_UPGRADE: update to $UPGRADE_TO_VERSION" &&
-          git add PKGBUILD &&
+          { test ! -f PKGBUILD || git add PKGBUILD; } &&
           git commit -sm "$msg" &&
           echo "msg=$msg" >>$GITHUB_OUTPUT &&
           echo "modified=true" >>$GITHUB_OUTPUT
       - name: check if the package was already deployed
+        if: steps.repo.outputs.skip-deployment-check != 'true'
         shell: bash
         run: |
           ./update-scripts/ensure-not-yet-deployed.sh "/usr/src/$REPO/$PACKAGE_TO_UPGRADE"
@@ -149,7 +155,7 @@ jobs:
         run: |
           auth="$(printf '%s:%s' '${{ steps.actor.outputs.login }}' '${{ steps.setup.outputs.token }}' | base64)" &&
           echo "::add-mask::$auth" &&
-          cd "/usr/src/$REPO/$PACKAGE_TO_UPGRADE" &&
+          cd "/usr/src/$REPO/${package_path-$PACKAGE_TO_UPGRADE}" &&
           git -c http.extraHeader="Authorization: Basic $auth" push --force origin HEAD:refs/heads/$PACKAGE_TO_UPGRADE-$UPGRADE_TO_VERSION
       - name: open PR
         if: steps.update.outputs.modified == 'true'
