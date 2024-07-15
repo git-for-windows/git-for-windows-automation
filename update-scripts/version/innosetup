@@ -1,0 +1,12 @@
+#!/bin/sh
+
+set -x &&
+url="https://jrsoftware.org/download.php/innosetup-$1.exe" &&
+curl -# -LR -D curl.log -o is.exe "$url" &&
+cat curl.log &&
+grep 'HTTP/.* 200' curl.log &&
+./is.exe //verysilent //dir=InnoSetup //noicons //tasks= //portable=1 //lang=english \
+  //SP- //SUPPRESSMSGBOXES //NORESTART //LOG=is.log &&
+cat is.log &&
+git add -A InnoSetup/ &&
+git status

@@ -1,0 +1,3 @@
+#!/bin/sh
+
+echo "::notice::No checksum update needed for Inno Setup" >&2
