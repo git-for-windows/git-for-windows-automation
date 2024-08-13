@@ -147,7 +147,8 @@ runs:
             release.id, {
               draft: false,
               prerelease: isPrerelease,
-              make_latest : !isPrerelease
+              make_latest : !isPrerelease,
+              discussion_category_name: 'Announcements',
             }
           )
     - name: update check-run
