@@ -119,9 +119,7 @@ catch {
 # It contains a bunch of new features compared to "powershell" and is sometimes more stable as well.
 #
 # url for Github API to get the latest release of pwsh
-#
-# TODO update this to /releases/latest once 7.5.0 is out, as it adds support for arm64 MSIs
-[string]$PwshUrl = "https://api.github.com/repos/PowerShell/PowerShell/releases/tags/v7.5.0-preview.2"
+[string]$PwshUrl = "https://api.github.com/repos/PowerShell/PowerShell/releases/latest"
 
 # Name of the MSI file that should be verified and downloaded
 [string]$PwshMsiName = "PowerShell-.*-win-arm64.msi"
@@ -237,10 +235,6 @@ $MsiArguments = "/qn /i  `"$MsiPath`" ADD_PATH=1"
 
 # Install pwsh using msiexec
 Start-Process msiexec.exe -Wait -ArgumentList $MsiArguments
-
-# TODO remove once 7.5.0 is out
-Write-Output "Copying pwsh-preview.cmd to pwsh.cmd as a temporary measure until 7.5.0 is out..."
-Copy-Item "C:\Program Files\PowerShell\7-preview\preview\pwsh-preview.cmd" "C:\Program Files\PowerShell\7-preview\preview\pwsh.cmd"  
 
 Write-Output "Finished installing pwsh."
 
