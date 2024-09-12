@@ -1,3 +1,5 @@
+#Requires -RunAsAdministrator
+
 param (
     # https://docs.github.com/en/actions/hosting-your-own-runners/adding-self-hosted-runners
     [Parameter(Mandatory = $true, HelpMessage = "GitHub Actions Runner registration token. Note that these tokens are only valid for one hour after creation, so we always expect the user to provide one.")]
