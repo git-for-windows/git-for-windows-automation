@@ -47,7 +47,7 @@ jobs:
               vm_name=$(echo $active_vm | jq '.name')
               vm_creation_iso_string=$(echo $active_vm | jq -r '.timeCreated')
               vm_creation_time=$(date -d $vm_creation_iso_string +%s)
-              
+
               if [ "$one_hour_ago" -lt "$vm_creation_time" ]; then
                   echo "The VM ${vm_name} was created less then 1 hour ago and shouldn't be deleted yet. Skipping."
               elif test true = "$(if test ! -f .cli-authenticated; then
