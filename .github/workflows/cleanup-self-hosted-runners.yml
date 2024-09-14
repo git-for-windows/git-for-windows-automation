@@ -25,7 +25,7 @@ jobs:
     - name: Discover VMs to delete
       uses: azure/CLI@v1
       with:
-        azcliversion: 2.54.0
+        azcliversion: 2.64.0
         inlineScript: |
           active_vms=$(az vm list -g ${{ secrets.AZURE_RESOURCE_GROUP }} | jq -c '.[] | {name,timeCreated}')
           current_time=$(date +%s)
