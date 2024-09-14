@@ -49,16 +49,16 @@ jobs:
               vm_creation_time=$(date -d $vm_creation_iso_string +%s)
 
               if [ "$one_hour_ago" -lt "$vm_creation_time" ]; then
-                  echo "The VM ${vm_name} was created less then 1 hour ago and shouldn't be deleted yet. Skipping."
+                  echo "::notice::The VM ${vm_name} was created less then 1 hour ago and shouldn't be deleted yet. Skipping."
               elif test true = "$(if test ! -f .cli-authenticated; then
                       ./gh-cli-auth-as-app.sh &&
                       >.cli-authenticated # only authenticate once
                   fi &&
                   gh api repos/$GITHUB_REPOSITORY/actions/runners \
                       --jq '.runners[] | select(.name == "'$vm_name'") | .busy)"; then
-                  echo "The VM ${vm_name} is still busy."
+                  echo "::notice::The VM ${vm_name} is still busy."
               else
-                  echo "The VM ${vm_name} was created more than 3 hours ago and wasn't deleted. Let's do that now."
+                  echo "::warning::The VM ${vm_name} was created more than 3 hours ago and wasn't deleted. Let's do that now."
                   az vm delete -n "$vm_name" -g ${{ secrets.AZURE_RESOURCE_GROUP }} --yes
                   az network nsg delete -n "$vm_name"-nsg -g ${{ secrets.AZURE_RESOURCE_GROUP }}
                   az network vnet delete -n "$vm_name"-vnet -g ${{ secrets.AZURE_RESOURCE_GROUP }}
