@@ -34,7 +34,7 @@ jobs:
         inlineScript: |
           active_vms=$(az vm list -g ${{ secrets.AZURE_RESOURCE_GROUP }} | jq -c '.[] | {name,timeCreated}')
           current_time=$(date +%s)
-          three_hours_ago=$(($current_time - 3 * 3600))
+          one_hour_ago=$(($current_time - 3600))
 
           if [ -z "$active_vms" ]; then
               echo "No active VMs found, nothing to do."
@@ -51,8 +51,8 @@ jobs:
                   jq -r '.timeCreated | sub("\\.[0-9]+[+-][0-9]+:[0-9]+$"; "") | sub("T"; " ")')"
               vm_creation_time=$(TZ=UTC date -d "$vm_creation_time_string" +%s)
               
-              if [ "$three_hours_ago" -lt "$vm_creation_time" ]; then
-                  echo "The VM ${vm_name} was created less then 3 hours ago and shouldn't be deleted yet. Skipping."
+              if [ "$one_hour_ago" -lt "$vm_creation_time" ]; then
+                  echo "The VM ${vm_name} was created less then 1 hour ago and shouldn't be deleted yet. Skipping."
               elif test true = "$(if test ! -f .cli-authenticated; then
                       ./gh-cli-auth-as-app.sh &&
                       >.cli-authenticated # only authenticate once
