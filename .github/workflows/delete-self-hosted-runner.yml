@@ -30,7 +30,7 @@ jobs:
     - name: Delete VM '${{ env.ACTIONS_RUNNER_NAME }}'
       uses: azure/CLI@v2
       with:
-        azcliversion: 2.43.0
+        azcliversion: 2.64.0
         inlineScript: |
           az vm delete -n "$ACTIONS_RUNNER_NAME" -g ${{ secrets.AZURE_RESOURCE_GROUP }} --yes
           az network nsg delete -n "$ACTIONS_RUNNER_NAME"-nsg -g ${{ secrets.AZURE_RESOURCE_GROUP }}
