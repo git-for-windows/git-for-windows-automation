@@ -18,12 +18,16 @@ jobs:
   delete-runner:
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v4
     - name: Azure Login
       uses: azure/login@v1
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     - name: Discover VMs to delete
       uses: azure/CLI@v1
+      env:
+          GH_APP_ID: ${{ secrets.GH_APP_ID }}
+          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
       with:
         azcliversion: 2.64.0
         inlineScript: |
@@ -46,6 +50,13 @@ jobs:
               
               if [ "$three_hours_ago" -lt "$vm_creation_time" ]; then
                   echo "The VM ${vm_name} was created less then 3 hours ago and shouldn't be deleted yet. Skipping."
+              elif test true = "$(if test ! -f .cli-authenticated; then
+                      ./gh-cli-auth-as-app.sh &&
+                      >.cli-authenticated # only authenticate once
+                  fi &&
+                  gh api repos/$GITHUB_REPOSITORY/actions/runners \
+                      --jq '.runners[] | select(.name == "'$vm_name'") | .busy)"; then
+                  echo "The VM ${vm_name} is still busy."
               else
                   echo "The VM ${vm_name} was created more than 3 hours ago and wasn't deleted. Let's do that now."
                   az vm delete -n "$vm_name" -g ${{ secrets.AZURE_RESOURCE_GROUP }} --yes
