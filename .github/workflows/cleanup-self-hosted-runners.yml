@@ -6,7 +6,7 @@ on:
     # Run every 6 hours
     - cron: "0 */6 * * *"
   workflow_dispatch:
-  push:
+  pull_request:
 
 # The following secrets are required for this workflow to run:
 # AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
