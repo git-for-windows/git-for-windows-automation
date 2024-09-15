@@ -49,8 +49,8 @@ jobs:
           for active_vm in ${active_vms[@]}; do
               vm_name=$(echo $active_vm | jq '.name')
               vm_creation_iso_string=$(echo $active_vm | jq -r '.timeCreated')
-              # Bash's date -d command doesn't support the ISO 8601 format with a colon in the timezone offset, so we need to remove it
-              vm_creation_trimmed=$(echo "$vm_creation_iso_string" | sed 's/+[^+]*$//')
+              # Bash's date -d command doesn't support the full ISO 8601 format with milliseconds and timezone, so let's strip those
+              vm_creation_trimmed=$(echo "$vm_creation_iso_string" | sed 's/\.[0-9]*//;s/+[^+]*$//')
               vm_creation_time=$(TZ=UTC date -d $vm_creation_trimmed +%s)
 
               if [ "$one_hour_ago" -lt "$vm_creation_time" ]; then
