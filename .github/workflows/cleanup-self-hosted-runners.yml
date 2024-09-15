@@ -21,16 +21,17 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Azure Login
-      uses: azure/login@v1
+      uses: azure/login@v2
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     - name: Discover VMs to delete
-      uses: azure/CLI@v1
+      uses: azure/CLI@v2
       env:
           GH_APP_ID: ${{ secrets.GH_APP_ID }}
           GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
       with:
-        azcliversion: 2.64.0
+        # Stick to 2.63.0 until jq is added to 2.64.0+ https://github.com/Azure/azure-cli/issues/29830
+        azcliversion: 2.63.0
         inlineScript: |
           active_vms=$(az vm list -g ${{ secrets.AZURE_RESOURCE_GROUP }} | jq -c '.[] | {name,timeCreated}')
           current_time=$(date +%s)
