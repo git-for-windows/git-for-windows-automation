@@ -25,7 +25,8 @@ jobs:
     - name: Discover VMs to delete
       uses: azure/CLI@v2
       with:
-        azcliversion: 2.54.0
+        # Stick to 2.63.0 until jq is added to 2.64.0+ https://github.com/Azure/azure-cli/issues/29830
+        azcliversion: 2.63.0
         inlineScript: |
           active_vms=$(az vm list -g ${{ secrets.AZURE_RESOURCE_GROUP }} | jq -c '.[] | {name,timeCreated}')
           current_time=$(date +%s)
@@ -41,8 +42,10 @@ jobs:
 
           for active_vm in ${active_vms[@]}; do
               vm_name=$(echo $active_vm | jq '.name')
-              vm_creation_iso_string=$(echo $active_vm | jq -r '.timeCreated')
-              vm_creation_time=$(date -d $vm_creation_iso_string +%s)
+              # Use jq to extract and format the date-time string
+              vm_creation_time_string="$(echo $active_vm |
+                  jq -r '.timeCreated | sub("\\.[0-9]+[+-][0-9]+:[0-9]+$"; "") | sub("T"; " ")')"
+              vm_creation_time=$(TZ=UTC date -d "$vm_creation_time_string" +%s)
               
               if [ "$three_hours_ago" -ge "$vm_creation_time" ]; then
                   echo "The VM ${vm_name} was created more than 3 hours ago and wasn't deleted. Let's do that now."
