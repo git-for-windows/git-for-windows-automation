@@ -33,6 +33,7 @@ jobs:
         # Stick to 2.63.0 until jq is added to 2.64.0+ https://github.com/Azure/azure-cli/issues/29830
         azcliversion: 2.63.0
         inlineScript: |
+          set -x
           active_vms=$(az vm list -g ${{ secrets.AZURE_RESOURCE_GROUP }} | jq -c '.[] | {name,timeCreated}')
           current_time=$(date +%s)
           one_hour_ago=$(($current_time - 3600))
