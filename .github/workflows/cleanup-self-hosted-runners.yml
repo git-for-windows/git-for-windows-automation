@@ -58,7 +58,7 @@ jobs:
                       >.cli-authenticated # only authenticate once
                   fi &&
                   gh api repos/$GITHUB_REPOSITORY/actions/runners \
-                      --jq '.runners[] | select(.name == "'$vm_name'") | .busy)"; then
+                      --jq '.runners[] | select(.name == "'$vm_name'") | .busy')"; then
                   echo "::notice::The VM ${vm_name} is still busy."
               else
                   echo "::warning::The VM ${vm_name} was created more than 3 hours ago and wasn't deleted. Let's do that now."
