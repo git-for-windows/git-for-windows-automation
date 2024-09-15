@@ -168,6 +168,6 @@ jobs:
       if: env.DEALLOCATE_IMMEDIATELY == 'true'
       uses: azure/CLI@v2
       with:
-        azcliversion: 2.43.0
+        azcliversion: 2.64.0
         inlineScript: |
           az vm deallocate -n ${{ steps.generate-vm-name.outputs.vm_name }} -g ${{ secrets.AZURE_RESOURCE_GROUP }} --verbose
