@@ -19,11 +19,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - name: Azure Login
-      uses: azure/login@v1
+      uses: azure/login@v2
       with:
         creds: ${{ secrets.AZURE_CREDENTIALS }}
     - name: Discover VMs to delete
-      uses: azure/CLI@v1
+      uses: azure/CLI@v2
       with:
         azcliversion: 2.54.0
         inlineScript: |
