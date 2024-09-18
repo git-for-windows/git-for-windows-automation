@@ -83,6 +83,16 @@ runs:
             updateRelease
           } = require('./github-release')
 
+          const { initCheckRunState } = require('./check-runs')
+          const state = await initCheckRunState(
+            console,
+            core.setSecret,
+            ${{ inputs.app-id }},
+            ${{ toJSON(inputs.private-key) }},
+            '${{ inputs.owner }}',
+            '${{ inputs.repo }}')
+          await state.refreshToken()
+
           let release
           if ('${{ inputs.tag-name }}' === 'v2.46.1.windows.1') {
             release = { id: 175612508 }
@@ -99,16 +109,6 @@ runs:
 
           const sha256sums = sha256sumsFromReleaseNotes(${{ toJSON(inputs.release-notes) }})
           await checkSHA256Sums(console, artifacts, sha256sums)
-
-          const { initCheckRunState } = require('./check-runs')
-          const state = await initCheckRunState(
-            console,
-            core.setSecret,
-            ${{ inputs.app-id }},
-            ${{ toJSON(inputs.private-key) }},
-            '${{ inputs.owner }}',
-            '${{ inputs.repo }}')
-          await state.refreshToken()
 
           release = await createRelease(
             console,
