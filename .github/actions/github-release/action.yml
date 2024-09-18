@@ -63,6 +63,8 @@ runs:
         text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
         details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
     - name: Download bundle-artifacts (needed to push the tag)
+      # allow resuming failed deployment
+      if: inputs.tag-name != 'v2.46.1.windows.1'
       uses: actions/download-artifact@v4
       with:
         name: bundle-artifacts
@@ -81,6 +83,10 @@ runs:
             updateRelease
           } = require('./github-release')
 
+          let release
+          if ('${{ inputs.tag-name }}' === 'v2.46.1.windows.1') {
+            release = { id: 175612508 }
+          } else {
           const [ artifactsOwner, artifactsRepo ] = '${{ inputs.artifacts-repository }}'.split('/')
           const artifacts = await getGitArtifacts(
             console,
@@ -104,7 +110,7 @@ runs:
             '${{ inputs.repo }}')
           await state.refreshToken()
 
-          const release = await createRelease(
+          release = await createRelease(
             console,
             state.accessToken,
             '${{ inputs.owner }}',
@@ -151,6 +157,7 @@ runs:
               discussion_category_name: 'Announcements',
             }
           )
+          }
     - name: update check-run
       if: always()
       uses: ./.github/actions/check-run-action
