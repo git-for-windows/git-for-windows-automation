@@ -17,6 +17,7 @@ on:
 #                        group specifically for self-hosted Actions Runners.
 jobs:
   delete-runner:
+    if: github.repository_owner == 'git-for-windows'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
