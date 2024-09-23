@@ -13,58 +13,79 @@ on:
 #   az ad sp create-for-rbac --name "{YOUR_DESCRIPTIVE_NAME_HERE}" --role contributor \
 #     --scopes /subscriptions/{SUBSCRIPTION_ID_HERE}/resourceGroups/{RESOURCE_GROUP_HERE} \
 #     --sdk-auth
-# AZURE_RESOURCE_GROUP - Resource group to create the runner(s) in
+# AZURE_RESOURCE_GROUP - Resource group to find the runner(s) in. It's recommended to set up a resource
+#                        group specifically for self-hosted Actions Runners.
 jobs:
   delete-runner:
+    if: github.repository_owner == 'git-for-windows'
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Azure Login
-      uses: azure/login@v2
-      with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
-    - name: Discover VMs to delete
-      uses: azure/CLI@v2
+    - name: Process Azure credentials
+      uses: actions/github-script@v7
       env:
-          GH_APP_ID: ${{ secrets.GH_APP_ID }}
-          GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+        AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
       with:
-        # Stick to 2.63.0 until jq is added to 2.64.0+ https://github.com/Azure/azure-cli/issues/29830
-        azcliversion: 2.63.0
-        inlineScript: |
-          active_vms=$(az vm list -g ${{ secrets.AZURE_RESOURCE_GROUP }} | jq -c '.[] | {name,timeCreated}')
-          current_time=$(date +%s)
-          one_hour_ago=$(($current_time - 3600))
+        script: |
+          if (!process.env.AZURE_CREDENTIALS) {
+            core.setFailed('The AZURE_CREDENTIALS secret is required.')
+            process.exit(1)
+          }
+          
+          const azureCredentials = JSON.parse(process.env.AZURE_CREDENTIALS)
+          const {clientId, clientSecret, tenantId, subscriptionId} = azureCredentials
 
-          if [ -z "$active_vms" ]; then
-              echo "No active VMs found, nothing to do."
-              exit 0
-          else
-              echo "Found these active VMs:"
-              echo $active_vms
-          fi
+          core.setSecret(clientId)
+          core.exportVariable('AZURE_CLIENT_ID', clientId)
 
-          for active_vm in ${active_vms[@]}; do
-              vm_name=$(echo $active_vm | jq '.name')
-              # Use jq to extract and format the date-time string
-              vm_creation_time_string="$(echo $active_vm |
-                  jq -r '.timeCreated | sub("\\.[0-9]+[+-][0-9]+:[0-9]+$"; "") | sub("T"; " ")')"
-              vm_creation_time=$(TZ=UTC date -d "$vm_creation_time_string" +%s)
+          core.setSecret(clientSecret)
+          core.exportVariable('AZURE_CLIENT_SECRET', clientSecret)
 
-              if [ "$one_hour_ago" -lt "$vm_creation_time" ]; then
-                  echo "::notice::The VM ${vm_name} was created less then 1 hour ago and shouldn't be deleted yet. Skipping."
-              elif test true = "$(if test ! -f .cli-authenticated; then
-                      ./gh-cli-auth-as-app.sh &&
-                      >.cli-authenticated # only authenticate once
-                  fi &&
-                  gh api repos/$GITHUB_REPOSITORY/actions/runners \
-                      --jq '.runners[] | select(.name == "'$vm_name'") | .busy')"; then
-                  echo "::notice::The VM ${vm_name} is still busy."
-              else
-                  echo "::warning::The VM ${vm_name} was created more than 3 hours ago and wasn't deleted. Let's do that now."
-                  az vm delete -n "$vm_name" -g ${{ secrets.AZURE_RESOURCE_GROUP }} --yes
-                  az network nsg delete -n "$vm_name"-nsg -g ${{ secrets.AZURE_RESOURCE_GROUP }}
-                  az network vnet delete -n "$vm_name"-vnet -g ${{ secrets.AZURE_RESOURCE_GROUP }}
-                  az network public-ip delete -n "$vm_name"-ip -g ${{ secrets.AZURE_RESOURCE_GROUP }}
-              fi
-          done
+          core.setSecret(tenantId)
+          core.exportVariable('AZURE_TENANT_ID', tenantId)
+
+          core.setSecret(subscriptionId)
+          core.exportVariable('AZURE_SUBSCRIPTION_ID', subscriptionId)
+    - name: Discover VMs to delete
+      env:
+        GH_APP_ID: ${{ secrets.GH_APP_ID }}
+        GH_APP_PRIVATE_KEY: ${{ secrets.GH_APP_PRIVATE_KEY }}
+      run: |
+        az login --service-principal -u ${{ env.AZURE_CLIENT_ID }} -p ${{ env.AZURE_CLIENT_SECRET }} --tenant ${{ env.AZURE_TENANT_ID }}
+        az account set --subscription ${{ env.AZURE_SUBSCRIPTION_ID }}
+        active_vms=$(az vm list -g ${{ secrets.AZURE_RESOURCE_GROUP }} | jq -c '.[] | {name,timeCreated}')
+        current_time=$(date +%s)
+        one_hour_ago=$(($current_time - 3600))
+
+        if [ -z "$active_vms" ]; then
+            echo "No active VMs found, nothing to do."
+            exit 0
+        else
+            echo "Found these active VMs:"
+            echo $active_vms
+        fi
+
+        for active_vm in ${active_vms[@]}; do
+            vm_name=$(echo $active_vm | jq -r '.name')
+            # Use jq to extract and format the date-time string
+            vm_creation_time_string="$(echo $active_vm |
+                jq -r '.timeCreated | sub("\\.[0-9]+[+-][0-9]+:[0-9]+$"; "") | sub("T"; " ")')"
+            vm_creation_time=$(TZ=UTC date -d "$vm_creation_time_string" +%s)
+
+            if [ "$one_hour_ago" -lt "$vm_creation_time" ]; then
+                echo "::notice::The VM ${vm_name} was created less then 1 hour ago and shouldn't be deleted yet. Skipping."
+            elif test true = "$(if test ! -f .cli-authenticated; then
+                    ./gh-cli-auth-as-app.sh &&
+                    >.cli-authenticated # only authenticate once
+                fi &&
+                gh api repos/$GITHUB_REPOSITORY/actions/runners \
+                    --jq '.runners[] | select(.name == "'$vm_name'") | .busy')"; then
+                echo "::notice::The VM ${vm_name} is still busy."
+            else
+                echo "::warning::The VM ${vm_name} was created more than 3 hours ago and wasn't deleted. Let's do that now."
+                az vm delete -n "$vm_name" -g ${{ secrets.AZURE_RESOURCE_GROUP }} --yes
+                az network nsg delete -n "$vm_name"-nsg -g ${{ secrets.AZURE_RESOURCE_GROUP }}
+                az network vnet delete -n "$vm_name"-vnet -g ${{ secrets.AZURE_RESOURCE_GROUP }}
+                az network public-ip delete -n "$vm_name"-ip -g ${{ secrets.AZURE_RESOURCE_GROUP }}
+            fi
+        done
