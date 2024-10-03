@@ -176,6 +176,7 @@ jobs:
         echo "::endgroup::"
     
     - name: Show post-deployment script output
+      if: always()
       env:
         CUSTOM_SCRIPT_OUTPUT: ${{ steps.deploy-arm-template.outputs.customScriptInstanceView }}
       run: echo "$CUSTOM_SCRIPT_OUTPUT" | jq -r '.substatuses[0].message' 
