@@ -144,11 +144,11 @@ jobs:
         )
 
         echo "AZURE_ARM_PARAMETERS=$AZURE_ARM_PARAMETERS" >> $GITHUB_ENV
-        
+
     - name: Azure Login
-      uses: azure/login@v2
+      uses: ./.github/workflows/azure-login
       with:
-        creds: ${{ secrets.AZURE_CREDENTIALS }}
+        credentials: ${{ secrets.AZURE_CREDENTIALS }}
     
     - uses: azure/arm-deploy@v2
       id: deploy-arm-template
