@@ -158,6 +158,22 @@ jobs:
         template: ./azure-self-hosted-runners/azure-arm-template.json
         parameters: ./azure-self-hosted-runners/azure-arm-template-example-parameters.json ${{ env.AZURE_ARM_PARAMETERS }}
         scope: resourcegroup
+
+    - name: Show some more information on failure
+      if: failure()
+      run: |
+        echo "::group::VM status"
+        az vm get-instance-view --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ steps.generate-vm-name.outputs.vm_name }} --query "instanceView.statuses"
+        az vm get-instance-view --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name ${{ steps.generate-vm-name.outputs.vm_name }} --query "statuses"
+        echo "::endgroup::"
+
+        echo "::group::Deployment logs"
+        az group deployment show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --name deploy-${{ steps.generate-vm-name.outputs.vm_name }}
+        echo "::endgroup::"
+
+        echo "::group::Extension logs"
+        az vm extension show --resource-group ${{ secrets.AZURE_RESOURCE_GROUP }} --vm-name ${{ steps.generate-vm-name.outputs.vm_name }} --name CustomScriptExtension
+        echo "::endgroup::"
     
     - name: Show post-deployment script output
       env:
