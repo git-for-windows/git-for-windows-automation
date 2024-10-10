@@ -26,7 +26,11 @@ esac
 # `updpkgsums` requires the bare clone `msys2-runtime` to exist
 git init --bare msys2-runtime &&
 git --git-dir=msys2-runtime config remote.origin.url https://github.com/cygwin/cygwin &&
-git --git-dir=msys2-runtime fetch --tags https://github.com/cygwin/cygwin &&
+# pretend to be a partial clone
+git --git-dir=msys2-runtime config remote.origin.promisor true &&
+git --git-dir=msys2-runtime config remote.origin.partialCloneFilter blob:none &&
+git --git-dir=msys2-runtime config remote.origin.fetch 'refs/tags/cygwin-*:refs/tags/cygwin-*' &&
+git --git-dir=msys2-runtime fetch origin &&
 
 git clone --bare msys2-runtime src/msys2-runtime &&
 git --git-dir=src/msys2-runtime config remote.origin.url https://github.com/git-for-windows/msys2-runtime &&
