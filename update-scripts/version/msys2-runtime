@@ -32,22 +32,21 @@ git --git-dir=msys2-runtime config remote.origin.partialCloneFilter blob:none &&
 git --git-dir=msys2-runtime config remote.origin.fetch 'refs/tags/cygwin-*:refs/tags/cygwin-*' &&
 git --git-dir=msys2-runtime fetch origin &&
 
-git clone --bare msys2-runtime src/msys2-runtime &&
-git --git-dir=src/msys2-runtime config remote.origin.url https://github.com/git-for-windows/msys2-runtime &&
-# pretend to be a partial clone
-git --git-dir=src/msys2-runtime config remote.origin.promisor true &&
-git --git-dir=src/msys2-runtime config remote.origin.partialCloneFilter blob:none ||
-die "Failed to initialize the src/msys2-runtime repository"
+git --git-dir=msys2-runtime config remote.g4w.url https://github.com/git-for-windows/msys2-runtime &&
+# pretend to be a partially-cloned remote, too
+git --git-dir=msys2-runtime config remote.g4w.promisor true &&
+git --git-dir=msys2-runtime config remote.g4w.partialCloneFilter blob:none &&
+git --git-dir=msys2-runtime fetch g4w $revision ||
+die "Failed to initialize the msys2-runtime repository"
 
-git --git-dir=src/msys2-runtime reset --soft "$revision" &&
 previous_commit="$(cat msys2-runtime.commit)" && {
-    test 0 = $(git --git-dir=src/msys2-runtime rev-list --count "$revision..$previous_commit") ||
+    test 0 = $(git --git-dir=msys2-runtime rev-list --count "$revision..$previous_commit") ||
     die "The revision $revision is not a direct descendant of $previous_commit"
 } &&
 
 # update pkgver if needed
 update_pkgver= &&
-pkgver=$(git --git-dir=src/msys2-runtime describe --match='cygwin-[0-9]*' "$revision") &&
+pkgver=$(git --git-dir=msys2-runtime describe --match='cygwin-[0-9]*' "$revision") &&
 pkgver=${pkgver#cygwin-} &&
 pkgver=${pkgver%%-*} &&
 if test "$pkgver" != "$(sed -n 's/^pkgver=\(.*\)/\1/p' PKGBUILD)"
@@ -60,14 +59,17 @@ then
 fi &&
 
 # pre-fetch the required blobs
-git --git-dir=src/msys2-runtime fetch origin \
-    $(git --git-dir=src/msys2-runtime -c core.abbrev=no \
+git --git-dir=msys2-runtime fetch g4w \
+    $(git --git-dir=msys2-runtime -c core.abbrev=no \
         log --format='%n' --raw "refs/tags/cygwin-$pkgver..$revision" ^"$revision^{/^Start.the.merging-rebase}" |
         cut -d ' ' -f 3,4 |
         tr ' ' '\n' |
         grep -v '^0*$' |
         sort |
         uniq) &&
+
+git --git-dir=msys2-runtime reset --soft "$revision" &&
+git --git-dir=msys2-runtime worktree add --no-checkout src/msys2-runtime &&
 
 sh -x ./update-patches.sh &&
 if test -n "$update_pkgver"
