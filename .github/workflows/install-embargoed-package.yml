@@ -1,0 +1,174 @@
+name: install-embargoed-package
+run-name: Install embargoed package
+
+on:
+  workflow_dispatch:
+    inputs:
+      github-release-url:
+        description: 'The URL to the GitHub release that contains the package files'
+        required: true
+      branch-name:
+        description: 'The name of the branches to work on'
+        required: true
+
+env:
+  GITHUB_RELEASE_URL: ${{ github.event.inputs.github-release-url }}
+  BRANCH_NAME: ${{ github.event.inputs.branch-name }}
+  HOME: "${{github.workspace}}\\home"
+  USERPROFILE: "${{github.workspace}}\\home"
+
+jobs:
+  install-embargoed-package:
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        arch:
+          - name: i686
+            repo: git-sdk-32
+          - name: x86_64
+            repo: git-sdk-64
+    steps:
+      - name: sanity check
+        if: github.repository_visibility != 'private' || github.repository.fork == true
+        run: echo "This action is meant to be run in an embargoed org" >&2; exit 1
+      - name: validate input
+        id: validate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const [, owner, repo, release] = process.env.GITHUB_RELEASE_URL.match(
+              /^https:\/\/github.com\/([^/]+)\/([^/]+)\/releases\/tag\/([^/]+)$/
+            )
+            if (owner !== context.repo.owner) {
+              core.setFailed(`Expected URL to point to '${context.repo.owner}', got '${owner}'`)
+              return
+            }
+            core.setOutput('owner', owner)
+            core.setOutput('repo', repo)
+            core.setOutput('release', release)
+      - uses: actions/checkout@v4
+      - name: obtain tokens
+        id: token
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { getAccessTokenForRepo } = require('./repository-updates.js')
+            core.setOutput('release-token', await getAccessTokenForRepo(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              context.repo.owner,
+              ${{ toJSON(steps.validate.outputs.repo) }}
+            ))
+            core.setOutput('git-sdk-token', await getAccessTokenForRepo(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              context.repo.owner,
+              ${{ toJSON(matrix.arch.repo) }}
+            ))
+            core.setOutput('build-extra-token', await getAccessTokenForRepo(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              context.repo.owner,
+              'build-extra'
+            ))
+      - name: download package files
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.release-token }}
+        shell: bash
+        run: |
+          set -ex
+          repo='${{ steps.validate.outputs.owner }}/${{ steps.validate.outputs.repo }}'
+          tag='${{ steps.validate.outputs.release }}'
+          gh release download --repo $repo $tag \
+            -p 'mingw-w64-${{ matrix.arch.name }}-*' \
+            -p '*-${{ matrix.arch.name }}.pkg.tar.*'
+          ls -la
+      - name: identify actor
+        id: actor
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const githubApiRequest = require('./github-api-request')
+            const answer = await githubApiRequest(
+              console,
+              '${{ secrets.GITHUB_TOKEN }}',
+              'GET',
+              '/users/${{ github.triggering_actor }}'
+            )
+            core.setOutput('name', answer.name)
+            core.setOutput('email', answer.email || '${{ github.triggering_actor }}@users.noreply.github.com')
+      - name: configure
+        shell: bash
+        run: |
+          USER_NAME="${{ steps.actor.outputs.name }}" &&
+          USER_EMAIL="${{ steps.actor.outputs.email }}" &&
+          mkdir -p "$HOME" &&
+          git config --global user.name "$USER_NAME" &&
+          git config --global user.email "$USER_EMAIL" &&
+          git config --global url.https://github.com/${{ github.repository_owner }}.insteadOf \
+            https://github.com/embargoed-git-for-windows-builds &&
+          git config --global credential.helper '' &&
+          git config --global --add credential.helper cache &&
+          git config --global checkout.workers 56 &&
+          cygpath -aw git-sdk/usr/bin >>$GITHUB_PATH &&
+          cygpath -aw git-sdk/cmd >>$GITHUB_PATH
+      - name: clone ${{ matrix.arch.repo }}
+        uses: actions/checkout@v4
+        with:
+          repository: "${{ github.repository_owner }}/${{ matrix.arch.repo }}"
+          path: git-sdk
+          ref: ${{ env.BRANCH_NAME }}
+          persist-credentials: true
+          token: ${{ steps.token.outputs.git-sdk-token }}
+      - name: clone build-extra
+        uses: actions/checkout@v4
+        with:
+          repository: "${{ github.repository_owner }}/build-extra"
+          path: git-sdk/usr/src/build-extra
+          ref: ${{ env.BRANCH_NAME }}
+          token: ${{ steps.token.outputs.build-extra-token }}
+      - name: install package
+        shell: bash
+        run: |
+          . /etc/profile &&
+          set -x &&
+          for pkg in *.pkg.tar.*
+          do
+            case "$pkg" in *.sig) continue;; esac
+            pacman -U --noconfirm $pkg
+          done
+      - name: run git-extra's post-upgrade script
+        shell: bash
+        run: |
+          set -x &&
+          cd / &&
+          export MSYSTEM=MSYS &&
+          export MSYS2_PATH_TYPE=minimal &&
+          . etc/profile &&
+          . var/lib/pacman/local/mingw-w64-*-git-extra-[0-9]*/install &&
+          post_upgrade
+      - name: commit changes (if any)
+        id: commit
+        shell: bash
+        run: |
+          set -x &&
+          cd / &&
+          git add -A &&
+          # If there are changes besides an updated `%INSTALLDATE%` in a `desc` file, commit them
+          { git update-index --refresh || :; } &&
+          if ! git diff-index --cached --quiet --exit-code HEAD -I '^[1-9][0-9]*$' --
+          then
+            sh - /usr/src/build-extra/commit-msys2.sh commit &&
+            echo "result=$(git config get remote.origin.url)/commit/$(git rev-parse $BRANCH_NAME)" >>$GITHUB_OUTPUT
+          fi
+      - name: push
+        if: steps.commit.outputs.result != ''
+        run: |
+          git -C git-sdk push origin '${{ env.BRANCH_NAME }}' &&
+          echo "::notice::Pushed to ${{ steps.commit.outputs.result }}"
