@@ -72,6 +72,10 @@ const getPushAuthorizationHeader = async (context, setSecret, appId, privateKey,
     privateKey,
     installationId
   )
+  if (setSecret) {
+    setSecret(accessToken)
+    setSecret(Buffer.from(accessToken).toString('base64'))
+  }
 
   const auth = Buffer.from(`PAT:${accessToken}`).toString('base64')
   if (setSecret) setSecret(auth)
