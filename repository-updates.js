@@ -55,7 +55,7 @@ const mergeBundle = (gitDir, worktree, bundlePath, refName) => {
   }
 }
 
-const getPushAuthorizationHeader = async (context, setSecret, appId, privateKey, owner, repo) => {
+const getAccessTokenForRepo = async (context, setSecret, appId, privateKey, owner, repo) => {
   const getAppInstallationId = require('./get-app-installation-id')
   const installationId = await getAppInstallationId(
     context,
@@ -77,6 +77,11 @@ const getPushAuthorizationHeader = async (context, setSecret, appId, privateKey,
     setSecret(Buffer.from(accessToken).toString('base64'))
   }
 
+  return accessToken
+}
+
+const getPushAuthorizationHeader = async (context, setSecret, appId, privateKey, owner, repo) => {
+  const accessToken = await getAccessTokenForRepo(context, setSecret, appId, privateKey, owner, repo)
   const auth = Buffer.from(`PAT:${accessToken}`).toString('base64')
   if (setSecret) setSecret(auth)
 
@@ -171,5 +176,6 @@ module.exports = {
   getWorkflowRunArtifact,
   pushRepositoryUpdate,
   pushGitBranch,
+  getAccessTokenForRepo,
   getPushAuthorizationHeader
 }
