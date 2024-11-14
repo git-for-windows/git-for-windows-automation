@@ -104,6 +104,30 @@ jobs:
           architecture: ${{ env.ARCHITECTURE || 'x86_64' }}
           msys: ${{ env.REPO == 'MSYS2-packages' || env.PACKAGE_TO_BUILD == 'git-for-windows-keyring' }}
 
+      - name: work around curl v8.11.0-1 problem
+        if: env.PACKAGE_TO_BUILD == 'curl' && env. REF == 'd58b04ae4163fe6c6c25b330bea0930d7bb627ac'
+        shell: bash
+        run: |
+          # `git fetch` does not work with that libcurl version. For details,
+          # see https://github.com/git-for-windows/MSYS2-packages/pull/199
+          test ! -f /var/lib/pacman/local/libcurl-8.11.0-1/desc ||
+          for pkg in libcurl curl
+          do
+            case "$ARCHITECTURE" in
+            i686) url=https://wingit.blob.core.windows.net/i686/$pkg-8.10.1-1-i686.pkg.tar.xz;;
+            x86_64) url=https://wingit.blob.core.windows.net/x86-64/$pkg-8.10.1-1-x86_64.pkg.tar.xz;;
+            esac
+            for suffix in '' .sig
+            do
+              curl --retry 5 -fLO $url$suffix || exit 1
+            done
+            pacman -U --noconfirm ${url##*/} || exit 1
+          done
+
+          # Sadly, this does not work because the Pacman repository's index only
+          # ever lists the latest package version:
+          # pacman -S --noconfirm libcurl=8.10.1-1 curl=8.10.1-1
+
       - name: Clone ${{ env.REPO }}
         shell: bash
         run: |
