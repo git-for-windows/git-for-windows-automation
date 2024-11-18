@@ -73,7 +73,8 @@ const downloadAndUnZip = async (token, url, name) => {
 
 const architectures = [
   { name: 'x86_64', infix: '-64-bit' },
-  { name: 'i686', infix: '-32-bit' }
+  { name: 'i686', infix: '-32-bit' },
+  { name: 'aarch64', infix: '-arm64' }
 ]
 
 const artifacts = [
@@ -96,11 +97,20 @@ const artifactName2Rank = (name) => {
   return rank
 }
 
-const downloadBundleArtifacts = async (context, token, owner, repo, git_artifacts_i686_workflow_run_id, git_artifacts_x86_64_workflow_run_id) => {
+const downloadBundleArtifacts = async (
+  context,
+  token,
+  owner,
+  repo,
+  git_artifacts_i686_workflow_run_id,
+  git_artifacts_x86_64_workflow_run_id,
+  git_artifacts_aarch64_workflow_run_id
+) => {
   for (const architecture of architectures) {
     const workflowRunId = {
       x86_64: git_artifacts_x86_64_workflow_run_id,
-      i686: git_artifacts_i686_workflow_run_id
+      i686: git_artifacts_i686_workflow_run_id,
+      aarch64: git_artifacts_aarch64_workflow_run_id
     }[architecture.name]
     const downloadURLs = await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
     if (architecture.name === 'x86_64') await downloadAndUnZip(token, downloadURLs['bundle-artifacts'], 'bundle-artifacts')
@@ -162,17 +172,27 @@ const downloadBundleArtifacts = async (context, token, owner, repo, git_artifact
   return result
 }
 
-const getGitArtifacts = async (context, token, owner, repo, git_artifacts_i686_workflow_run_id, git_artifacts_x86_64_workflow_run_id) => {
+const getGitArtifacts = async (
+  context,
+  token,
+  owner,
+  repo,
+  git_artifacts_i686_workflow_run_id,
+  git_artifacts_x86_64_workflow_run_id,
+  git_artifacts_aarch64_workflow_run_id
+) => {
   const fs = require('fs')
   const result = []
   for (const architecture of architectures) {
     const workflowRunId = {
       x86_64: git_artifacts_x86_64_workflow_run_id,
-      i686: git_artifacts_i686_workflow_run_id
+      i686: git_artifacts_i686_workflow_run_id,
+      aarch64: git_artifacts_aarch64_workflow_run_id
     }[architecture.name]
 
     const urls = await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
     for (const artifact of artifacts) {
+      if (architecture.name === 'aarch64' && artifact.name === 'mingit-busybox') continue
       const name = `${artifact.name}-${architecture.name}`
       context.log(`Downloading ${name}`)
       await downloadAndUnZip(token, urls[name], name)

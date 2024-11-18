@@ -9,6 +9,9 @@ on:
       git_artifacts_x86_64_workflow_run_id:
         description: 'ID of the git-artifacts (x86_64) workflow run'
         required: true
+      git_artifacts_aarch64_workflow_run_id:
+        description: 'ID of the git-artifacts (aarch64) workflow run'
+        required: true
 
 env:
   HOME: "${{github.workspace}}\\home"
@@ -17,6 +20,7 @@ env:
   REPO: git
   I686_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_i686_workflow_run_id}}"
   X86_64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_x86_64_workflow_run_id}}"
+  AARCH64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_aarch64_workflow_run_id}}"
 
 jobs:
   setup:
@@ -86,7 +90,8 @@ jobs:
               context.repo.owner,
               context.repo.repo,
               process.env.I686_WORKFLOW_RUN_ID,
-              process.env.X86_64_WORKFLOW_RUN_ID
+              process.env.X86_64_WORKFLOW_RUN_ID,
+              process.env.AARCH64_WORKFLOW_RUN_ID
             )
 
             core.setOutput('display-version', result.displayVersion)

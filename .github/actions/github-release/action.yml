@@ -39,6 +39,9 @@ inputs:
   git_artifacts_x86_64_workflow_run_id:
     description: 'ID of the git-artifacts (x86_64) workflow run'
     required: true
+  git_artifacts_aarch64_workflow_run_id:
+    description: 'ID of the git-artifacts (aarch64) workflow run'
+    required: true
 outputs:
   github-release-url:
     description: "The GitHub Release URL"
@@ -59,7 +62,7 @@ runs:
         rev: ${{ inputs.rev }}
         check-run-name: "github-release"
         title: "Publish ${{ inputs.display-version }} for @${{ inputs.rev }}"
-        summary: "Downloading the Git artifacts from ${{ inputs.git_artifacts_x86_64_workflow_run_id }} and ${{ inputs.git_artifacts_i686_workflow_run_id }} and publishing them as a new GitHub Release at ${{ inputs.owner }}/${{ inputs.repo }}"
+        summary: "Downloading the Git artifacts from ${{ inputs.git_artifacts_x86_64_workflow_run_id }}, ${{ inputs.git_artifacts_i686_workflow_run_id }} and ${{ inputs.git_artifacts_aarch64_workflow_run_id }} and publishing them as a new GitHub Release at ${{ inputs.owner }}/${{ inputs.repo }}"
         text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
         details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
     - name: Download bundle-artifacts (needed to push the tag)
@@ -97,7 +100,8 @@ runs:
             artifactsOwner,
             artifactsRepo,
             ${{ inputs.git_artifacts_i686_workflow_run_id }},
-            ${{ inputs.git_artifacts_x86_64_workflow_run_id }}
+            ${{ inputs.git_artifacts_x86_64_workflow_run_id }},
+            ${{ inputs.git_artifacts_aarch64_workflow_run_id }}
           )
 
           const sha256sums = sha256sumsFromReleaseNotes(${{ toJSON(inputs.release-notes) }})
