@@ -125,6 +125,7 @@ jobs:
           artifacts-token: ${{ secrets.GITHUB_TOKEN }}
           git_artifacts_i686_workflow_run_id: ${{ env.I686_WORKFLOW_RUN_ID }}
           git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
+          git_artifacts_aarch64_workflow_run_id: ${{ env.AARCH64_WORKFLOW_RUN_ID }}
   announcement-mail:
     needs: ['setup', 'github-release']
     runs-on: ubuntu-latest
@@ -188,6 +189,7 @@ jobs:
           artifacts-token: ${{ secrets.GITHUB_TOKEN }}
           git_artifacts_i686_workflow_run_id: ${{ env.I686_WORKFLOW_RUN_ID }}
           git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
+          git_artifacts_aarch64_workflow_run_id: ${{ env.AARCH64_WORKFLOW_RUN_ID }}
           gpg-key: ${{ secrets.GPGKEY }}
           priv-gpg-key: ${{ secrets.PRIVGPGKEY }}
           azure-blobs-token: ${{ secrets.AZURE_BLOBS_TOKEN }}
