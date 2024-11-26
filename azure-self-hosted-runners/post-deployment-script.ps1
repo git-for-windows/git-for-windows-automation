@@ -47,7 +47,7 @@ Write-Output "Starting post-deployment script."
 [string]$GitHubUrl = "https://api.github.com/repos/git-for-windows/git/releases/latest"
 #
 # Name of the exe file that should be verified and downloaded
-[string]$GithubExeName = "Git-.*-64-bit.exe"
+[string]$GithubExeName = "Git-.*-arm64.exe"
 
 try {
     [System.Object]$GithubRestData = Invoke-RestMethod -Uri $GitHubUrl -Method Get -Headers $GithubHeaders -TimeoutSec 10 | Select-Object -Property assets, body
