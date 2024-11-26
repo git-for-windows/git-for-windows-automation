@@ -52,7 +52,8 @@ Write-Output "Starting post-deployment script."
 try {
     [System.Object]$GithubRestData = Invoke-RestMethod -Uri $GitHubUrl -Method Get -Headers $GithubHeaders -TimeoutSec 10 | Select-Object -Property assets, body
     [System.Object]$GitHubAsset = $GithubRestData.assets | Where-Object { $_.name -match $GithubExeName }
-    if ($GithubRestData.body -match "\b${[Regex]::Escape($GitHubAsset.name)}.*?\|.*?([a-zA-Z0-9]{64})" -eq $True) {
+    $AssetNameEscaped = [Regex]::Escape($GitHubAsset.name)
+    if ($GithubRestData.body -match "\b${AssetNameEscaped}.*?\|.*?([a-zA-Z0-9]{64})" -eq $True) {
         [System.Object]$GitHubGit = [PSCustomObject]@{
             DownloadUrl = [string]$GitHubAsset.browser_download_url
             Hash        = [string]$Matches[1].ToUpper()
