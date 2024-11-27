@@ -216,13 +216,15 @@ const getGitArtifacts = async (
       aarch64: git_artifacts_aarch64_workflow_run_id
     }[architecture.name]
 
-    const urls = await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
+    const urls = workflowRunId && await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
     for (const artifact of artifacts) {
       if (architecture.name === 'aarch64' && artifact.name === 'mingit-busybox') continue
       const name = `${artifact.name}-${architecture.name}`
       if (architecture.name === 'i686' && !artifact.name.startsWith('mingit') && !urls && !fs.existsSync(name)) continue
-      context.log(`Downloading ${name}`)
-      await downloadAndUnZip(token, urls[name], name)
+      if (urls) {
+        context.log(`Downloading ${name}`)
+        await downloadAndUnZip(token, urls[name], name)
+      } else if (!fs.existsSync(name)) continue
 
       for (const fileName of fs.readdirSync(name)) {
         if (fileName.endsWith('.exe') || fileName.endsWith('.zip') || fileName.endsWith('.tar.bz2')) {
