@@ -123,10 +123,10 @@ const processBundleArtifacts = () => {
   const fs = require('fs')
 
   const result = {
-    tagName: fs.readFileSync('bundle-artifacts/next_version').toString().trim(),
-    displayVersion: fs.readFileSync('bundle-artifacts/next_version').toString().trim(),
-    ver: fs.readFileSync('bundle-artifacts/ver').toString().trim(),
-    gitCommitOID: fs.readFileSync('bundle-artifacts/git-commit-oid').toString().trim(),
+    tagName: fs.readFileSync('bundle-artifacts-x86_64/next_version').toString().trim(),
+    displayVersion: fs.readFileSync('bundle-artifacts-x86_64/next_version').toString().trim(),
+    ver: fs.readFileSync('bundle-artifacts-x86_64/ver').toString().trim(),
+    gitCommitOID: fs.readFileSync('bundle-artifacts-x86_64/git-commit-oid').toString().trim(),
     sha256sums: {}
   }
 
@@ -146,31 +146,31 @@ const processBundleArtifacts = () => {
     .map(name => `${name} | ${result.sha256sums[name]}`)
     .join('\n')
 
-  fs.writeFileSync('bundle-artifacts/sha256sums', checksums)
+  fs.writeFileSync('bundle-artifacts-x86_64/sha256sums', checksums)
 
   // Work around out-of-band versions' announcement file containing parentheses
   const withParens = result.ver.replace(/^(\d+\.\d+\.\d+)\.(\d+)$/, '$1($2)')
   console.log(`withParens: ${withParens}`)
   if (result.ver !== withParens) {
-    if (!fs.existsSync(`bundle-artifacts/announce-${result.ver}`)) {
-      fs.renameSync(`bundle-artifacts/announce-${withParens}`, `bundle-artifacts/announce-${result.ver}`)
+    if (!fs.existsSync(`bundle-artifacts-x86_64/announce-${result.ver}`)) {
+      fs.renameSync(`bundle-artifacts-x86_64/announce-${withParens}`, `bundle-artifacts-x86_64/announce-${result.ver}`)
     }
-    if (!fs.existsSync(`bundle-artifacts/release-notes-${result.ver}`)) {
-      fs.renameSync(`bundle-artifacts/release-notes-${withParens}`, `bundle-artifacts/release-notes-${result.ver}`)
+    if (!fs.existsSync(`bundle-artifacts-x86_64/release-notes-${result.ver}`)) {
+      fs.renameSync(`bundle-artifacts-x86_64/release-notes-${withParens}`, `bundle-artifacts-x86_64/release-notes-${result.ver}`)
     }
   }
 
   result.announcement = fs
-    .readFileSync(`bundle-artifacts/announce-${result.ver}`)
+    .readFileSync(`bundle-artifacts-x86_64/announce-${result.ver}`)
     .toString()
     .replace('@@CHECKSUMS@@', checksums)
   result.releaseNotes = fs
-    .readFileSync(`bundle-artifacts/release-notes-${result.ver}`)
+    .readFileSync(`bundle-artifacts-x86_64/release-notes-${result.ver}`)
     .toString()
     .replace('@@CHECKSUMS@@', checksums)
 
-  fs.writeFileSync(`bundle-artifacts/announce-${result.ver}`, result.announcement)
-  fs.writeFileSync(`bundle-artifacts/release-notes-${result.ver}`, result.releaseNotes)
+  fs.writeFileSync(`bundle-artifacts-x86_64/announce-${result.ver}`, result.announcement)
+  fs.writeFileSync(`bundle-artifacts-x86_64/release-notes-${result.ver}`, result.releaseNotes)
 
   return result
 }
@@ -191,7 +191,7 @@ const downloadBundleArtifacts = async (
       aarch64: git_artifacts_aarch64_workflow_run_id
     }[architecture.name]
     const downloadURLs = await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
-    if (architecture.name === 'x86_64') await downloadAndUnZip(token, downloadURLs['bundle-artifacts'], 'bundle-artifacts')
+    if (architecture.name === 'x86_64') await downloadAndUnZip(token, downloadURLs['bundle-artifacts'], 'bundle-artifacts-x86_64')
     await downloadAndUnZip(token, downloadURLs['sha256sums'], `sha256sums-${architecture.name}`)
   }
 
