@@ -28,27 +28,16 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
-            const [owner, repo] = '${{ github.repository }}'.split('/')
-            const appId = ${{ secrets.GH_APP_ID }}
-            const privateKey = `${{ secrets.GH_APP_PRIVATE_KEY }}`
-
-            const getAppInstallationId = require('./get-app-installation-id')
-            const installationId = await getAppInstallationId(
+            const { getAccessTokenForRepo } = require('./repository-updates.js')
+            const { owner, repo } = context.repo
+            const token = await getAccessTokenForRepo(
               console,
-              appId,
-              privateKey,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
               owner,
-              repo
+              repo,
             )
-
-            const getInstallationAccessToken = require('./get-installation-access-token')
-            const { token } = await getInstallationAccessToken(
-              console,
-              appId,
-              privateKey,
-              installationId
-            )
-            core.setSecret(token)
 
             const {
               getWorkflowRunArtifactsURLs,
