@@ -28,6 +28,43 @@ git_rev="$1"
 test "refs/heads/$release_branch" = "$(git -C "$build_extra_dir" symbolic-ref HEAD)" ||
 die "Need the current branch in '$build_extra_dir' to be '$release_branch'"
 
+# This function was copied from `git-update-git-for-windows` in
+# the `mingw-w64-git-extra` package.
+version_compare () {
+        a="$1"
+        b="$2"
+
+        while true
+        do
+                test -n "$b" || { echo 1; return; }
+                test -n "$a" || { echo -1; return; }
+
+                # Get the first numbers (if any)
+                a1="$(expr "$a" : '^\([0-9]*\)')"; a="${a#$a1}"
+                b1="$(expr "$b" : '^\([0-9]*\)')"; b="${b#$b1}"
+
+                if test -z "$b1"
+                then
+                        test -z "$a1" || { echo 1; return; }
+                        a1=0
+                        b1=0
+                fi
+                test -n "$a1" || { echo -1; return; }
+                test $a1 -le $b1 || { echo 1; return; }
+                test $b1 -le $a1 || { echo -1; return; }
+
+                # Skip non-numeric prefixes
+                a1="$(expr "$a" : '^\([^0-9]\+\)')"; a="${a#$a1}"
+                b1="$(expr "$b" : '^\([^0-9]\+\)')"; b="${b#$b1}"
+
+                case "$a1,$b1" in
+                [.-]rc,[.-]rc) ;; # both are -rc versions
+                [.-]rc,*) echo -1; return;;
+                *,[.-]rc) echo 1; return;;
+                esac
+        done
+}
+
 mkdir -p "$artifacts_dir" &&
 if test -n "$snapshot_version"
 then
@@ -45,6 +82,13 @@ else
 
 	desc="$(git --git-dir "$git_git_dir" describe --match 'v[0-9]*[0-9]' --exclude='*-[0-9]*' --exclude='*.windows.*' "$git_rev")" &&
 	base_tag=${desc%%-[1-9]*} &&
+	desc2="$(git --git-dir "$git_git_dir" describe --match 'v[0-9]*[0-9]' --exclude='*-[0-9]*' "$git_rev")" &&
+	base_tag2=${desc2%%-[1-9]*} &&
+	# If there is a candidate Git tag _and_ a candidate Git for Windows tag, compare versions
+	if test "$base_tag" != "$base_tag2" && test $(version_compare "$base_tag" "$base_tag2") -lt 0
+	then
+		base_tag="$base_tag2"
+	fi &&
 	case "$base_tag" in
 	"$desc") die "Revision '$git_rev' already tagged as $base_tag";;
 	*.windows.*)
