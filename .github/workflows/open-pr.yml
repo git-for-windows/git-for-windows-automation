@@ -169,7 +169,7 @@ jobs:
               const version = process.env.UPGRADE_TO_VERSION
 
               if (name === 'mintty') body = `See https://github.com/mintty/mintty/releases/tag/${version} for details.`
-              else if (name === 'mingw-w64-git-lfs') body = `See https://github.com/git-lfs/git-lfs/releases/tag/${version} for details.`
+              else if (name === 'mingw-w64-git-lfs') body = `See https://github.com/git-lfs/git-lfs/releases/tag/v${version} for details.`
               else if (name === 'mingw-w64-pcre2') body = `See https://github.com/PCRE2Project/pcre2/blob/pcre2-${version}/ChangeLog for details.`
 
               const terms = 'type:issue repo:git-for-windows/git state:open author:app/github-actions label:component-update'
