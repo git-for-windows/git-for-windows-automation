@@ -176,6 +176,8 @@ jobs:
           base64 -w 0 tmp.zip
         )"
 
+        PUBLIC_IP_ADDRESS_NAME1="${{ github.repository_visibility != 'private' && format('{0}-ip', steps.generate-vm-name.outputs.vm_name) || '' }}"
+
         AZURE_ARM_PARAMETERS=$(tr '\n' ' ' <<-END
           githubActionsRunnerRegistrationUrl="$ACTIONS_RUNNER_REGISTRATION_URL"
           githubActionsRunnerToken="$ACTIONS_RUNNER_TOKEN"
@@ -184,7 +186,7 @@ jobs:
           virtualMachineImage="$AZURE_VM_IMAGE"
           virtualMachineName="${{ steps.generate-vm-name.outputs.vm_name }}"
           virtualMachineSize="$AZURE_VM_TYPE"
-          publicIpAddressName1="${{ steps.generate-vm-name.outputs.vm_name }}-ip"
+          publicIpAddressName1="$PUBLIC_IP_ADDRESS_NAME1"
           adminUsername="${{ secrets.AZURE_VM_USERNAME }}"
           adminPassword="${{ secrets.AZURE_VM_PASSWORD }}"
           ephemeral="$EPHEMERAL_RUNNER"
