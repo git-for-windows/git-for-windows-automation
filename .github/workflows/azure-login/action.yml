@@ -1,43 +1,31 @@
 name: Azure Login
 description: Logs into Azure using a service principal
 inputs:
-  credentials:
-    description: Your credentials in JSON format
+  client-id:
+    description: The Client ID of the Azure Managed Identity
+    required: true
+  tenant-id:
+    description: The Tenant ID of the Azure Managed Identity (i.e. the Azure Active Directory in which the Identity lives)
     required: true
 
 runs:
   using: "composite"
   steps:
-    - name: Process Azure credentials
+    - name: Obtain OpenID Connect token
       uses: actions/github-script@v7
-      env:
-        AZURE_CREDENTIALS: ${{ inputs.credentials }}
-      with:
-        script: |
-          if (!process.env.AZURE_CREDENTIALS) {
-            core.setFailed('The AZURE_CREDENTIALS secret is required.')
-            process.exit(1)
-          }
-          
-          const azureCredentials = JSON.parse(process.env.AZURE_CREDENTIALS)
-          const {clientId, clientSecret, tenantId, subscriptionId} = azureCredentials
+        id: token
+        with:
+          script: |
+            const token = await core.getIDToken('api://AzureADTokenExchange')
+            core.setSecret(token)
+            return token
 
-          core.setSecret(clientId)
-          core.exportVariable('AZURE_CLIENT_ID', clientId)
-
-          core.setSecret(clientSecret)
-          core.exportVariable('AZURE_CLIENT_SECRET', clientSecret)
-
-          core.setSecret(tenantId)
-          core.exportVariable('AZURE_TENANT_ID', tenantId)
-
-          core.setSecret(subscriptionId)
-          core.exportVariable('AZURE_SUBSCRIPTION_ID', subscriptionId)
-    
     - name: Azure Login
       shell: bash
       run: |
         echo "Logging into Azure..."
-        az login --service-principal -u ${{ env.AZURE_CLIENT_ID }} -p ${{ env.AZURE_CLIENT_SECRET }} --tenant ${{ env.AZURE_TENANT_ID }}
-        echo "Setting subscription..."
-        az account set --subscription ${{ env.AZURE_SUBSCRIPTION_ID }} --output none
+        az login --service-principal \
+          --username ${{ inputs.client-id }} \
+          --tenant ${{ inputs.tenant-id }} \
+          --federated-token ${{ steps.token.outputs.result }} \
+          --output none

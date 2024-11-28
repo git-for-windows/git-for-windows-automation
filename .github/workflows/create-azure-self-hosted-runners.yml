@@ -53,12 +53,29 @@ env:
   AZURE_VM_REGION: westus2
   AZURE_VM_IMAGE: win11-24h2-ent
 
+permissions:
+  id-token: write # required for Azure login via OIDC
+  contents: read
+
 # The following secrets are required for this workflow to run:
-# AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
-#                     group specifically for self-hosted Actions Runners.
-#   az ad sp create-for-rbac --name "{YOUR_DESCRIPTIVE_NAME_HERE}" --role contributor \
-#     --scopes /subscriptions/{SUBSCRIPTION_ID_HERE}/resourceGroups/{RESOURCE_GROUP_HERE} \
-#     --sdk-auth
+# AZURE_CLIENT_ID - The Client ID of an Azure Managed Identity. It is recommended to set up a resource
+#                   group specifically for self-hosted Actions Runners, and to add a federated identity
+#                   to authenticate as the currently-running GitHub workflow.
+#   az identity create --name <managed-identity-name> -g <resource-group>
+#   az identity federated-credential create \
+#     --identity-name <managed-identity-name> \
+#     --resource-group <resource-group> \
+#     --name github-workflow \
+#     --issuer https://token.actions.githubusercontent.com \
+#     --subject repo:git-for-windows/git-for-windows-automation:ref:refs/heads/main \
+#     --audiences api://AzureADTokenExchange
+#   MSYS_NO_PATHCONV=1 \
+#   az role assignment create \
+#     --assignee <client-id-of-managed-identity> \
+#     --scope '/subscriptions/<subscription-id>/resourceGroups/<resource-group>' \
+#     --role 'Contributor'
+# AZURE_TENANT_ID - The Tenant ID of the Azure Managed Identity (i.e. the Azure Active Directory in which
+#                   the Identity lives)
 # AZURE_RESOURCE_GROUP - Resource group to create the runner(s) in
 # AZURE_VM_USERNAME - Username of the VM so you can RDP into it
 # AZURE_VM_PASSWORD - Password of the VM so you can RDP into it
@@ -163,8 +180,9 @@ jobs:
     - name: Azure Login
       uses: ./.github/workflows/azure-login
       with:
-        credentials: ${{ secrets.AZURE_CREDENTIALS }}
-    
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+
     - uses: azure/arm-deploy@v2
       id: deploy-arm-template
       with:
