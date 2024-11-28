@@ -29,6 +29,9 @@ permissions:
 #     --role 'Contributor'
 # AZURE_TENANT_ID - The Tenant ID of the Azure Managed Identity (i.e. the Azure Active Directory in which
 #                   the Identity lives)
+# AZURE_SUBSCRIPTION_ID - The Subscription ID with which the Azure Managed Identity is associated
+#                         (technically, this is not necessary for `az login --service-principal` with a
+#                         managed identity, but `Azure/login` requires it anyway)
 # AZURE_RESOURCE_GROUP - Resource group to find the runner(s) in. It's recommended to set up a resource
 #                        group specifically for self-hosted Actions Runners.
 jobs:
@@ -38,10 +41,11 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Azure Login
-      uses: ./.github/workflows/azure-login
+      uses: azure/login@v2
       with:
         client-id: ${{ secrets.AZURE_CLIENT_ID }}
         tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
     - name: Discover VMs to delete
       env:
         GH_APP_ID: ${{ secrets.GH_APP_ID }}
