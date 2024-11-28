@@ -42,8 +42,6 @@ env:
   ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo || github.event.repository.name }}"
   DEALLOCATE_IMMEDIATELY: ${{ github.event.inputs.deallocate_immediately }}
   EPHEMERAL_RUNNER: ${{ github.event.inputs.ephemeral }}
-  # This has to be a public URL that the VM can access after creation
-  POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/azure-self-hosted-runners/post-deployment-script.ps1
   # Note that you'll need "p" (arm64 processor) and ideally "d" (local temp disk). The number 4 stands for 4 CPU-cores.
   # For a convenient overview of all arm64 VM types, see e.g. https://azureprice.net/?_cpuArchitecture=Arm64
   AZURE_VM_TYPE: Standard_D4plds_v5
@@ -161,10 +159,21 @@ jobs:
           ACTIONS_RUNNER_PATH="D:\a"
         fi
 
+        # Zip up and Base64-encode the post-deployment script; We used to provide a public URL
+        # for that script instead, but that does not work in private repositories (and we could
+        # not even use the `GITHUB_TOKEN` to access the file because it lacks the necessary
+        # scope to read repository contents).
+        POST_DEPLOYMENT_SCRIPT_ZIP_BASE64="$(
+          cd azure-self-hosted-runners &&
+          zip -9 tmp.zip post-deployment-script.ps1 >&2 &&
+          base64 -w 0 tmp.zip
+        )"
+
         AZURE_ARM_PARAMETERS=$(tr '\n' ' ' <<-END
           githubActionsRunnerRegistrationUrl="$ACTIONS_RUNNER_REGISTRATION_URL"
           githubActionsRunnerToken="$ACTIONS_RUNNER_TOKEN"
-          postDeploymentPsScriptUrl="$POST_DEPLOYMENT_SCRIPT_URL"
+          postDeploymentScriptZipBase64="$POST_DEPLOYMENT_SCRIPT_ZIP_BASE64"
+          postDeploymentScriptFileName="post-deployment-script.ps1"
           virtualMachineImage="$AZURE_VM_IMAGE"
           virtualMachineName="${{ steps.generate-vm-name.outputs.vm_name }}"
           virtualMachineSize="$AZURE_VM_TYPE"
@@ -216,7 +225,7 @@ jobs:
       if: always()
       env:
         CUSTOM_SCRIPT_OUTPUT: ${{ steps.deploy-arm-template.outputs.customScriptInstanceView }}
-      run: echo "$CUSTOM_SCRIPT_OUTPUT" | jq -r '.substatuses[0].message' 
+      run: echo "$CUSTOM_SCRIPT_OUTPUT" | jq -r '.substatuses[0].message'
 
     - name: Deallocate the VM for later use
       if: env.DEALLOCATE_IMMEDIATELY == 'true'

@@ -22,11 +22,18 @@
                 "description": "Path to the Actions Runner. Keep this path short to prevent Long Path issues, e.g. D:\\a"
             }
         },
-        "postDeploymentPsScriptUrl": {
+        "postDeploymentScriptZipBase64": {
             "type": "string",
             "minLength": 6,
             "metadata": {
-                "description": "URL to the post-deployment PowerShell script. E.g. https://raw.githubusercontent.com/git-for-windows/git-for-windows-automation/main/azure-self-hosted-runners/post-deployment-script.ps1"
+                "description": "Base64-encoded .zip file containing the post-deployment script"
+            }
+        },
+        "postDeploymentScriptFileName": {
+            "type": "string",
+            "minLength": 6,
+            "metadata": {
+                "description": "File name of the post-deployment script"
             }
         },
         "computerName": {
@@ -118,10 +125,6 @@
         "vnetName": "[concat(parameters('virtualMachineName'), '-vnet')]",
         "vnetId": "[resourceId(resourceGroup().name,'Microsoft.Network/virtualNetworks', concat(parameters('virtualMachineName'), '-vnet'))]",
         "subnetRef": "[concat(variables('vnetId'), '/subnets/', parameters('subnetName'))]",
-        "UriFileNamePieces": "[split(parameters('postDeploymentPsScriptUrl'), '/')]",
-        "firstFileNameString": "[variables('UriFileNamePieces')[sub(length(variables('UriFileNamePieces')), 1)]]",
-        "firstFileNameBreakString": "[split(variables('firstFileNameString'), '?')]",
-        "firstFileName": "[variables('firstFileNameBreakString')[0]]",
         "postDeploymentScriptArguments": "[concat('-GitHubActionsRunnerToken ', parameters('githubActionsRunnerToken'), ' -GithubActionsRunnerRegistrationUrl ', parameters('githubActionsRunnerRegistrationUrl'), ' -GithubActionsRunnerName ', parameters('virtualMachineName'), ' -Ephemeral ', parameters('ephemeral'), ' -StopService ', parameters('stopService'), ' -GitHubActionsRunnerPath ', parameters('githubActionsRunnerPath'))]"
     },
     "resources": [
@@ -269,11 +272,8 @@
                 "type": "CustomScriptExtension",
                 "typeHandlerVersion": "1.9",
                 "autoUpgradeMinorVersion": true,
-                "settings": {
-                    "fileUris": "[split(parameters('postDeploymentPsScriptUrl'), ' ')]"
-                },
                 "protectedSettings": {
-                    "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -File ', variables('firstFileName'), ' ', variables('postDeploymentScriptArguments'))]"
+                    "commandToExecute": "[concat('powershell -ExecutionPolicy Unrestricted -Command \"[System.IO.File]::WriteAllBytes(\\\"tmp.zip\\\", [System.Convert]::FromBase64String(\\\"', parameters('postDeploymentScriptZipBase64'), '\\\")); Add-Type -AssemblyName System.IO.Compression.FileSystem; [System.IO.Compression.ZipFile]::ExtractToDirectory(\\\"tmp.zip\\\", \\\".\\\"); & .\\', parameters('postDeploymentScriptFileName'), ' ', variables('postDeploymentScriptArguments'), '\"')]"
                 }
             }
         }
