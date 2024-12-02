@@ -69,14 +69,6 @@ jobs:
               context.repo.owner,
               ${{ toJSON(matrix.arch.repo) }}
             ))
-            core.setOutput('build-extra-token', await getAccessTokenForRepo(
-              console,
-              core.setSecret,
-              ${{ secrets.GH_APP_ID }},
-              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
-              context.repo.owner,
-              'build-extra'
-            ))
       - name: download package files
         env:
           GITHUB_TOKEN: ${{ steps.token.outputs.release-token }}
@@ -126,13 +118,6 @@ jobs:
           ref: ${{ env.BRANCH_NAME }}
           persist-credentials: true
           token: ${{ steps.token.outputs.git-sdk-token }}
-      - name: clone build-extra
-        uses: actions/checkout@v4
-        with:
-          repository: "${{ github.repository_owner }}/build-extra"
-          path: git-sdk/usr/src/build-extra
-          ref: ${{ env.BRANCH_NAME }}
-          token: ${{ steps.token.outputs.build-extra-token }}
       - name: install package
         shell: bash
         run: |
@@ -164,7 +149,7 @@ jobs:
           { git update-index --refresh || :; } &&
           if ! git diff-index --cached --quiet --exit-code HEAD -I '^[1-9][0-9]*$' --
           then
-            sh - /usr/src/build-extra/commit-msys2.sh commit &&
+            sh -x .github/commit-sdk.sh &&
             echo "result=$(git config get remote.origin.url)/commit/$(git rev-parse $BRANCH_NAME)" >>$GITHUB_OUTPUT
           fi
       - name: push
