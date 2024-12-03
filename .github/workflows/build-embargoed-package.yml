@@ -1,0 +1,464 @@
+name: build-embargoed-package
+run-name: Build ${{ !startsWith(inputs.package, 'mingw-w64-') && inputs.repo != 'MSYS2-packages' && inputs.package != 'git-extra' && inputs.package != 'git-for-windows-keyring' && 'mingw-w64-' || '' }}${{ inputs.package }}${{ inputs.architecture && format(' ({0})', inputs.architecture) || '' }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      github-release-url:
+        description: 'The URL to the GitHub release that contains the package files'
+        required: true
+      repo:
+        description: 'The repo containing the package definition'
+        required: true
+      branch-name:
+        description: 'The name of the branches to work on'
+        required: true
+      package:
+        description: 'The package to build'
+        required: true
+      architecture:
+        description: 'The architecture to build for (only for MSYS packages and all arm64 builds)'
+        required: false
+      actor:
+        description: The GitHub user on whose behalf this workflow is run
+        required: false
+
+env:
+  GITHUB_RELEASE_URL: ${{ github.event.inputs.github-release-url }}
+  OWNER: ${{ github.repository_owner }}
+  REPO: "${{ github.event.inputs.repo }}"
+  BRANCH_NAME: ${{ github.event.inputs.branch-name }}
+  PACKAGE_TO_BUILD: "${{ github.event.inputs.package }}"
+  ARCHITECTURE: "${{ github.event.inputs.architecture }}"
+  GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
+  ACTOR: "${{ github.event.inputs.actor || github.triggering_actor }}"
+  CREATE_CHECK_RUN: true
+  HOME: "${{github.workspace}}\\home"
+  USERPROFILE: "${{github.workspace}}\\home"
+
+jobs:
+  build-embargoed:
+    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
+    steps:
+      - name: sanity check
+        if: github.repository_visibility != 'private' || github.repository.fork == true
+        run: echo "This action is meant to be run in an embargoed org" >&2; exit 1
+      - name: validate input
+        id: validate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const [, owner, repo, release] = process.env.GITHUB_RELEASE_URL.match(
+              /^https:\/\/github.com\/([^/]+)\/([^/]+)\/releases\/tag\/([^/]+)$/
+            )
+            if (owner !== context.repo.owner) {
+              core.setFailed(`Expected URL to point to '${context.repo.owner}', got '${owner}'`)
+              return
+            }
+            core.setOutput('owner', owner)
+            core.setOutput('repo', repo)
+            core.setOutput('release', release)
+
+            let gitSDK
+            let msystem
+            switch (process.env.ARCHITECTURE) {
+            case 'i686':
+              gitSDK = 'git-sdk-32'
+              msystem = 'MINGW32'
+              break
+            case '':
+            case 'x86_64':
+              gitSDK = 'git-sdk-64'
+              msystem = 'MINGW64'
+              break
+            case 'aarch64':
+              gitSDK = 'git-sdk-arm64'
+              msystem = 'CLANGARM64'
+              break
+            default:
+              throw new Error(`Unknown architecture: ${process.env.ARCHITECTURE}`)
+            }
+            if (
+              process.env.REPO === 'MSYS2-packages'
+              || process.env.PACKAGE_TO_BUILD === 'git-for-windows-keyring'
+            ) msystem = 'MSYS'
+
+            const fs = require('fs')
+            const gitSDKPath = `${fs.existsSync('D:') ? 'D' : 'C'}:/${gitSDK}`
+
+            core.exportVariable('GIT_SDK', gitSDK)
+            core.exportVariable('MSYSTEM', msystem)
+            core.exportVariable('GIT_SDK_URL', `https://github.com/${process.env.OWNER}/${gitSDK}`)
+            core.exportVariable('GIT_SDK_PATH', gitSDKPath)
+            core.addPath(`${gitSDKPath}/usr/bin/core_perl`)
+            core.addPath(`${gitSDKPath}/usr/bin`)
+            core.addPath(`${gitSDKPath}/${msystem.toLowerCase()}/bin`)
+      - uses: actions/checkout@v4
+      - name: obtain tokens
+        id: token
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { getAccessTokenForRepo } = require('./repository-updates.js')
+            core.setOutput('release-token', await getAccessTokenForRepo(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              context.repo.owner,
+              ${{ toJSON(steps.validate.outputs.repo) }}
+            ))
+            core.setOutput('git-sdk-token', await getAccessTokenForRepo(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              context.repo.owner,
+              process.env.GIT_SDK
+            ))
+            const repoToken = await getAccessTokenForRepo(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              context.repo.owner,
+              process.env.REPO
+            )
+            core.setOutput('repo-token', repoToken)
+            // obtain the revision of the target branch
+            const githubApiRequest = require('./github-api-request')
+            const answer = await githubApiRequest(
+              console,
+              repoToken,
+              'GET',
+              `/repos/${context.repo.owner}/${process.env.REPO}/git/ref/heads/${process.env.BRANCH_NAME}`
+            )
+            core.exportVariable('REV', answer.object.sha)
+
+            const fs = require('fs')
+            if (!fs.existsSync(process.env.HOME)) fs.mkdirSync(process.env.HOME)
+            const { callGit, getPushAuthorizationHeader } = require('./repository-updates.js')
+            for (const repo of [
+              'build-extra',
+              'git-sdk-${{ env.ARCHITECTURE == 'i686' && '32' || (env.ARCHITECTURE == 'aarch64' && 'arm64' || '64') }}',
+              ...[${{ env.REPO != 'build-extra' && toJSON(env.REPO) || '' }}]
+            ]) {
+              const header = await getPushAuthorizationHeader(
+                console,
+                core.setSecret,
+                ${{ secrets.GH_APP_ID }},
+                ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                process.env.OWNER,
+                repo
+              )
+              console.log(callGit(['config', '--global', `http.https://github.com/${process.env.OWNER}/${repo}.extraHeader`, header]))
+            }
+      - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
+        if: env.CREATE_CHECK_RUN != 'false'
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          rev: ${{ env.REV }}
+          check-run-name: "build${{ env.ARCHITECTURE && format('_{0}', env.ARCHITECTURE) || '' }}"
+          title: "Build ${{ env.PACKAGE_TO_BUILD }}"
+          summary: "Building ${{ env.PACKAGE_TO_BUILD }}"
+          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+
+      - name: Identify actor
+        id: actor
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const githubApiRequest = require('./github-api-request')
+            const answer = await githubApiRequest(
+              console,
+              '${{ secrets.GITHUB_TOKEN }}',
+              'GET',
+              `/users/${process.env.ACTOR}`
+            )
+            core.setOutput('name', answer.name)
+            core.setOutput('email', answer.email || `${process.env.ACTOR}@users.noreply.github.com`)
+
+      - name: Set up Git for Windows SDK ${{ env.architecture }} (${{ env.BRANCH_NAME }})
+        # use PowerShell to avoid relying on Git for Windows's Bash being installed
+        shell: pwsh
+        run: git -c checkout.workers=56 clone --single-branch -b $env:BRANCH_NAME --depth 1 $env:GIT_SDK_URL $env:GIT_SDK_PATH
+
+      - name: Configure build
+        shell: bash
+        run: |
+          USER_NAME="${{ steps.actor.outputs.name }}" &&
+          USER_EMAIL="${{ steps.actor.outputs.email }}" &&
+          git config --global user.name "$USER_NAME" &&
+          git config --global user.email "$USER_EMAIL" &&
+          echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >>$GITHUB_ENV &&
+          if test MSYS2-packages != "$REPO" &&
+            test git-extra != "$PACKAGE_TO_BUILD" &&
+            test git-for-windows-keyring != "$PACKAGE_TO_BUILD" &&
+            test "z${PACKAGE_TO_BUILD#mingw-w64-}" = "z$PACKAGE_TO_BUILD"
+          then
+            echo "PACKAGE_TO_BUILD=mingw-w64-$PACKAGE_TO_BUILD" >>$GITHUB_ENV
+          fi
+
+      - name: Clone ${{ env.REPO }}
+        shell: bash
+        run: |
+          mkdir -p /usr/src &&
+          git init -b main /usr/src/$REPO &&
+          git -C /usr/src/$REPO remote add origin "https://github.com/$OWNER/$REPO" &&
+          git -C /usr/src/$REPO fetch --depth 1 origin $BRANCH_NAME &&
+          git -C /usr/src/$REPO reset --hard FETCH_HEAD
+
+      - name: check if the package was already deployed
+        shell: bash
+        run: |
+          ./update-scripts/ensure-not-yet-deployed.sh${{ env.ARCHITECTURE != '' && format(' --architecture={0}', env.ARCHITECTURE) || '' }} "/usr/src/$REPO/$PACKAGE_TO_BUILD"
+
+      - name: Download source files from specified GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ steps.token.outputs.release-token }}
+        shell: bash
+        run: |
+          set -ex
+          repo='${{ steps.validate.outputs.owner }}/${{ steps.validate.outputs.repo }}'
+          tag='${{ steps.validate.outputs.release }}'
+          cd /usr/src/$REPO/$PACKAGE_TO_BUILD
+          gh release download --repo $repo $tag
+          ls -la
+
+      - name: Clone build-extra (unless cloned already)
+        if: env.REPO != 'build-extra'
+        shell: bash
+        run: git clone --depth 1 --single-branch -b $BRANCH_NAME https://github.com/git-for-windows/build-extra /usr/src/build-extra
+
+      - name: rebase `.dll` base addresses
+        if: env.ARCHITECTURE == 'i686'
+        shell: powershell
+        run: |
+          if (Test-Path D:\git-sdk-32-full -PathType Container) {
+            cd D:\git-sdk-32-full
+          } else {
+            cd C:\git-sdk-32-full
+          }
+          if (!$?) { exit(1); }
+
+          $env:MSYSTEM = "MINGW32"
+          $env:PATH = "$(Get-Location)\usr\bin;" + $env:PATH
+          $env:MSYS2_PATH_TYPE = "minimal"
+
+          # Disable pacman's post-transaction hook that would mess everything up, if it exists
+          sh.exe -lc "set -x && rm -f /usr/share/libalpm/hooks/rebase.hook"
+
+          sh.exe -lc "set -x && find /usr/lib/perl5/*_perl -name \*.dll >perl-dlls.txt"
+          type perl-dlls.txt
+          dash -x /usr/bin/rebaseall -p -T perl-dlls.txt
+
+          # Work around for:
+          # - address space needed by 'Cwd.dll' is already occupied
+          # - address space needed by 'Dumper.dll' is already occupied
+          # etc
+          bash -lc "set -x && rebase -b 0x61500000 /usr/lib/perl5/core_perl/auto/*/{*,*/*}.dll"
+          # Work around for:
+          # - address space needed by 'Cwd.dll' is already occupied
+          bash -lc "set -x && rebase -v -b 0x63f00000 /usr/lib/perl5/core_perl/auto/Cwd/Cwd.dll"
+          # verify the base address
+          bash -lc "set -x && rebase -v -i /usr/lib/perl5/core_perl/auto/Cwd/Cwd.dll"
+
+      - name: Get GPG key(s)
+        timeout-minutes: 5
+        shell: bash
+        env:
+          CARCH: x86_64 # dummy, to allow sourcing cv2pdb's PKGBUILD as-is
+        run: |
+          cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
+          . PKGBUILD &&
+          for key in "${validpgpkeys[@]}" 57759F748D223F034D8BE870BB3AA74136C569BB
+          do
+            gpg $GPG_OPTIONS --recv-keys --batch --yes --keyserver hkp://keyserver.ubuntu.com "$key" &&
+            echo "$key:6:" | gpg $GPG_OPTIONS --import-ownertrust ||
+            exit 1
+          done
+
+      - name: Prepare home directory for GPG signing
+        if: env.GPGKEY != ''
+        shell: bash
+        run: |
+          echo '${{secrets.PRIVGPGKEY}}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
+          mkdir -p "$HOME" &&
+          git config --global gpg.program "/usr/src/build-extra/gnupg-with-gpgkey.sh" &&
+          info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
+          git config --global user.name "${info% <*}" &&
+          git config --global user.email "<${info#*<}"
+          echo "PACKAGER=$info" >>$GITHUB_ENV
+        env:
+          GPGKEY: ${{secrets.GPGKEY}}
+
+      - name: Prepare home directory for code-signing
+        if: env.CODESIGN_P12 != '' && env.CODESIGN_PASS != ''
+        env:
+          CODESIGN_P12: ${{secrets.CODESIGN_P12}}
+          CODESIGN_PASS: ${{secrets.CODESIGN_PASS}}
+        shell: bash
+        run: |
+          mkdir -p "$HOME"/.sig &&
+          echo "$CODESIGN_P12" | tr % '\n' | base64 -d >"$HOME"/.sig/codesign.p12 &&
+          echo "$CODESIGN_PASS" >"$HOME"/.sig/codesign.pass
+          git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
+          echo "SIGNTOOL=git signtool" >>$GITHUB_ENV
+
+      - name: Build ${{env.PACKAGE_TO_BUILD}}
+        timeout-minutes: ${{ env.PACKAGE_TO_BUILD== 'mingw-w64-llvm' && 360 || 150 }}
+        env:
+          GPGKEY: ${{secrets.GPGKEY}}
+          MAKEPKG: ${{ env.REPO != 'MSYS2-packages' && env.PACKAGE_TO_BUILD != 'git-for-windows-keyring' && 'makepkg-mingw' || 'makepkg' }}
+        shell: bash
+        run: |
+          set -x &&
+
+          # Restrict `PATH` to MSYS2
+          MSYS2_PATH_TYPE=minimal &&
+          . /etc/profile &&
+
+          dir="$(cygpath -au artifacts)" &&
+          mkdir -p "$dir" &&
+
+          case "$ARCHITECTURE" in
+            aarch64)
+              GIT_EXE="/clangarm64/bin/git.exe"
+              BUILD_SRC=
+              ;;
+            *)
+              GIT_EXE="/mingw64/bin/git.exe"
+              BUILD_SRC="YesPlease"
+              ;;
+          esac &&
+
+          {
+            test -f /usr/bin/git ||
+            printf '#!/bin/sh\n\nexec '$GIT_EXE' "$@"\n' >/usr/bin/git
+          } &&
+
+          MINGW_ARCHS_TO_BUILD=$(
+                    case "$ARCHITECTURE,$PACKAGE_TO_BUILD" in
+                    aarch64,*) echo "clangarm64";;
+                    *,mingw-w64-wintoast) echo "mingw32 mingw64 clangarm64";; # We're (cross-)compiling via Visual Studio
+                    *,mingw-w64-git-credential-manager) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built x86 artifacts and using them for all three platforms
+                    *,mingw-w64-git-lfs) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built artifacts from Git LFS' official release page
+                    *) echo "mingw32 mingw64";;
+                    esac
+          )
+
+          cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
+          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH=$MINGW_ARCHS_TO_BUILD $MAKEPKG -s --noconfirm &&
+          cp *.pkg.tar* "$dir/" &&
+
+          if test -n "$BUILD_SRC"
+          then
+            MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=mingw64 $MAKEPKG --allsource &&
+            cp *.src.tar* "$dir/"
+          fi &&
+
+          # Ensure that the Git worktree is still clean
+          ls -la &&
+          if ! git update-index --ignore-submodules --refresh ||
+            ! git diff-files --ignore-submodules ||
+            ! git diff-index --cached --ignore-submodules HEAD
+          then
+            echo "::error::Uncommitted changes after build!" >&2
+            git diff
+            exit 1
+          fi
+
+      - name: update check-run
+        if: env.CREATE_CHECK_RUN != 'false'
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: 'The build was successful!'
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: artifacts
+          path: artifacts
+
+      - name: Upload to an embargoed GitHub release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            const artifacts = fs.readdirSync(process.env.GITHUB_WORKSPACE + '/artifacts')
+
+            let version
+            const regex = new RegExp(`.*${process.env.PACKAGE_TO_BUILD.replace(/^mingw-w64-/, '')}-(?<version>.*-[0-9]+)(-(?<architecture>any|i686|x86_64|aarch64))?.*\.(src|pkg)\.tar.*`)
+            for (const filename of artifacts) {
+              const match = filename.match(regex)
+              if (!match) continue
+              if (!version) version = match.groups.version
+              else if (version !== match.groups.version) throw new Error(`Mismatched version: ${version} !== ${match.groups.version}`)
+            }
+
+            const { initCheckRunState } = require('./check-runs')
+            const state = await initCheckRunState(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              process.env.OWNER,
+              process.env.REPO)
+            await state.refreshToken()
+
+            const {
+              createRelease,
+              uploadReleaseAsset
+            } = require('./github-release')
+            const title = `${process.env.PACKAGE_TO_BUILD}-${version}`
+            let release = await createRelease(
+              console,
+              ${{ toJSON(steps.token.outputs.repo-token) }},
+              process.env.OWNER,
+              process.env.REPO,
+              title,
+              process.env.REV,
+              title,
+              `Built by ${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}.`,
+              false,
+              true
+            )
+            await state.refreshToken()
+            core.notice(`Release: ${release.html_url}`)
+            console.log(`Release: ${JSON.stringify(release, null, 2)}`)
+
+            for (const filename of artifacts) {
+              await uploadReleaseAsset(
+                console,
+                ${{ toJSON(steps.token.outputs.repo-token) }},
+                process.env.OWNER,
+                process.env.REPO,
+                release.id,
+                filename,
+                `artifacts/${filename}`
+              )
+            }
+
+      - name: Clean up temporary files
+        if: always()
+        shell: bash
+        run: |
+          gpgconf --kill dirmngr &&
+          gpgconf --kill gpg-agent &&
+          { rm -rf "$HOME" || echo "Gracefully leaving files undeleted" >&2; }
+
+      - name: mark check run as completed
+        if: env.CREATE_CHECK_RUN != 'false' && always()
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: "${{ job.status == 'success' && 'Done!' || format('Completed: {0}', job.status) }}."
+          conclusion: ${{ job.status }}
