@@ -418,18 +418,32 @@ jobs:
               uploadReleaseAsset
             } = require('./github-release')
             const title = `${process.env.PACKAGE_TO_BUILD}-${version}`
-            let release = await createRelease(
-              console,
-              ${{ toJSON(steps.token.outputs.repo-token) }},
-              process.env.OWNER,
-              process.env.REPO,
-              title,
-              process.env.REV,
-              title,
-              `Built by ${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}.`,
-              false,
-              true
-            )
+            let release = await (async () => {
+              try {
+                return await createRelease(
+                  console,
+                  ${{ toJSON(steps.token.outputs.repo-token) }},
+                  process.env.OWNER,
+                  process.env.REPO,
+                  title,
+                  process.env.REV,
+                  title,
+                  `Built by ${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}.`,
+                  false,
+                  true
+                )
+              } catch (e) {
+                console.log(`Failed to create release:`)
+                console.log(e)
+                const githubApiRequest = require('./github-api-request')
+                return await githubApiRequest(
+                  console,
+                  ${{ toJSON(steps.token.outputs.repo-token) }},
+                  'GET',
+                  `/repos/${process.env.OWNER}/${process.env.REPO}/releases/tags/${title}`
+                )
+              }
+            })()
             await state.refreshToken()
             core.notice(`Release: ${release.html_url}`)
             console.log(`Release: ${JSON.stringify(release, null, 2)}`)
