@@ -19,14 +19,19 @@ env:
 
 jobs:
   install-embargoed-package:
-    runs-on: windows-latest
+    runs-on: ${{ matrix.arch.runs-on }}
     strategy:
       matrix:
         arch:
           - name: i686
             repo: git-sdk-32
+            runs-on: windows-latest
           - name: x86_64
             repo: git-sdk-64
+            runs-on: windows-latest
+          - name: clang-aarch64
+            repo: git-sdk-arm64
+            runs-on: ['Windows', 'ARM64']
     steps:
       - name: sanity check
         if: github.repository_visibility != 'private' || github.repository.fork == true
