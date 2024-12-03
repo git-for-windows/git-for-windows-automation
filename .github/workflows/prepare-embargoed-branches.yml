@@ -45,7 +45,7 @@ jobs:
         with:
           script: |
             const { callGit, getPushAuthorizationHeader } = require('./repository-updates.js')
-            for (const repo of ['build-extra', 'git', 'git-sdk-32', 'git-sdk-64', 'MINGW-packages']) {
+            for (const repo of ['build-extra', 'git', 'git-sdk-32', 'git-sdk-64', 'git-sdk-arm64', 'MINGW-packages']) {
               const header = await getPushAuthorizationHeader(
                 console,
                 core.setSecret,

@@ -93,6 +93,8 @@ handle_repo git-sdk-32 /c/git-sdk-32 \
 	"\"--grep=mingw-w64-i686-git \".*\" -> $grep_version_regex\" -- cmd/git.exe" &&
 handle_repo git-sdk-64 /c/git-sdk-64 \
 	"\"--grep=mingw-w64-x86_64-git \".*\" -> $grep_version_regex\" -- cmd/git.exe" &&
+handle_repo git-sdk-arm64 /c/git-sdk-arm64 \
+	"\"--grep=mingw-w64-clang-aarch64-git \".*\" -> $grep_version_regex\" -- cmd/git.exe" &&
 handle_repo build-extra /usr/src/build-extra \
 	"-- versions/package-versions-$previous_version_prefix\\*-MinGit.txt" &&
 handle_repo MINGW-packages /usr/src/MINGW-packages \
