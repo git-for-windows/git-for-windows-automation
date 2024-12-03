@@ -21,11 +21,26 @@ version=${1#v}
 if test -z "$mingit"
 then
 	case "$version" in
+	*.*.*.windows.*)
+		# major.minor.patch.windows.extra
+		previous_version_prefix=${version%.windows.*}
+		version="${version%.windows.*}.${version##*.windows.}"
+		;;
+	*.*.*\(*)
+		# major.minor.patch(extra)
+		previous_version_prefix=${version%(*}
+		version="${version%(*}.${version##*(}"
+		version=${version%)}
+		;;
 	*[^0-9.]*|*..*|.*|*.) die "Invalid version: '$version'";;
-	*.*.*) ;; # okay
+	*.*.*.*)
+		# major.minor.patch.extra
+		v0="${version#*.*.*.}"
+		previous_version_prefix=${version%.$v0}
+		;;
+	*.*.*) previous_version_prefix=${version%.*}.$((${version##*.}-1));; # major.minor.patch
 	*) die "Invalid version: '$version'";;
 	esac
-	previous_version_prefix=${version%.*}.$((${version##*.}-1))
 	branch_name=git-$version
 else
 	previous_version_prefix="$(expr "$version" : '\([0-9]\+\.[0-9]\+\)\.\{0,1\}[0-9]*$')"
