@@ -60,8 +60,12 @@ const getWorkflowRunArtifactsURLs = async (context, token, owner, repo, workflow
 
 const download = async (token, url, outputFile) => {
   const { spawnSync } = require('child_process')
-  const auth = token ? ['-H', `Authorization: Bearer ${token}`] : []
-  const curl = spawnSync('curl', [...auth, '-Lo', outputFile, url])
+  const headers = token ? ['-H', `Authorization: Bearer ${token}`] : []
+  if (url.match(/^https:\/\/github.com\/[^/]+\/[^/]+\/releases\/assets\/\d+$/)
+    || url.match(/^https:\/\/api\.github.com\/repos\/[^/]+\/[^/]+\/releases\/assets\/\d+$/)) {
+    headers.push('-H', 'Accept: application/octet-stream')
+  }
+  const curl = spawnSync('curl', [...headers, '-fLo', outputFile, url])
   if (curl.error) throw curl.error
 }
 
