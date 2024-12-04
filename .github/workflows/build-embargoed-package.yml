@@ -43,22 +43,10 @@ jobs:
       - name: sanity check
         if: github.repository_visibility != 'private' || github.repository.fork == true
         run: echo "This action is meant to be run in an embargoed org" >&2; exit 1
-      - name: validate input
-        id: validate
+      - name: determine Git for Windows SDK parameters
         uses: actions/github-script@v7
         with:
           script: |
-            const [, owner, repo, release] = process.env.GITHUB_RELEASE_URL.match(
-              /^https:\/\/github.com\/([^/]+)\/([^/]+)\/releases\/tag\/([^/]+)$/
-            )
-            if (owner !== context.repo.owner) {
-              core.setFailed(`Expected URL to point to '${context.repo.owner}', got '${owner}'`)
-              return
-            }
-            core.setOutput('owner', owner)
-            core.setOutput('repo', repo)
-            core.setOutput('release', release)
-
             let gitSDK
             let msystem
             switch (process.env.ARCHITECTURE) {
@@ -100,14 +88,6 @@ jobs:
         with:
           script: |
             const { getAccessTokenForRepo } = require('./repository-updates.js')
-            core.setOutput('release-token', await getAccessTokenForRepo(
-              console,
-              core.setSecret,
-              ${{ secrets.GH_APP_ID }},
-              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
-              context.repo.owner,
-              ${{ toJSON(steps.validate.outputs.repo) }}
-            ))
             core.setOutput('git-sdk-token', await getAccessTokenForRepo(
               console,
               core.setSecret,
@@ -219,17 +199,18 @@ jobs:
           ./update-scripts/ensure-not-yet-deployed.sh${{ env.ARCHITECTURE != '' && format(' --architecture={0}', env.ARCHITECTURE) || '' }} "/usr/src/$REPO/$PACKAGE_TO_BUILD"
 
       - name: Download source files from specified GitHub Release
-        env:
-          GITHUB_TOKEN: ${{ steps.token.outputs.release-token }}
-        shell: bash
-        run: |
-          set -ex
-          repo='${{ steps.validate.outputs.owner }}/${{ steps.validate.outputs.repo }}'
-          tag='${{ steps.validate.outputs.release }}'
-          cd /usr/src/$REPO/$PACKAGE_TO_BUILD
-          gh release download --repo $repo $tag
-          ls -la
-
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { downloadReleaseAssetsFromURL } = require('./github-release.js')
+            process.chdir(`${process.env.GIT_SDK_PATH}/usr/src/${process.env.REPO}/${process.env.PACKAGE_TO_BUILD}`)
+            await downloadReleaseAssetsFromURL(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              process.env.GITHUB_RELEASE_URL
+            )
       - name: Clone build-extra (unless cloned already)
         if: env.REPO != 'build-extra'
         shell: bash
