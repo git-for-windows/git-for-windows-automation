@@ -9,6 +9,9 @@ on:
       git_artifacts_x86_64_workflow_run_id:
         description: 'ID of the git-artifacts (x86_64) workflow run'
         required: true
+      git_artifacts_aarch64_workflow_run_id:
+        description: 'ID of the git-artifacts (aarch64) workflow run'
+        required: true
 
 env:
   GIT_CONFIG_PARAMETERS: "'user.name=gitforwindowshelper-bot' 'user.email=gitforwindowshelper-bot@users.noreply.github.com'"
@@ -17,6 +20,7 @@ env:
   REPO: git
   I686_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_i686_workflow_run_id }}"
   X86_64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_x86_64_workflow_run_id }}"
+  AARCH64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_aarch64_workflow_run_id }}"
 
 jobs:
   prepare-github-release:
@@ -92,7 +96,7 @@ jobs:
           rev: ${{ steps.info.outputs.git-rev }}
           check-run-name: "prepare-github-release"
           title: "Prepare embargoed ${{ steps.info.outputs.mingit-only == 'true' && 'Min' || '' }}Git for Windows ${{ steps.info.outputs.display-version }} updates to the various repositories"
-          summary: "Downloading the ${{ steps.info.outputs.mingit-only == 'true' && 'Min' || '' }}Git artifacts from ${{ env.X86_64_WORKFLOW_RUN_ID }} and ${{ env.I686_WORKFLOW_RUN_ID }} and publishing them as a new embargoed GitHub Release at ${{ env.OWNER }}/${{ env.REPO }}."
+          summary: "Downloading the ${{ steps.info.outputs.mingit-only == 'true' && 'Min' || '' }}Git artifacts from ${{ env.X86_64_WORKFLOW_RUN_ID }}, ${{ env.AARCH64_WORKFLOW_RUN_ID }} and ${{ env.I686_WORKFLOW_RUN_ID }} and publishing them as a new embargoed GitHub Release at ${{ env.OWNER }}/${{ env.REPO }}."
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: configure token
