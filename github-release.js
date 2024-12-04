@@ -303,6 +303,34 @@ const pushGitTag = (context, setSecret, token, owner, repo, tagName, bundlePath)
   context.log('Done pushing tag')
 }
 
+const downloadReleaseAssets = async (context, setSecret, appId, privateKey, owner, repo, tagName, filenameMatcher) => {
+  const { getAccessTokenForRepo } = require('./repository-updates.js')
+  const token = await getAccessTokenForRepo(context, setSecret, appId, privateKey, owner, repo)
+
+  const githubApiRequest = require('./github-api-request.js')
+  const release = await githubApiRequest(
+    context,
+    token,
+    'GET',
+    `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tagName}`
+  )
+
+  for (const asset of release.assets) {
+    if (!filenameMatcher || filenameMatcher(asset.name)) {
+      context.log(`Downloading ${asset.name}`)
+      await download(token, asset.url, asset.name)
+    }
+  }
+}
+
+const downloadReleaseAssetsFromURL = async (context, setSecret, appId, privateKey, releaseURL, filenameMatcher) => {
+  const [, owner, repo, tagName] = releaseURL.match(
+    /^https:\/\/github.com\/([^/]+)\/([^/]+)\/releases\/tag\/([^/]+)$/
+  )
+  if (!owner || !repo || !tagName) throw new Error(`Invalid release URL: ${releaseURL}`)
+    return await downloadReleaseAssets(context, setSecret, appId, privateKey, owner, repo, tagName, filenameMatcher)
+}
+
 module.exports = {
   createRelease,
   updateRelease,
@@ -318,5 +346,7 @@ module.exports = {
   calculateSHA256ForFile,
   checkSHA256Sums,
   uploadGitArtifacts,
-  pushGitTag
+  pushGitTag,
+  downloadReleaseAssets,
+  downloadReleaseAssetsFromURL,
 }
