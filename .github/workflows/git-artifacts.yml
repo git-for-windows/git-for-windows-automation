@@ -172,6 +172,7 @@ jobs:
             test "$ARCHITECTURE" != x86_64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD nuget"
           }
           echo "ARTIFACTS_TO_BUILD=$ARTIFACTS_TO_BUILD" >> $GITHUB_ENV
+          echo "PKG_CACHE_KEY=pkg-$GIT_VERSION-$ARCHITECTURE-$TAG_GIT_WORKFLOW_RUN_ID" >> $GITHUB_ENV
       - name: Configure user
         run:
           USER_NAME="${{github.actor}}" &&
@@ -203,7 +204,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: artifacts
-          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}-${{env.TAG_GIT_WORKFLOW_RUN_ID}}
+          key: ${{ env.PKG_CACHE_KEY }}
       - name: Clone and update build-extra
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
@@ -321,7 +322,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: artifacts
-          key: pkg-${{env.GIT_VERSION}}-${{env.ARCHITECTURE}}-${{env.TAG_GIT_WORKFLOW_RUN_ID}}
+          key: ${{ env.PKG_CACHE_KEY }}
       - name: update check-run
         uses: ./.github/actions/check-run-action
         with:
