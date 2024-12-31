@@ -11,7 +11,7 @@ on:
         type: choice
         description: 'Architecture to build'
         required: true
-        options: 
+        options:
         - x86_64
         - i686
         - aarch64
