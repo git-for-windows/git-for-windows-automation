@@ -172,7 +172,7 @@ jobs:
             test "$ARCHITECTURE" != x86_64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD nuget"
           }
           echo "ARTIFACTS_TO_BUILD=$ARTIFACTS_TO_BUILD" >> $GITHUB_ENV
-          echo "PKG_CACHE_KEY=pkg-$GIT_VERSION-$ARCHITECTURE-$TAG_GIT_WORKFLOW_RUN_ID" >> $GITHUB_ENV
+          echo "PKG_CACHE_KEY=pkg-$GIT_VERSION$(test v2.48.0-rc1.windows.1 != "$GIT_VERSION" || echo "-try2")-$ARCHITECTURE-$TAG_GIT_WORKFLOW_RUN_ID" >> $GITHUB_ENV
       - name: Configure user
         run:
           USER_NAME="${{github.actor}}" &&
