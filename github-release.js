@@ -92,8 +92,8 @@ const ranked = artifacts
 const artifactName2Rank = (name) => {
   let rank = ranked.indexOf(name
     .replace(/-\d+(\.\d+)*(-rc\d+)?/, '')
-    .replace(/-(32|64)-bit/, '')
-  ) + (name.indexOf('-64-bit') > 0 ? 0.5 : 0)
+    .replace(/-((32|64)-bit|arm64)/, '')
+  ) + (name.indexOf('-64-bit') > 0 ? 0.5 : (name.indexOf('-arm64') > 0 ? 0.3 : 0))
   return rank
 }
 
