@@ -1,5 +1,5 @@
 name: git-artifacts
-run-name: Build git-artifacts (${{ inputs.architecture }})
+run-name: Build git-artifacts (${{ inputs.artifacts != '' && format('{0} ', inputs.artifacts) || '' }}${{ inputs.architecture }})
 
 on:
   workflow_dispatch:
@@ -45,7 +45,7 @@ jobs:
   pkg:
     runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
     outputs:
-      artifact_matrix: ${{steps.artifact-build-matrix.outputs.matrix}}
+      artifact_matrix: ${{ steps.artifact-build-matrix.outputs.result }}
       msystem: ${{steps.configure-environment.outputs.MSYSTEM}}
       mingw_package_prefix: ${{steps.configure-environment.outputs.MINGW_PACKAGE_PREFIX}}
       sdk_repo_arch: ${{steps.configure-environment.outputs.SDK_REPO_ARCH}}
@@ -195,7 +195,7 @@ jobs:
             try {
               const output = createArtifactsMatrix(process.env.ARTIFACTS_TO_BUILD, process.env.ARCHITECTURE)
               core.info(`Will be using the following matrix: ${JSON.stringify(output)}`)
-              core.setOutput('matrix', output)
+              return output
             } catch (e) {
               core.setFailed(e.message)
             }
@@ -268,7 +268,8 @@ jobs:
           echo '${{secrets.PRIVGPGKEY}}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
           info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
           git config --global user.name "${info% <*}" &&
-          git config --global user.email "<${info#*<}"
+          git config --global user.email "<${info#*<}" &&
+          echo "PACKAGER=$info" >>$GITHUB_ENV
         env:
           GPGKEY: ${{secrets.GPGKEY}}
       - name: update check-run
@@ -287,7 +288,10 @@ jobs:
           set -x
           BUILD_SRC=$(test x86_64 != "$ARCHITECTURE" || echo "--build-src-pkg")
           # Make sure that there is a `/usr/bin/git` that can be used by `makepkg-mingw`
-          printf '#!/bin/sh\n\nexec '$MINGW_PREFIX'/bin/git.exe "$@"\n' >/usr/bin/git &&
+          if test ! -x /usr/bin/git
+          then
+            printf '#!/bin/sh\n\nexec '$MINGW_PREFIX'/bin/git.exe "$@"\n' >/usr/bin/git
+          fi &&
           (
             cd /usr/src/MINGW-packages/mingw-w64-git/src/git &&
             /usr/src/build-extra/please.sh build-mingw-w64-git --reset-pkgrel --only-$ARCHITECTURE $BUILD_SRC \
@@ -308,13 +312,14 @@ jobs:
           if test -z "$EXISTING_GIT_TAG"
           then
             git commit -s -m "mingw-w64-git: new version ($version)" PKGBUILD &&
-          git bundle create "$b"/MINGW-packages.bundle origin/main..main
+            git bundle create "$b"/MINGW-packages.bundle origin/main..main
           elif ! git update-index --ignore-submodules --refresh ||
             ! git diff-files --ignore-submodules ||
             ! git diff-index --cached --ignore-submodules HEAD
           then
             echo "::warning::Uncommitted changes after build!" >&2 &&
             git diff >&2 &&
+            git commit -s -m "mingw-w64-git: new version ($version)" PKGBUILD &&
             git bundle create "$b"/MINGW-packages.bundle main^..main
           fi)
       - name: Cache ${{env.MINGW_PACKAGE_PREFIX}}-git
