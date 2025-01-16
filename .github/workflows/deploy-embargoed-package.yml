@@ -1,0 +1,99 @@
+name: deploy-embargoed-package
+run-name: Deploy embargoed package
+
+on:
+  workflow_dispatch:
+    inputs:
+      github-release-url:
+        description: 'The URL to the GitHub release that contains the package files'
+        required: true
+
+env:
+  GITHUB_RELEASE_URL: ${{ github.event.inputs.github-release-url }}
+  OWNER: ${{ github.repository_owner }}
+  GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
+  HOME: "${{github.workspace}}\\home"
+  USERPROFILE: "${{github.workspace}}\\home"
+
+jobs:
+  deploy-embargoed-package:
+    runs-on: windows-latest
+    steps:
+      - name: sanity check
+        if: github.repository_visibility != 'private' || github.repository.fork == true
+        run: echo "This action is meant to be run in an embargoed org" >&2; exit 1
+      - uses: actions/checkout@v4
+      - name: obtain tokens
+        id: token
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            if (!fs.existsSync(process.env.HOME)) fs.mkdirSync(process.env.HOME)
+            const { callGit, getPushAuthorizationHeader } = require('./repository-updates.js')
+            for (const repo of [
+              'build-extra',
+              'git-sdk-64',
+            ]) {
+              const header = await getPushAuthorizationHeader(
+                console,
+                core.setSecret,
+                ${{ secrets.GH_APP_ID }},
+                ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                process.env.OWNER,
+                repo
+              )
+              console.log(callGit(['config', '--global', `http.https://github.com/${process.env.OWNER}/${repo}.extraHeader`, header]))
+            }
+      - name: download package files
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { downloadReleaseAssetsFromURL } = require('./github-release.js')
+            await downloadReleaseAssetsFromURL(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              process.env.GITHUB_RELEASE_URL,
+              filename => filename.match(/\.(pkg|src)\.tar\.(gz|xz|zst)(\.sig)?$/)
+            )
+      - name: Initialize Git for Windows SDK subset
+        uses: ./.github/actions/init-g4w-sdk-for-pacman
+        with:
+          git-sdk-64-owner: ${{ env.OWNER }}
+          include-makepkg: true
+          include-repo-add: true
+      - name: Clone build-extra (unless cloned already)
+        shell: bash
+        run: git clone --depth 1 --single-branch -b main https://github.com/"$OWNER"/build-extra /usr/src/build-extra
+      - name: Prepare home directory for GPG signing
+        if: env.GPGKEY != ''
+        shell: bash
+        run: |
+          echo '${{secrets.PRIVGPGKEY}}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
+          mkdir -p "$HOME" &&
+          git config --global gpg.program "/usr/src/build-extra/gnupg-with-gpgkey.sh" &&
+          info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
+          git config --global user.name "${info% <*}" &&
+          git config --global user.email "<${info#*<}"
+          echo "PACKAGER=$info" >>$GITHUB_ENV
+        env:
+          GPGKEY: ${{secrets.GPGKEY}}
+      - uses: actions/create-github-app-token@v2
+        id: pacman-repo-token
+        with:
+          app-id: ${{ secrets.PUBLIC_GH_APP_ID }}
+          private-key: ${{ secrets.PUBLIC_GH_APP_PRIVATE_KEY }}
+          owner: git-for-windows
+          repositories: pacman-repo
+      - name: Deploy Pacman packages
+        if: env.azure_blobs_token != ''
+        shell: bash
+        env:
+          GPGKEY: ${{secrets.GPGKEY}}
+          azure_blobs_token: ${{secrets.AZURE_BLOBS_TOKEN}}
+          GITHUB_TOKEN: ${{ steps.pacman-repo-token.outputs.token }}
+        run: |
+          echo "$azure_blobs_token" | base64 -w 0 | sed 's/^/::add-mask::/' # mask the base64-encoded token
+          sh -x /usr/src/build-extra/pacman-helper.sh quick_add *.tar.*
