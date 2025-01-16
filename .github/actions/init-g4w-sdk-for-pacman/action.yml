@@ -5,6 +5,9 @@ inputs:
     description: 'Whether to include a working `makepkg`'
     required: false
     default: 'false'
+  git-sdk-64-owner:
+    description: 'The owner of the git-sdk-64 repository to use'
+    required: false
 outputs:
   result:
     description: 'The path to the subset of the SDK'
@@ -17,7 +20,7 @@ runs:
       shell: bash
       run: |
         git clone --bare --depth=1 --single-branch --branch=main --filter=blob:none \
-          https://github.com/git-for-windows/git-sdk-64 .tmp &&
+          https://github.com/${{ inputs.git-sdk-64-owner }}/git-sdk-64 .tmp &&
         rev="$(git -C .tmp rev-parse HEAD)" &&
         echo "rev=$rev" >>$GITHUB_OUTPUT &&
         echo "cache-key=g4w-sdk-$rev${{ inputs.include-makepkg != 'false' && '+makepkg' || '' }}" >>$GITHUB_OUTPUT

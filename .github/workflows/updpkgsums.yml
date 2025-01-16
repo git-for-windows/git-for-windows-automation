@@ -65,6 +65,7 @@ jobs:
       - name: Initialize Git for Windows SDK subset
         uses: ./.github/actions/init-g4w-sdk-for-pacman
         with:
+          git-sdk-64-owner: ${{ env.OWNER }}
           include-makepkg: true
       - name: Clone ${{ env.REPO }}
         id: clone
