@@ -20,18 +20,28 @@ on:
         required: false
         description: Repo to deploy the runner to. Only needed if runner_scope is set to "repo-level" (defaults to current repository)
       deallocate_immediately:
-        type: string
+        type: choice
+        options:
+          - false
+          - true
         required: true
         description: Deallocate the runner immediately after creating it (useful for spinning up runners preemptively)
         default: "false"
+      ephemeral:
+        type: choice
+        options:
+          - false
+          - true
+        required: true
+        description: Start the runner in ephemeral mode (i.e. unregister after running one job)
+        default: "true"
 
 env:
   ACTIONS_RUNNER_SCOPE: ${{ github.event.inputs.runner_scope }}
   ACTIONS_RUNNER_ORG: "${{ github.event.inputs.runner_org || github.repository_owner }}"
   ACTIONS_RUNNER_REPO: "${{ github.event.inputs.runner_repo || github.event.repository.name }}"
   DEALLOCATE_IMMEDIATELY: ${{ github.event.inputs.deallocate_immediately }}
-  # This has to be a public URL that the VM can access after creation
-  POST_DEPLOYMENT_SCRIPT_URL: https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref }}/azure-self-hosted-runners/post-deployment-script.ps1
+  EPHEMERAL_RUNNER: ${{ github.event.inputs.ephemeral }}
   # Note that you'll need "p" (arm64 processor) and ideally "d" (local temp disk). The number 4 stands for 4 CPU-cores.
   # For a convenient overview of all arm64 VM types, see e.g. https://azureprice.net/?_cpuArchitecture=Arm64
   AZURE_VM_TYPE: Standard_D4plds_v5
@@ -41,15 +51,37 @@ env:
   AZURE_VM_REGION: westus2
   AZURE_VM_IMAGE: win11-24h2-ent
 
+permissions:
+  id-token: write # required for Azure login via OIDC
+  contents: read
+
 # The following secrets are required for this workflow to run:
-# AZURE_CREDENTIALS - Credentials for the Azure CLI. It's recommended to set up a resource
-#                     group specifically for self-hosted Actions Runners.
-#   az ad sp create-for-rbac --name "{YOUR_DESCRIPTIVE_NAME_HERE}" --role contributor \
-#     --scopes /subscriptions/{SUBSCRIPTION_ID_HERE}/resourceGroups/{RESOURCE_GROUP_HERE} \
-#     --sdk-auth
+# AZURE_CLIENT_ID - The Client ID of an Azure Managed Identity. It is recommended to set up a resource
+#                   group specifically for self-hosted Actions Runners, and to add a federated identity
+#                   to authenticate as the currently-running GitHub workflow.
+#   az identity create --name <managed-identity-name> -g <resource-group>
+#   az identity federated-credential create \
+#     --identity-name <managed-identity-name> \
+#     --resource-group <resource-group> \
+#     --name github-workflow \
+#     --issuer https://token.actions.githubusercontent.com \
+#     --subject repo:git-for-windows/git-for-windows-automation:ref:refs/heads/main \
+#     --audiences api://AzureADTokenExchange
+#   MSYS_NO_PATHCONV=1 \
+#   az role assignment create \
+#     --assignee <client-id-of-managed-identity> \
+#     --scope '/subscriptions/<subscription-id>/resourceGroups/<resource-group>' \
+#     --role 'Contributor'
+# AZURE_TENANT_ID - The Tenant ID of the Azure Managed Identity (i.e. the Azure Active Directory in which
+#                   the Identity lives)
+# AZURE_SUBSCRIPTION_ID - The Subscription ID with which the Azure Managed Identity is associated
+#                         (technically, this is not necessary for `az login --service-principal` with a
+#                         managed identity, but `Azure/login` requires it anyway)
 # AZURE_RESOURCE_GROUP - Resource group to create the runner(s) in
 # AZURE_VM_USERNAME - Username of the VM so you can RDP into it
 # AZURE_VM_PASSWORD - Password of the VM so you can RDP into it
+# GH_APP_ID - The ID of the GitHub App whose credentials are to be used to obtain the runner token
+# GH_APP_PRIVATE_KEY - The private key of the GitHub App whose credentials are to be used to obtain the runner token
 jobs:
   create-runner:
     runs-on: ubuntu-latest
@@ -94,14 +126,21 @@ jobs:
     # https://github.com/actions/runner/issues/475
     - name: Generate Actions Runner token and registration URL
       run: |
+        # We need to URL-encode the user name because it usually is a GitHub App, which means that
+        # it has the suffix `[bot]`. If un-encoded, this would cause a cURL error "bad range in URL"
+        # because it would mistake this for an IPv6 address or something like that.
+        user_pwd="$(jq -n \
+          --arg user '${{ github.actor }}' \
+          --arg pwd '${{ secrets.GITHUB_TOKEN }}' \
+          '$user | @uri + ":" + $pwd')"
         case "$ACTIONS_RUNNER_SCOPE" in
           "org-level")
-            ACTIONS_API_URL="https://api.github.com/repos/$ACTIONS_RUNNER_ORG/actions/runners/registration-token"
-            ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/$ACTIONS_RUNNER_ORG"
+            ACTIONS_API_URL="https://$user_pwd@api.github.com/repos/$ACTIONS_RUNNER_ORG/actions/runners/registration-token"
+            ACTIONS_RUNNER_REGISTRATION_URL="https://$user_pwd@github.com/$ACTIONS_RUNNER_ORG"
             ;;
           "repo-level")
-            ACTIONS_API_URL="https://api.github.com/repos/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO/actions/runners/registration-token"
-            ACTIONS_RUNNER_REGISTRATION_URL="https://github.com/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO"
+            ACTIONS_API_URL="https://$user_pwd@api.github.com/repos/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO/actions/runners/registration-token"
+            ACTIONS_RUNNER_REGISTRATION_URL="https://$user_pwd@github.com/$ACTIONS_RUNNER_ORG/$ACTIONS_RUNNER_REPO"
             ;;
           *)
             echo "Unsupported runner scope: $ACTIONS_RUNNER_SCOPE"
@@ -127,16 +166,30 @@ jobs:
           ACTIONS_RUNNER_PATH="D:\a"
         fi
 
+        # Zip up and Base64-encode the post-deployment script; We used to provide a public URL
+        # for that script instead, but that does not work in private repositories (and we could
+        # not even use the `GITHUB_TOKEN` to access the file because it lacks the necessary
+        # scope to read repository contents).
+        POST_DEPLOYMENT_SCRIPT_ZIP_BASE64="$(
+          cd azure-self-hosted-runners &&
+          zip -9 tmp.zip post-deployment-script.ps1 >&2 &&
+          base64 -w 0 tmp.zip
+        )"
+
+        PUBLIC_IP_ADDRESS_NAME1="${{ github.repository_visibility != 'private' && format('{0}-ip', steps.generate-vm-name.outputs.vm_name) || '' }}"
+
         AZURE_ARM_PARAMETERS=$(tr '\n' ' ' <<-END
           githubActionsRunnerRegistrationUrl="$ACTIONS_RUNNER_REGISTRATION_URL"
           githubActionsRunnerToken="$ACTIONS_RUNNER_TOKEN"
-          postDeploymentPsScriptUrl="$POST_DEPLOYMENT_SCRIPT_URL"
+          postDeploymentScriptZipBase64="$POST_DEPLOYMENT_SCRIPT_ZIP_BASE64"
+          postDeploymentScriptFileName="post-deployment-script.ps1"
           virtualMachineImage="$AZURE_VM_IMAGE"
           virtualMachineName="${{ steps.generate-vm-name.outputs.vm_name }}"
           virtualMachineSize="$AZURE_VM_TYPE"
-          publicIpAddressName1="${{ steps.generate-vm-name.outputs.vm_name }}-ip"
+          publicIpAddressName1="$PUBLIC_IP_ADDRESS_NAME1"
           adminUsername="${{ secrets.AZURE_VM_USERNAME }}"
           adminPassword="${{ secrets.AZURE_VM_PASSWORD }}"
+          ephemeral="$EPHEMERAL_RUNNER"
           stopService="$DEALLOCATE_IMMEDIATELY"
           githubActionsRunnerPath="$ACTIONS_RUNNER_PATH"
           location="$AZURE_VM_REGION"
@@ -146,10 +199,12 @@ jobs:
         echo "AZURE_ARM_PARAMETERS=$AZURE_ARM_PARAMETERS" >> $GITHUB_ENV
 
     - name: Azure Login
-      uses: ./.github/workflows/azure-login
+      uses: azure/login@v2
       with:
-        credentials: ${{ secrets.AZURE_CREDENTIALS }}
-    
+        client-id: ${{ secrets.AZURE_CLIENT_ID }}
+        tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+        subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
     - uses: azure/arm-deploy@v2
       id: deploy-arm-template
       with:
@@ -179,7 +234,7 @@ jobs:
       if: always()
       env:
         CUSTOM_SCRIPT_OUTPUT: ${{ steps.deploy-arm-template.outputs.customScriptInstanceView }}
-      run: echo "$CUSTOM_SCRIPT_OUTPUT" | jq -r '.substatuses[0].message' 
+      run: echo "$CUSTOM_SCRIPT_OUTPUT" | jq -r '.substatuses[0].message' | sed 's/${{ secrets.GITHUB_TOKEN }}/***/g'
 
     - name: Deallocate the VM for later use
       if: env.DEALLOCATE_IMMEDIATELY == 'true'

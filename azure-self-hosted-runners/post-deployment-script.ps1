@@ -15,6 +15,10 @@ param (
     [ValidateNotNullOrEmpty()]
     [string]$GithubActionsRunnerName,
 
+    [Parameter(Mandatory = $false, HelpMessage = "Start an ephemeral runner (this is the default)")]
+    [ValidateSet('true', 'false')]
+    [string]$Ephemeral = 'true',
+
     [Parameter(Mandatory = $false, HelpMessage = "Stop Service immediately (useful for spinning up runners preemptively)")]
     [ValidateSet('true', 'false')]
     [string]$StopService = 'true',
@@ -261,12 +265,17 @@ Write-Output "Installing GitHub Actions runner $($GitHubAction.Tag) as a Windows
 
 Add-Type -AssemblyName System.IO.Compression.FileSystem ; [System.IO.Compression.ZipFile]::ExtractToDirectory($GitHubAction.OutFile, $GitHubActionsRunnerPath)
 
-Write-Output "Configuring the runner to shut down automatically after running"
-Set-Content -Path "${GitHubActionsRunnerPath}\shut-down.ps1" -Value "shutdown -s -t 60 -d p:4:0 -c `"workflow job is done`""
-[System.Environment]::SetEnvironmentVariable("ACTIONS_RUNNER_HOOK_JOB_COMPLETED", "${GitHubActionsRunnerPath}\shut-down.ps1", [System.EnvironmentVariableTarget]::Machine)
+If ($Ephemeral -ne 'true') {
+    $EphemeralOption = ""
+} Else {
+    $EphemeralOption = "--ephemeral"
+    Write-Output "Configuring the runner to shut down automatically after running"
+    Set-Content -Path "${GitHubActionsRunnerPath}\shut-down.ps1" -Value "shutdown -s -t 60 -d p:4:0 -c `"workflow job is done`""
+    [System.Environment]::SetEnvironmentVariable("ACTIONS_RUNNER_HOOK_JOB_COMPLETED", "${GitHubActionsRunnerPath}\shut-down.ps1", [System.EnvironmentVariableTarget]::Machine)
+}
 
 Write-Output "Configuring the runner"
-cmd.exe /c "${GitHubActionsRunnerPath}\config.cmd" --unattended --ephemeral --name ${GithubActionsRunnerName} --runasservice --labels $($GitHubAction.RunnerLabels) --url ${GithubActionsRunnerRegistrationUrl} --token ${GitHubActionsRunnerToken}
+cmd.exe /c "${GitHubActionsRunnerPath}\config.cmd" --unattended $EphemeralOption --name ${GithubActionsRunnerName} --runasservice --labels $($GitHubAction.RunnerLabels) --url ${GithubActionsRunnerRegistrationUrl} --token ${GitHubActionsRunnerToken}
 
 # Ensure that the service was created. If not, exit with error code.
 if ($null -eq (Get-Service -Name "actions.runner.*")) {
