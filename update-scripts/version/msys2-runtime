@@ -59,7 +59,7 @@ then
 fi &&
 
 # pre-fetch the required blobs
-git --git-dir=msys2-runtime fetch g4w \
+git --git-dir=msys2-runtime -c fetch.negotiationAlgorithm=noop fetch g4w \
     $(git --git-dir=msys2-runtime -c core.abbrev=no \
         log --format='%n' --raw "refs/tags/cygwin-$pkgver..$revision" ^"$revision^{/^Start.the.merging-rebase}" |
         cut -d ' ' -f 3,4 |
