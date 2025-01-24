@@ -24,6 +24,7 @@ env:
 
 jobs:
   open-pr:
+    if: github.event.repository.owner.login == 'git-for-windows'
     runs-on: windows-latest
     steps:
       - name: Determine REPO

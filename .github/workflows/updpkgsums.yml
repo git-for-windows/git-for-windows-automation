@@ -24,6 +24,7 @@ env:
 
 jobs:
   updpkgsums:
+    if: github.event.repository.owner.login == 'git-for-windows'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
