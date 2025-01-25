@@ -226,6 +226,7 @@ jobs:
       - name: Prepare git-for-windows/git clone with the tag
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
+          set -x
           if test ! -d /usr/src/MINGW-packages
           then
             git clone --depth 1 --single-branch -b main \
