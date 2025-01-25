@@ -246,7 +246,8 @@ jobs:
           then
             git fetch origin "refs/tags/$EXISTING_GIT_TAG:refs/tags/$EXISTING_GIT_TAG"
           else
-            git fetch --tags "$GITHUB_WORKSPACE"/bundle-artifacts/git.bundle \
+            git -c fetch.writeCommitGraph=false fetch --tags --no-recurse-submodules \
+             "$GITHUB_WORKSPACE"/bundle-artifacts/git.bundle \
               $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)
           fi &&
           git reset --hard $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)
