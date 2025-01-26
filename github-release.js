@@ -349,4 +349,5 @@ module.exports = {
   pushGitTag,
   downloadReleaseAssets,
   downloadReleaseAssetsFromURL,
+  architectures,
 }
