@@ -11,7 +11,7 @@
 
     let [ , basever, patchlevel ] = version.match(/^(\d+\.\d+)\.(\d+)/)
     let match
-    
+
     const fs = require('fs')
     const lines = fs.readFileSync('PKGBUILD').toString('utf-8').split(/\r?\n/)
     lines.forEach((line, i) => {

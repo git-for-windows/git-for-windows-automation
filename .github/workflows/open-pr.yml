@@ -119,7 +119,12 @@ jobs:
           update_script="$GITHUB_WORKSPACE/update-scripts/version/$PACKAGE_TO_UPGRADE"
           if test -f "$update_script"
           then
-            $update_script "$UPGRADE_TO_VERSION"
+            $update_script "$UPGRADE_TO_VERSION" &&
+            if test -f UPGRADE_TO_VERSION
+            then
+              UPGRADE_TO_VERSION="$(cat UPGRADE_TO_VERSION)" &&
+              rm UPGRADE_TO_VERSION
+            fi
           else
             sed -i \
               -e "s/^\\(pkgver=\\).*/\\1$UPGRADE_TO_VERSION/" \

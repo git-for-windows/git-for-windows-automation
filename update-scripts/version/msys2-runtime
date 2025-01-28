@@ -76,4 +76,6 @@ if test -n "$update_pkgver"
 then
     git reset --soft HEAD^ &&
     sed -i 's/^pkgrel=.*/pkgrel=1/' PKGBUILD
-fi
+fi &&
+sed -n '/^pkgver=/{:1;N;/pkgrel=/{s/.*pkgver=\([0-9\.]*\).*pkgrel=\([0-9]*\).*/\1-\2/p;q};b1}' \
+    <PKGBUILD >UPGRADE_TO_VERSION
