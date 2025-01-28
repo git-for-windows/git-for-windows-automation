@@ -25,6 +25,7 @@ env:
 jobs:
   setup:
     runs-on: ubuntu-latest
+    if: github.event.repository.owner.login == 'git-for-windows'
     outputs:
       display-version: ${{ steps.bundle-artifacts.outputs.display-version }}
       tag-name: ${{ steps.bundle-artifacts.outputs.tag-name }}

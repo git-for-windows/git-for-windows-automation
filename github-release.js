@@ -58,16 +58,32 @@ const getWorkflowRunArtifactsURLs = async (context, token, owner, repo, workflow
   }, {})
 }
 
-const downloadAndUnZip = async (token, url, name) => {
+const download = async (token, url, outputFile) => {
   const { spawnSync } = require('child_process')
-  const auth = token ? ['-H', `Authorization: Bearer ${token}`] : []
-  const tmpFile = `${process.env.RUNNER_TEMP || process.env.TEMP || '/tmp'}/${name}.zip`
-  const curl = spawnSync('curl', [...auth, '-Lo', tmpFile, url])
+  const headers = token ? ['-H', `Authorization: Bearer ${token}`] : []
+  if (url.match(/^https:\/\/github.com\/[^/]+\/[^/]+\/releases\/assets\/\d+$/)
+    || url.match(/^https:\/\/api\.github.com\/repos\/[^/]+\/[^/]+\/releases\/assets\/\d+$/)) {
+    headers.push('-H', 'Accept: application/octet-stream')
+  }
+  const curl = spawnSync('curl', [...headers, '-fLo', outputFile, url])
   if (curl.error) throw curl.error
-  const { mkdirSync, rmSync } = require('fs')
-  await mkdirSync(name, { recursive: true })
-  const unzip = spawnSync('unzip', ['-d', name, tmpFile])
+}
+
+const unzip = async (zipFile, outputDirectory) => {
+  const { mkdirSync } = require('fs')
+  await mkdirSync(outputDirectory, { recursive: true })
+  const { spawnSync } = require('child_process')
+  const unzip = spawnSync('unzip', ['-d', outputDirectory, zipFile])
   if (unzip.error) throw unzip.error
+}
+
+const getTempFile = (name) => `${process.env.RUNNER_TEMP || process.env.TEMP || '/tmp'}/${name}`
+
+const downloadAndUnZip = async (token, url, name) => {
+  const tmpFile = getTempFile(`${name}.zip`)
+  await download(token, url, tmpFile)
+  await unzip(tmpFile, name)
+  const { rmSync } = require('fs')
   rmSync(tmpFile)
 }
 
@@ -287,11 +303,42 @@ const pushGitTag = (context, setSecret, token, owner, repo, tagName, bundlePath)
   context.log('Done pushing tag')
 }
 
+const downloadReleaseAssets = async (context, setSecret, appId, privateKey, owner, repo, tagName, filenameMatcher) => {
+  const { getAccessTokenForRepo } = require('./repository-updates.js')
+  const token = await getAccessTokenForRepo(context, setSecret, appId, privateKey, owner, repo)
+
+  const githubApiRequest = require('./github-api-request.js')
+  const release = await githubApiRequest(
+    context,
+    token,
+    'GET',
+    `https://api.github.com/repos/${owner}/${repo}/releases/tags/${tagName}`
+  )
+
+  for (const asset of release.assets) {
+    if (!filenameMatcher || filenameMatcher(asset.name)) {
+      context.log(`Downloading ${asset.name}`)
+      await download(token, asset.url, asset.name)
+    }
+  }
+}
+
+const downloadReleaseAssetsFromURL = async (context, setSecret, appId, privateKey, releaseURL, filenameMatcher) => {
+  const [, owner, repo, tagName] = releaseURL.match(
+    /^https:\/\/github.com\/([^/]+)\/([^/]+)\/releases\/tag\/([^/]+)$/
+  )
+  if (!owner || !repo || !tagName) throw new Error(`Invalid release URL: ${releaseURL}`)
+    return await downloadReleaseAssets(context, setSecret, appId, privateKey, owner, repo, tagName, filenameMatcher)
+}
+
 module.exports = {
   createRelease,
   updateRelease,
   uploadReleaseAsset,
   getWorkflowRunArtifactsURLs,
+  download,
+  unzip,
+  getTempFile,
   downloadAndUnZip,
   downloadBundleArtifacts,
   getGitArtifacts,
@@ -299,5 +346,8 @@ module.exports = {
   calculateSHA256ForFile,
   checkSHA256Sums,
   uploadGitArtifacts,
-  pushGitTag
+  pushGitTag,
+  downloadReleaseAssets,
+  downloadReleaseAssetsFromURL,
+  architectures,
 }

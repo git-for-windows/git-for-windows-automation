@@ -172,7 +172,7 @@ jobs:
             test "$ARCHITECTURE" != x86_64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD nuget"
           }
           echo "ARTIFACTS_TO_BUILD=$ARTIFACTS_TO_BUILD" >> $GITHUB_ENV
-          echo "PKG_CACHE_KEY=pkg-$GIT_VERSION$(test v2.48.0-rc1.windows.1 != "$GIT_VERSION" || echo "-try2")-$ARCHITECTURE-$TAG_GIT_WORKFLOW_RUN_ID" >> $GITHUB_ENV
+          echo "PKG_CACHE_KEY=pkg-$GIT_VERSION-$ARCHITECTURE-$TAG_GIT_WORKFLOW_RUN_ID" >> $GITHUB_ENV
       - name: Configure user
         run:
           USER_NAME="${{github.actor}}" &&
@@ -226,6 +226,7 @@ jobs:
       - name: Prepare git-for-windows/git clone with the tag
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
+          set -x
           if test ! -d /usr/src/MINGW-packages
           then
             git clone --depth 1 --single-branch -b main \
@@ -246,7 +247,8 @@ jobs:
           then
             git fetch origin "refs/tags/$EXISTING_GIT_TAG:refs/tags/$EXISTING_GIT_TAG"
           else
-            git fetch --tags "$GITHUB_WORKSPACE"/bundle-artifacts/git.bundle \
+            git -c fetch.writeCommitGraph=false fetch --tags --no-recurse-submodules \
+             "$GITHUB_WORKSPACE"/bundle-artifacts/git.bundle \
               $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)
           fi &&
           git reset --hard $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)

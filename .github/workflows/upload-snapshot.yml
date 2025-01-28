@@ -1,0 +1,286 @@
+name: upload-snapshot
+run-name: "Upload Git for Windows snapshot"
+
+on:
+  workflow_dispatch:
+    inputs:
+      git_artifacts_i686_workflow_run_id:
+        description: 'ID of the git-artifacts (i686) workflow run'
+        required: true
+      git_artifacts_x86_64_workflow_run_id:
+        description: 'ID of the git-artifacts (x86_64) workflow run'
+        required: true
+      git_artifacts_aarch64_workflow_run_id:
+        description: 'ID of the git-artifacts (aarch64) workflow run'
+        required: true
+
+env:
+  OWNER: "${{ github.repository_owner }}"
+  REPO: git
+  SNAPSHOTS_REPO: git-snapshots
+  ARTIFACTS_REPO: git-for-windows-automation
+  I686_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_i686_workflow_run_id }}"
+  X86_64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_x86_64_workflow_run_id }}"
+  AARCH64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_aarch64_workflow_run_id }}"
+  CREATE_CHECK_RUN: "true"
+  NODEJS_VERSION: 16
+
+jobs:
+  upload-snapshot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: download `bundle-artifacts`
+        id: bundle-artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {
+              getWorkflowRunArtifactsURLs,
+              downloadAndUnZip,
+            } = require('./github-release')
+
+            const token = ${{ toJSON(secrets.GITHUB_TOKEN) }}
+            const workflowRunId = process.env.X86_64_WORKFLOW_RUN_ID
+            const urls = await getWorkflowRunArtifactsURLs(
+              console,
+              token,
+              process.env.OWNER,
+              process.env.ARTIFACTS_REPO,
+              workflowRunId
+            )
+            core.setOutput('x86_64-urls', urls)
+
+            const dir = 'bundle-artifacts-x86_64'
+            await downloadAndUnZip(token, urls['bundle-artifacts'], dir)
+
+            const fs = require('fs')
+            const sha = fs.readFileSync(`${dir}/git-commit-oid`, 'utf-8').trim()
+            core.notice(`git-commit-oid: ${sha}`)
+
+            const githubApiRequest = require('./github-api-request')
+            const { commit: { committer: { date } } } = await githubApiRequest(
+              console,
+              token,
+              'GET',
+              `/repos/${process.env.OWNER}/${process.env.REPO}/commits/${sha}`
+            )
+
+            // emulate Git's date/time format
+            core.setOutput('date', new Date(date).toLocaleString('en-US', {
+              weekday: 'short',
+              month: 'short',
+              day: 'numeric',
+              year: 'numeric',
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+              timeZoneName: 'longOffset',
+            }).replace(/^(.*,.*),(.*),(.* )((PM|AM) GMT)([-+]\d\d):(\d\d)$/, '$1$2$3$6$7'))
+            core.setOutput('git-commit-oid', sha)
+            core.setOutput('ver', fs.readFileSync(`${dir}/ver`, 'utf-8').trim())
+      - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
+        if: env.CREATE_CHECK_RUN != 'false'
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          rev: ${{ steps.bundle-artifacts.outputs.git-commit-oid }}
+          check-run-name: "upload-snapshot"
+          title: "Upload snapshot ${{ steps.bundle-artifacts.outputs.ver }}"
+          summary: "Upload snapshot ${{ steps.bundle-artifacts.outputs.ver }}"
+          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+      - name: download remaining artifacts
+        id: download-artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const {
+              getWorkflowRunArtifactsURLs,
+              downloadAndUnZip,
+              architectures
+            } = require('./github-release')
+
+            const token = ${{ toJSON(secrets.GITHUB_TOKEN) }}
+            const directories = ['bundle-artifacts-x86_64']
+            for (const arch of architectures) {
+              const architecture = arch.name
+
+              const urls = architecture === 'x86_64'
+                ? ${{ steps.bundle-artifacts.outputs.x86_64-urls }}
+                : await getWorkflowRunArtifactsURLs(
+                  console,
+                  token,
+                  process.env.OWNER,
+                  process.env.ARTIFACTS_REPO,
+                  process.env[`${architecture.toUpperCase()}_WORKFLOW_RUN_ID`]
+                )
+              for (const name of Object.keys(urls)) {
+                if (name === 'bundle-artifacts' && architecture === 'x86_64') continue // already got it
+                if (!name.match(/^(installer|portable|mingit|bundle)/)) continue
+                const outputDirectory = name.endsWith(`-${architecture}`) ? name : `${name}-${architecture}`
+                console.log(`Downloading ${name} and extracting to ${outputDirectory}/`)
+                await downloadAndUnZip(token, urls[name], outputDirectory)
+                directories.push(outputDirectory)
+              }
+            }
+
+            const fs = require('fs')
+            const assetsToUpload = directories
+              .map(directory => fs
+                  .readdirSync(directory)
+                  .filter(file => file.match(/^(Min|Portable)Git-.*\.(exe|zip)$/))
+                  .map(file => `${directory}/${file}`))
+              .flat()
+            if (assetsToUpload.length === 0) throw new Error(`No assets to upload!`)
+            console.log(JSON.stringify(assetsToUpload, null, 2))
+            core.setOutput('paths', assetsToUpload.join(' '))
+            return assetsToUpload
+      - name: update check-run
+        if: env.CREATE_CHECK_RUN != 'false'
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: 'Downloaded all artifacts'
+      - name: validate
+        id: validate
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+
+            const { architectures } = require('./github-release')
+            for (const arch of architectures) {
+              const ver = fs.readFileSync(`bundle-artifacts-${arch.name}/ver`, 'utf-8').trim()
+              if (${{ toJSON(steps.bundle-artifacts.outputs.ver) }} !== ver) {
+                core.error(`Mismatched version between x86_64 and ${arch.name}: ${{ toJSON(steps.bundle-artifacts.outputs.ver) }} != "${ver}"`)
+                process.exit(1)
+              }
+            }
+
+            const githubApiRequest = require('./github-api-request')
+            const { ahead_by } = await githubApiRequest(
+              console,
+              ${{ toJSON(secrets.GITHUB_TOKEN) }},
+              'GET',
+              `/repos/${process.env.OWNER}/${process.env.REPO}/compare/HEAD...${{ steps.bundle-artifacts.outputs.git-commit-oid }}`
+            )
+            if (ahead_by !== 0) {
+              core.error(`The snapshots are built from a commit that is not reachable from git-for-windows/git's default branch!`)
+              process.exit(1)
+            }
+      - name: configure token
+        id: snapshots-token
+        uses: actions/github-script@v7
+        with:
+          result-encoding: string
+          script: |
+            const { callGit, getPushAuthorizationHeader } = require('./repository-updates')
+            const header = await getPushAuthorizationHeader(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              process.env.OWNER,
+              process.env.SNAPSHOTS_REPO
+            )
+            console.log(callGit([
+              'config',
+              '--global',
+              `http.${{ github.server_url }}/${process.env.OWNER}/${process.env.SNAPSHOTS_REPO}.extraHeader`,
+              header
+            ]))
+            return Buffer.from(header.replace(/^Authorization: Basic /, ''), 'base64').toString('utf-8').replace(/^PAT:/, '')
+      - name: figure out if we need to push commits
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // Since `git-snapshots` is a fork, and forks share the same object store, we can
+            // assume that `git-commit-oid` is accessible in the `git-snapshots` repository even
+            // if it might not yet be reachable.
+            const githubApiRequest = require('./github-api-request')
+            const token = ${{ toJSON(steps.snapshots-token.outputs.result) }}
+            const sha = ${{ toJSON(steps.bundle-artifacts.outputs.git-commit-oid) }}
+            const { ahead_by, behind_by } = await githubApiRequest(
+              console,
+              token,
+              'GET',
+              `/repos/${process.env.OWNER}/${process.env.SNAPSHOTS_REPO}/compare/${sha}...HEAD`
+            )
+            if (ahead_by > 0) throw new Error(`The snapshots repository is ahead of ${sha}!`)
+            if (behind_by > 0) {
+              await githubApiRequest(
+                console,
+                token,
+                'PATCH',
+                `/repos/${process.env.OWNER}/${process.env.SNAPSHOTS_REPO}/git/refs/heads/main`, {
+                  sha,
+                  force: false // require fast-forward
+                }
+              )
+            }
+      - name: upload snapshots to ${{ env.SNAPSHOTS_REPO }}
+        env:
+          GH_TOKEN: ${{ steps.snapshots-token.outputs.result }}
+        run: |
+          gh release create \
+            -R "$OWNER/$SNAPSHOTS_REPO" \
+            --target "${{ steps.bundle-artifacts.outputs.git-commit-oid }}" \
+            --title "${{ steps.bundle-artifacts.outputs.date }}" \
+            ${{ steps.bundle-artifacts.outputs.ver }} \
+            ${{ steps.download-artifacts.outputs.paths }} &&
+          echo "::notice::Uploaded snapshot artifacts to ${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}"
+      - name: update check-run
+        if: env.CREATE_CHECK_RUN != 'false'
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: 'Created release at ${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}'
+      - name: clone gh-pages
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}
+          ref: gh-pages
+          path: gh-pages
+          token: ${{ steps.snapshots-token.outputs.result }}
+      - name: update index.html
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const urlPrefix = `${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/download/${{ steps.bundle-artifacts.outputs.ver }}/`
+            process.chdir('gh-pages')
+            const main = require('./add-entry')
+            await main(
+              '--date=${{ steps.bundle-artifacts.outputs.date }}',
+              '--commit=${{ steps.bundle-artifacts.outputs.git-commit-oid }}',
+              ...${{ steps.download-artifacts.outputs.result }}
+                .map(path => `${urlPrefix}${path.replace(/.*\//, '')}`)
+            )
+      - name: push gh-pages
+        run: |
+          git -C gh-pages \
+            -c user.name="${{ github.actor }}" \
+            -c user.email="${{ github.actor }}@noreply.github.com" \
+            commit -sm "Add snapshot: ${{ steps.bundle-artifacts.outputs.ver }}" index.html &&
+          git -C gh-pages push &&
+          echo "::notice::Updated https://gitforwindows.org/git-snapshots (pending GitHub Pages deployment)"
+      - name: update check-run
+        if: env.CREATE_CHECK_RUN != 'false'
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: 'Updated https://gitforwindows.org/git-snapshots (pending GitHub Pages deployment)'
+      - name: mark check run as completed
+        if: env.CREATE_CHECK_RUN != 'false' && always()
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: "${{ job.status == 'success' && 'Done!' || format('Completed: {0}', job.status) }}."
+          conclusion: ${{ job.status }}
