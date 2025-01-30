@@ -7,6 +7,7 @@ on:
       rev:
         description: 'The commit to tag'
         required: true
+        default: main
       owner:
         description: 'Optionally override from where to fetch the specified rev'
         required: true
@@ -35,6 +36,18 @@ jobs:
     outputs:
       tag-name: ${{ steps.generate.outputs.tag-name }}
     steps:
+      - name: 'Determine tip commit'
+        if: env.REV == 'main'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (process.env.SNAPSHOT === '') throw new Error(`Non-snapshot build on the 'main' branch is not supported.`)
+            const { data: ref } = await github.rest.git.getRef({
+              owner: process.env.OWNER,
+              repo: 'git',
+              ref: 'heads/main',
+            })
+            core.exportVariable('REV', ref.object.sha)
       - uses: actions/checkout@v4
       - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
         if: env.CREATE_CHECK_RUN != 'false'
