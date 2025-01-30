@@ -25,7 +25,7 @@ jobs:
         with:
           script: |
             if (process.env.SNAPSHOT === '') throw new Error(`Non-snapshot build on the 'main' branch is not supported.`)
-            const { data: ref } = await github.git.getRef({
+            const { data: ref } = await github.rest.git.getRef({
               owner: process.env.OWNER,
               repo: 'git',
               ref: 'heads/main',
