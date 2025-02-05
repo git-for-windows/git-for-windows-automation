@@ -94,7 +94,7 @@ else
 
 	case "$display_version" in
 	prerelease-*)
-		url=https://wingit.blob.core.windows.net/files/index.html
+		url=https://gitforwindows.org/git-snapshots/
 		;;
 	*-rc*)
 		url=https://github.com/git-for-windows/git/releases/tag/$tag_name
