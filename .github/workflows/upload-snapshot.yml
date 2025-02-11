@@ -132,7 +132,7 @@ jobs:
             const assetsToUpload = directories
               .map(directory => fs
                   .readdirSync(directory)
-                  .filter(file => file.match(/^(Min|Portable)Git-.*\.(exe|zip)$/))
+                  .filter(file => file.match(/^(Min|Portable)?Git-.*\.(exe|zip)$/))
                   .map(file => `${directory}/${file}`))
               .flat()
             if (assetsToUpload.length === 0) throw new Error(`No assets to upload!`)
