@@ -2,6 +2,7 @@ name: break-pacman-upload-lease
 run-name: Break pacman upload lease
 
 on:
+  push:
   workflow_dispatch:
 
 jobs:
