@@ -306,22 +306,13 @@ jobs:
           name: artifacts
           path: artifacts
 
-      - name: Prepare home directory for deploying to the Pacman repository
-        if: env.BUILD_ONLY != 'true' && env.AZURE_BLOBS_TOKEN != ''
-        env:
-          AZURE_BLOBS_TOKEN: ${{secrets.AZURE_BLOBS_TOKEN}}
-        shell: bash
-        run: |
-          echo "::add-mask::$(echo "$AZURE_BLOBS_TOKEN" | base64 -w 0)" &&
-          echo "$AZURE_BLOBS_TOKEN" >"$HOME"/.azure-blobs-token
-
       - name: ${{ env.BUILD_ONLY == 'true' && 'Test-deploy' || 'Deploy' }} Pacman packages
-        if: env.BUILD_ONLY == 'true' || env.AZURE_BLOBS_TOKEN != ''
+        if: env.BUILD_ONLY == 'true' || env.azure_blobs_token != ''
         shell: bash
         env:
           GPGKEY: ${{secrets.GPGKEY}}
           PACMANDRYRUN: ${{env.BUILD_ONLY}}
-          AZURE_BLOBS_TOKEN: ${{secrets.AZURE_BLOBS_TOKEN}}
+          azure_blobs_token: ${{secrets.AZURE_BLOBS_TOKEN}}
         run: /usr/src/build-extra/pacman-helper.sh quick_add artifacts/*
 
       - name: Clean up temporary files
