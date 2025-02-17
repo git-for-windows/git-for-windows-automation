@@ -7,7 +7,6 @@ on:
 
 jobs:
   break-lease:
-    if: github.repository.fork == false
     runs-on: ubuntu-latest
     steps:
       - name: Clone build-extra
