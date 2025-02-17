@@ -306,6 +306,14 @@ jobs:
           name: artifacts
           path: artifacts
 
+      - uses: actions/create-github-app-token@v1
+        id: pacman-repo-token
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: pacman-repo
+
       - name: ${{ env.BUILD_ONLY == 'true' && 'Test-deploy' || 'Deploy' }} Pacman packages
         if: env.BUILD_ONLY == 'true' || env.azure_blobs_token != ''
         shell: bash
@@ -313,6 +321,7 @@ jobs:
           GPGKEY: ${{secrets.GPGKEY}}
           PACMANDRYRUN: ${{env.BUILD_ONLY}}
           azure_blobs_token: ${{secrets.AZURE_BLOBS_TOKEN}}
+          GITHUB_TOKEN: ${{ steps.pacman-repo-token.outputs.token }}
         run: /usr/src/build-extra/pacman-helper.sh quick_add artifacts/*
 
       - name: Clean up temporary files
