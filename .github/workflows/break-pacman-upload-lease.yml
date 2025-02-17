@@ -27,9 +27,3 @@ jobs:
         env:
           AZURE_BLOBS_TOKEN: ${{secrets.AZURE_BLOBS_TOKEN}}
         run: /usr/src/build-extra/pacman-helper.sh break_lock
-
-      - name: Clean up temporary files
-        if: always()
-        shell: bash
-        run: |
-          { rm -rf "$HOME" || echo "Gracefully leaving files undeleted" >&2; }
