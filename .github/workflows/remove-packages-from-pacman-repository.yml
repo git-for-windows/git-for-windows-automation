@@ -1,0 +1,92 @@
+name: remove-packages-from-pacman-repository
+run-name: Remove ${{ inputs.packages }} from the Pacman repository
+
+on:
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: 'The package name(s) to remove'
+        required: true
+      dry_run:
+        description: 'Skip deployment (if non-empty)'
+        required: false
+
+env:
+  PACKAGES_TO_REMOVE: "${{ github.event.inputs.packages }}"
+  PACMANDRYRUN: "${{ github.event.inputs.dry_run }}"
+  GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
+
+jobs:
+  build:
+    if: github.event.repository.fork != true
+    runs-on: 'windows-latest'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure build
+        shell: bash
+        run: |
+          HOME="${{ runner.temp }}\\home" &&
+          echo "HOME=$HOME" >>$GITHUB_ENV &&
+          mkdir -p "$HOME"
+
+      - name: Download Git for Windows SDK
+        uses: git-for-windows/setup-git-for-windows-sdk@v1
+        with:
+          flavor: makepkg-git
+          architecture: x86_64
+          msys: true
+
+      - name: Clone build-extra
+        shell: bash
+        run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra /usr/src/build-extra
+
+      - name: Get GPG key(s)
+        timeout-minutes: 5
+        shell: bash
+        run: |
+          for key in 57759F748D223F034D8BE870BB3AA74136C569BB
+          do
+            gpg $GPG_OPTIONS --recv-keys --batch --yes --keyserver hkp://keyserver.ubuntu.com "$key" &&
+            echo "$key:6:" | gpg $GPG_OPTIONS --import-ownertrust ||
+            exit 1
+          done
+
+      - name: Prepare home directory for GPG signing
+        if: env.GPGKEY != ''
+        shell: bash
+        run: |
+          echo '${{secrets.PRIVGPGKEY}}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
+          mkdir -p "$HOME" &&
+          git config --global gpg.program "/usr/src/build-extra/gnupg-with-gpgkey.sh" &&
+          info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
+          git config --global user.name "${info% <*}" &&
+          git config --global user.email "<${info#*<}"
+          echo "PACKAGER=$info" >>$GITHUB_ENV
+        env:
+          GPGKEY: ${{secrets.GPGKEY}}
+
+      - uses: actions/create-github-app-token@v1
+        id: pacman-repo-token
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: pacman-repo
+
+      - name: Remove Pacman packages
+        if: env.PACMANDRYRUN == 'true' || env.azure_blobs_token != ''
+        shell: bash
+        env:
+          GPGKEY: ${{secrets.GPGKEY}}
+          azure_blobs_token: ${{secrets.AZURE_BLOBS_TOKEN}}
+          GITHUB_TOKEN: ${{ steps.pacman-repo-token.outputs.token }}
+        run: /usr/src/build-extra/pacman-helper.sh quick_remove ${PACKAGES_TO_REMOVE}
+
+      - name: Clean up temporary files
+        if: always()
+        shell: bash
+        run: |
+          gpgconf --kill dirmngr &&
+          gpgconf --kill gpg-agent &&
+          { rm -rf "$HOME" || echo "Gracefully leaving files undeleted" >&2; }
