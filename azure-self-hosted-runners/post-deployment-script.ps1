@@ -275,7 +275,7 @@ If ($Ephemeral -ne 'true') {
 }
 
 Write-Output "Configuring the runner"
-cmd.exe /c "${GitHubActionsRunnerPath}\config.cmd" --unattended $EphemeralOption --name ${GithubActionsRunnerName} --runasservice --labels $($GitHubAction.RunnerLabels) --url ${GithubActionsRunnerRegistrationUrl} --token ${GitHubActionsRunnerToken}
+cmd.exe /c "${GitHubActionsRunnerPath}\config.cmd" --unattended $EphemeralOption --name ${GithubActionsRunnerName} --windowslogonaccount "NT AUTHORITY\SYSTEM" --runasservice --labels $($GitHubAction.RunnerLabels) --url ${GithubActionsRunnerRegistrationUrl} --token ${GitHubActionsRunnerToken}
 
 # Ensure that the service was created. If not, exit with error code.
 if ($null -eq (Get-Service -Name "actions.runner.*")) {
