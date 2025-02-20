@@ -1,4 +1,4 @@
-name: remove-packages-from-pacman-repository
+name: Remove Packages from the Pacman repository
 run-name: Remove ${{ inputs.packages }} from the Pacman repository
 
 on:
