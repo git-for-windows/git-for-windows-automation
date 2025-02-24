@@ -6,7 +6,7 @@ on:
 
 jobs:
   whoami:
-    runs-on: windows-latest
+    runs-on: [Windows, ARM64]
     steps:
       - run: whoami /user /groups /priv
       - run: icacls "C:\\Program Files\\Git"
