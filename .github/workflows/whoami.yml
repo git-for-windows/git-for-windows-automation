@@ -9,3 +9,4 @@ jobs:
     runs-on: windows-latest
     steps:
       - run: whoami /user /groups /priv
+      - run: icacls "C:\\Program Files\\Git"
