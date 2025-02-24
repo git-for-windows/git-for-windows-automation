@@ -1,0 +1,11 @@
+name: whoami
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  whoami:
+    runs-on: windows-latest
+    steps:
+      - run: whoami
