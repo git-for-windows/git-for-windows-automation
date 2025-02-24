@@ -8,4 +8,4 @@ jobs:
   whoami:
     runs-on: windows-latest
     steps:
-      - run: whoami
+      - run: whoami /user /groups /priv
