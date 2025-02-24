@@ -10,3 +10,21 @@ jobs:
     steps:
       - run: whoami /user /groups /priv
       - run: icacls "C:\\Program Files\\Git"
+      - run: curl -Lo git-inst.exe https://github.com/git-for-windows/git-snapshots/releases/download/prerelease-2.48.1.windows.1-2-g3003038578-20250221120304/Git-prerelease-2.48.1.windows.1-2-g3003038578-20250221120304-arm64.exe
+      - run: |
+          $exePath = ".\git-inst.exe"
+          $installer = Start-Process -PassThru -Wait -FilePath "$exePath" -ArgumentList "/SILENT /VERYSILENT /NORESTART /SUPPRESSMSGBOXES /ALLOWDOWNGRADE=1 /LOG=installer.log"
+          $exitCode = $installer.ExitCode
+          if ($exitCode -ne 0) {
+            Write-Host "::error::Installer failed with exit code $exitCode!"
+            exit 1
+          }
+      - name: Publish installer log
+        if: failure() || success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer.log
+          path: installer.log
+          retention-days: 5
+      - shell: bash
+        run: git version
