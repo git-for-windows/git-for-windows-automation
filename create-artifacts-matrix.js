@@ -7,26 +7,27 @@ module.exports = (artifactsString, architecture) => {
 
     const validArtifacts = [
         {
-            name: 'installer',
-            filePrefix: 'Git',
-            fileExtension: 'exe'
-        },
-        {
-            name: 'portable',
-            filePrefix: 'PortableGit',
-            fileExtension: 'exe'
-        },
-        {
-            name: 'archive',
-            filePrefix: 'Git',
-            fileExtension: 'tar.bz2'
-        },
-        {
             name: 'mingit',
             filePrefix: 'MinGit',
             fileExtension: 'zip'
         }
     ]
+
+    if (architecture !== 'i686') validArtifacts.unshift({
+        name: 'installer',
+        filePrefix: 'Git',
+        fileExtension: 'exe'
+    },
+    {
+        name: 'portable',
+        filePrefix: 'PortableGit',
+        fileExtension: 'exe'
+    },
+    {
+        name: 'archive',
+        filePrefix: 'Git',
+        fileExtension: 'tar.bz2'
+    })
 
     if (architecture !== 'aarch64') validArtifacts.push({
         name: 'mingit-busybox',
