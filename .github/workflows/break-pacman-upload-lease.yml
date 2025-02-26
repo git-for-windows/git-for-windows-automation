@@ -12,20 +12,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: git-for-windows/build-extra
-
-      - name: Prepare home directory
-        if: env.AZURE_BLOBS_TOKEN != ''
-        env:
-          AZURE_BLOBS_TOKEN: ${{secrets.AZURE_BLOBS_TOKEN}}
+      - name: Break the lease
+        if: env.azure_blobs_token != ''
         shell: bash
+        env:
+          azure_blobs_token: ${{secrets.AZURE_BLOBS_TOKEN}}
         run: |
           echo "::add-mask::$(echo "$AZURE_BLOBS_TOKEN" | base64 -w 0)" &&
-          echo "$AZURE_BLOBS_TOKEN" >"$HOME"/.azure-blobs-token
-
-      - name: Break the lease
-        if: env.AZURE_BLOBS_TOKEN != ''
-        shell: bash
-        env:
-          AZURE_BLOBS_TOKEN: ${{secrets.AZURE_BLOBS_TOKEN}}
-        run: |
           ./pacman-helper.sh break_lock
