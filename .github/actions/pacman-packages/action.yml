@@ -114,10 +114,14 @@ runs:
       shell: bash
       env:
         GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
+        GPGKEY: ${{ inputs.gpg-key }}
       run: |
         mkdir -p "$HOME" &&
         echo '${{ inputs.priv-gpg-key }}' | tr % '\n' | gpg $GPG_OPTIONS --import &&
-        git config --global gpg.program "$RUNNER_TEMP/build-extra/gnupg-with-gpgkey.sh"
+        git config --global gpg.program "$RUNNER_TEMP/build-extra/gnupg-with-gpgkey.sh" &&
+        info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
+        git config --global user.name "${info% <*}" &&
+        git config --global user.email "<${info#*<}"
     - uses: actions/create-github-app-token@v1
       id: pacman-repo-token
       with:
