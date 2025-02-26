@@ -167,7 +167,8 @@ jobs:
           echo "MINGW_PACKAGE_PREFIX=$MINGW_PACKAGE_PREFIX" >> $GITHUB_OUTPUT
           echo "SDK_REPO_ARCH=$SDK_REPO_ARCH" >> $GITHUB_OUTPUT
           test -n "$ARTIFACTS_TO_BUILD" || {
-            ARTIFACTS_TO_BUILD="installer portable archive mingit"
+            ARTIFACTS_TO_BUILD="mingit"
+            test "$ARCHITECTURE" = i686 || ARTIFACTS_TO_BUILD="installer portable archive $ARTIFACTS_TO_BUILD"
             test "$ARCHITECTURE" = aarch64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD mingit-busybox"
             test "$ARCHITECTURE" != x86_64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD nuget"
           }
