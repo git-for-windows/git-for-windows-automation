@@ -1,5 +1,4 @@
-name: break-pacman-upload-lease
-run-name: Break pacman upload lease
+name: Break Pacman Upload Lease
 
 on:
   workflow_dispatch:
