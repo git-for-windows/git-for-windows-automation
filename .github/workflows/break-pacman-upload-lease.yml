@@ -5,7 +5,7 @@ on:
 
 jobs:
   break-lease:
-    if: github.event.repository.owner.login == 'git-for-windows'
+    if: github.event.repository.fork == false
     runs-on: ubuntu-latest
     steps:
       - name: Clone build-extra
