@@ -142,7 +142,7 @@ jobs:
             const [, baseVersion, rc ] = ver.match(/^(.*)-rc(\d+)$/) || [ver]
             const skeet =
               rc
-              ? `The ${nth(Number.parseInt(rc) + 1)} release candidate of Git for Windows ${baseVersion} is available, please test! ${releaseURL}`
+              ? `The ${nth(Number.parseInt(rc) + 1)} preview of Git for Windows ${baseVersion} is available, please test! ${releaseURL}`
               : `Git for Windows ${baseVersion} is available! ${releaseURL}`
             const blueskyLink = `https://bsky.app/intent/compose?text=${encodeURIComponent(skeet)}`
 
