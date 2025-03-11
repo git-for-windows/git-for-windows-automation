@@ -131,7 +131,7 @@ jobs:
             const gitSHA = ${{ toJson(steps.bundle-artifacts.outputs.git-rev) }}
             const tagName = ${{ toJson(steps.bundle-artifacts.outputs.tag-name) }}
             const ver = ${{ toJson(steps.bundle-artifacts.outputs.ver) }}
-            const announcementURL = ${{ toJson(steps.announcement.outputs.announcement) }}
+            const announcementURL = ${{ toJson(steps.announcement.outputs.artifact-url) }}
 
             const nth = (n) => {
               const suffix = ((n + 89) % 100) > 2 && ['th', 'st', 'nd', 'rd'][n % 10] || 'th'
