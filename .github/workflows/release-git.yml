@@ -109,6 +109,60 @@ jobs:
         with:
           name: bundle-artifacts
           path: bundle-artifacts
+      - name: Publish announcement mail as a stand-alone artifact
+        id: announcement
+        uses: actions/upload-artifact@v4
+        with:
+          name: announcement
+          path: bundle-artifacts/announce-*
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repositories: |
+            ${{ env.REPO }}
+      - name: Add a comment about the announcement email to the Pull Request
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ steps.app-token.outputs.token }}
+          script: |
+            const gitSHA = ${{ toJson(steps.bundle-artifacts.outputs.git-rev) }}
+            const tagName = ${{ toJson(steps.bundle-artifacts.outputs.tag-name) }}
+            const ver = ${{ toJson(steps.bundle-artifacts.outputs.ver) }}
+            const announcementURL = ${{ toJson(steps.announcement.outputs.announcement) }}
+
+            const nth = (n) => {
+              const suffix = ((n + 89) % 100) > 2 && ['th', 'st', 'nd', 'rd'][n % 10] || 'th'
+              return `${n}${suffix}`
+            }
+
+            const releaseURL = `https://github.com/${process.env.OWNER}/${process.env.REPO}/releases/tag/${tagName}`
+            const [, baseVersion, rc ] = ver.match(/^(.*)-rc(\d+)$/) || [ver]
+            const skeet =
+              rc
+              ? `The ${nth(Number.parseInt(rc) + 1)} release candidate of Git for Windows ${baseVersion} is available, please test! ${releaseURL}`
+              : `Git for Windows ${baseVersion} is available! ${releaseURL}`
+            const blueskyLink = `https://bsky.app/intent/compose?text=${encodeURIComponent(skeet)}`
+
+            const body = `please [Share on Bluesky](${blueskyLink}) and send [the announcement email](${announcementURL}).`
+
+            const q = `repo:${process.env.OWNER}/${process.env.REPO}+is:pr+is:open+${gitSHA}`
+            const { data } = await github.rest.search.issuesAndPullRequests({ q })
+            if (data.items.length === 1) {
+              const author = data.items[0].user.login
+              const req = {
+                owner: process.env.OWNER,
+                repo: process.env.REPO,
+                issue_number: data.items[0].number,
+                body: `@${author}, ${body}`,
+              }
+
+              await github.rest.issues.createComment(req)
+            } else {
+              core.warning(`${data.items.length} PRs found for ${gitSHA}, not posting a comment, would have posted\n${body}`)
+            }
   github-release:
     needs: ['setup']
     runs-on: ubuntu-latest
