@@ -47,6 +47,7 @@ jobs:
     outputs:
       artifact_matrix: ${{ steps.artifact-build-matrix.outputs.result }}
       msystem: ${{steps.configure-environment.outputs.MSYSTEM}}
+      mingw-prefix: ${{steps.configure-environment.outputs.MINGW_PREFIX}}
       mingw_package_prefix: ${{steps.configure-environment.outputs.MINGW_PACKAGE_PREFIX}}
       sdk_repo_arch: ${{steps.configure-environment.outputs.SDK_REPO_ARCH}}
       check-run-state: ${{steps.check-run-state.outputs.check-run-state}}
@@ -163,6 +164,7 @@ jobs:
           echo "MSYSTEM=$MSYSTEM" >> $GITHUB_ENV
           echo "MSYSTEM=$MSYSTEM" >> $GITHUB_OUTPUT
           echo "MINGW_PREFIX=$MINGW_PREFIX" >> $GITHUB_ENV
+          echo "MINGW_PREFIX=$MINGW_PREFIX" >> $GITHUB_OUTPUT
           echo "MINGW_PACKAGE_PREFIX=$MINGW_PACKAGE_PREFIX" >> $GITHUB_ENV
           echo "MINGW_PACKAGE_PREFIX=$MINGW_PACKAGE_PREFIX" >> $GITHUB_OUTPUT
           echo "SDK_REPO_ARCH=$SDK_REPO_ARCH" >> $GITHUB_OUTPUT
@@ -359,6 +361,7 @@ jobs:
     needs: pkg
     env:
       MSYSTEM: ${{ needs.pkg.outputs.msystem }}
+      MINGW_PREFIX: ${{ needs.pkg.outputs.mingw-prefix }}
       MINGW_PACKAGE_PREFIX: ${{ needs.pkg.outputs.mingw_package_prefix }}
       SDK_REPO_ARCH: ${{ needs.pkg.outputs.sdk_repo_arch }}
     strategy:
@@ -397,6 +400,7 @@ jobs:
           git config --global user.name "$USER_NAME" &&
           git config --global user.email "$USER_EMAIL"
       - name: Clone and update build-extra
+        id: build-extra
         run: |
           d=/usr/src/build-extra &&
           if test ! -d $d/.git
@@ -406,6 +410,7 @@ jobs:
             git -C $d fetch https://github.com/git-for-windows/build-extra main &&
             git -C $d switch -C main FETCH_HEAD
           fi &&
+          echo "result=$(cygpath -am "$d")" >> $GITHUB_OUTPUT &&
           if test -z "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
           then
             git -C $d -c pull.rebase=false pull "$PWD"/bundle-artifacts/build-extra.bundle main
@@ -480,6 +485,47 @@ jobs:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           append-text: 'Built ${{ matrix.artifact.name }}'
+      - name: Run the installer
+        if: matrix.artifact.name == 'installer'
+        shell: pwsh
+        run: |
+          $exePath = Get-ChildItem -Path artifacts/*.exe | %{$_.FullName}
+          $installer = Start-Process -PassThru -Wait -FilePath "$exePath" -ArgumentList "/SILENT /VERYSILENT /NORESTART /SUPPRESSMSGBOXES /ALLOWDOWNGRADE=1 /LOG=installer.log"
+          $exitCode = $installer.ExitCode
+          if ($exitCode -ne 0) {
+            Write-Host "::error::Installer failed with exit code $exitCode!"
+            exit 1
+          }
+          "$env:ProgramFiles\Git\usr\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
+          "$env:ProgramFiles\Git\${{env.MINGW_PREFIX}}\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
+      - name: Publish installer log
+        if: matrix.artifact.name == 'installer' && (failure() || success())
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer.log
+          path: installer.log
+      - name: Validate installer
+        if: matrix.artifact.name == 'installer'
+        shell: bash
+        run: |
+          set -x &&
+          grep 'Installation process succeeded' installer.log &&
+          ! grep -iw failed installer.log &&
+          cygpath -aw / &&
+          git.exe version --build-options >version &&
+          cat version &&
+          grep "$(sed -e 's|^v||' -e 's|-|.|g' <bundle-artifacts/next_version)" version &&
+          checklist=${{ toJSON(steps.build-extra.outputs.result) }}/installer/run-checklist.sh &&
+          # cannot test SSH keys in read-only mode, skip test for now
+          sed -i 's|git@ssh.dev.azure.com:v3/git-for-windows/git/git|https://github.com/git/git|' $checklist &&
+          sh -x $checklist
+      - name: update check-run
+        if: needs.pkg.outputs.check-run-state != '' && matrix.artifact.name == 'installer'
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: 'Validated the installer'
       - name: update check-run if failed or canceled
         if: needs.pkg.outputs.check-run-state != '' && (failure() || cancelled())
         uses: ./.github/actions/check-run-action
