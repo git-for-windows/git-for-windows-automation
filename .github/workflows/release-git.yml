@@ -32,6 +32,8 @@ jobs:
       ver: ${{ steps.bundle-artifacts.outputs.ver }}
       git-rev: ${{ steps.bundle-artifacts.outputs.git-rev }}
       release-notes: ${{ steps.bundle-artifacts.outputs.release-notes }}
+      pull-request-number: ${{ steps.announcement.outputs.pull-request-number }}
+      pull-request-comment: ${{ steps.announcement.outputs.pull-request-comment }}
     steps:
       - uses: actions/checkout@v4
       - name: The `release` branch must be up to date
@@ -110,28 +112,20 @@ jobs:
           name: bundle-artifacts
           path: bundle-artifacts
       - name: Publish announcement mail as a stand-alone artifact
-        id: announcement
+        id: announcement-email
         uses: actions/upload-artifact@v4
         with:
           name: announcement
           path: bundle-artifacts/announce-*
-      - uses: actions/create-github-app-token@v1
-        id: app-token
-        with:
-          app-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ env.OWNER }}
-          repositories: |
-            ${{ env.REPO }}
-      - name: Add a comment about the announcement email to the Pull Request
+      - name: Prepare a comment about the announcement email to the Pull Request
+        id: announcement
         uses: actions/github-script@v7
         with:
-          github-token: ${{ steps.app-token.outputs.token }}
           script: |
             const gitSHA = ${{ toJson(steps.bundle-artifacts.outputs.git-rev) }}
             const tagName = ${{ toJson(steps.bundle-artifacts.outputs.tag-name) }}
             const ver = ${{ toJson(steps.bundle-artifacts.outputs.ver) }}
-            const announcementURL = ${{ toJson(steps.announcement.outputs.announcement) }}
+            const announcementURL = ${{ toJson(steps.announcement-email.outputs.artifact-url) }}
 
             const nth = (n) => {
               const suffix = ((n + 89) % 100) > 2 && ['th', 'st', 'nd', 'rd'][n % 10] || 'th'
@@ -142,7 +136,7 @@ jobs:
             const [, baseVersion, rc ] = ver.match(/^(.*)-rc(\d+)$/) || [ver]
             const skeet =
               rc
-              ? `The ${nth(Number.parseInt(rc) + 1)} release candidate of Git for Windows ${baseVersion} is available, please test! ${releaseURL}`
+              ? `The ${nth(Number.parseInt(rc) + 1)} preview of Git for Windows ${baseVersion} is available, please test! ${releaseURL}`
               : `Git for Windows ${baseVersion} is available! ${releaseURL}`
             const blueskyLink = `https://bsky.app/intent/compose?text=${encodeURIComponent(skeet)}`
 
@@ -152,16 +146,11 @@ jobs:
             const { data } = await github.rest.search.issuesAndPullRequests({ q })
             if (data.items.length === 1) {
               const author = data.items[0].user.login
-              const req = {
-                owner: process.env.OWNER,
-                repo: process.env.REPO,
-                issue_number: data.items[0].number,
-                body: `@${author}, ${body}`,
-              }
-
-              await github.rest.issues.createComment(req)
+              core.setOutput('pull-request-number', data.items[0].number)
+              core.setOutput('pull-request-comment', `@${author}, ${body}`)
+              core.info(`Prepared a comment to add to ${data.items[0].html_url}:\n@${author}, ${body}`)
             } else {
-              core.warning(`${data.items.length} PRs found for ${gitSHA}, not posting a comment, would have posted\n${body}`)
+              core.warning(`${data.items.length} PRs found for ${gitSHA}, not posting a comment, would have posted:\n${body}`)
             }
   github-release:
     needs: ['setup']
@@ -183,6 +172,8 @@ jobs:
           git_artifacts_i686_workflow_run_id: ${{ env.I686_WORKFLOW_RUN_ID }}
           git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
           git_artifacts_aarch64_workflow_run_id: ${{ env.AARCH64_WORKFLOW_RUN_ID }}
+          pull-request-number: ${{ needs.setup.outputs.pull-request-number }}
+          pull-request-comment: ${{ needs.setup.outputs.pull-request-comment }}
   gitforwindows-site:
     needs: ['setup', 'github-release']
     runs-on: ubuntu-latest

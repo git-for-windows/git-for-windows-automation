@@ -42,6 +42,12 @@ inputs:
   git_artifacts_aarch64_workflow_run_id:
     description: 'ID of the git-artifacts (aarch64) workflow run'
     required: true
+  pull-request-number:
+    description: 'The number of the pull request to comment on'
+    required: false
+  pull-request-comment:
+    description: 'The comment to add to the pull request'
+    required: false
 outputs:
   github-release-url:
     description: "The GitHub Release URL"
@@ -72,6 +78,7 @@ runs:
         path: bundle-artifacts
     - name: create release and upload release assets
       uses: actions/github-script@v7
+      id: release
       with:
         script: |
           const {
@@ -171,6 +178,21 @@ runs:
             console.log(`::warning::could not create Discussion`)
             console.log(e)
           }
+          core.setOutput('token', state.accessToken)
+    - name: Add a comment about the announcement email to the Pull Request
+      if: inputs.pull-request-number != ''
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ steps.release.outputs.token }}
+        script: |
+          const req = {
+            owner: ${{ toJSON(inputs.owner) }},
+            repo: ${{ toJSON(inputs.repo) }},
+            issue_number: ${{ inputs.pull-request-number }},
+            body: ${{ toJSON(inputs.pull-request-comment) }},
+          }
+
+          await github.rest.issues.createComment(req)
     - name: update check-run
       if: always()
       uses: ./.github/actions/check-run-action
