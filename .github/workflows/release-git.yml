@@ -133,7 +133,7 @@ jobs:
             }
 
             const releaseURL = `https://github.com/${process.env.OWNER}/${process.env.REPO}/releases/tag/${tagName}`
-            const [, baseVersion, rc ] = ver.match(/^(.*)-rc(\d+)$/) || [ver]
+            const [, baseVersion, rc ] = ver.match(/^(.*)-rc(\d+)$/) || [0, ver]
             const skeet =
               rc
               ? `The ${nth(Number.parseInt(rc) + 1)} preview of Git for Windows ${baseVersion} is available, please test! ${releaseURL}`
