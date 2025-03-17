@@ -1,11 +1,19 @@
+const maybeQuote = (arg) =>
+  !arg.match(/[ "']/) ? arg : `'${arg.replace(/'/g, "'\\''")}'`
+const prettyPrintCommand = (prog, parameters) =>
+  `${maybeQuote(prog)} ${parameters.map(maybeQuote).join(' ')}`
 const callProg = (prog, parameters, cwd) => {
   const { spawnSync } = require('child_process')
   const child = spawnSync(prog, parameters, {
     stdio: ['ignore', 'pipe', 'inherit'],
     cwd
   })
-  if (child.error) throw child.error
-  if (child.status !== 0) throw new Error(`${prog} ${parameters.join(' ')} failed with status ${child.status}`)
+  const error = (message) => [
+    `${prettyPrintCommand(prog, parameters)}: ${message}`,
+    `stdout: ${child.stdout}`,
+  ].join('\n')
+  if (child.error) throw new Error(error(`failed with ${child.error}`), { cause: child.error })
+  if (child.status !== 0) throw new Error(error(`failed with status ${child.status}`))
   return child.stdout.toString('utf-8').replace(/\r?\n$/, '')
 }
 
