@@ -306,7 +306,7 @@ jobs:
           name: artifacts
           path: artifacts
 
-      - uses: actions/create-github-app-token@v1
+      - uses: actions/create-github-app-token@v2
         id: pacman-repo-token
         with:
           app-id: ${{ secrets.GH_APP_ID }}
