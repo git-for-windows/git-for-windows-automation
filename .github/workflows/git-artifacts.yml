@@ -43,7 +43,7 @@ defaults:
 
 jobs:
   pkg:
-    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
+    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && 'windows-11-arm' || 'windows-latest' }}
     outputs:
       artifact_matrix: ${{ steps.artifact-build-matrix.outputs.result }}
       msystem: ${{steps.configure-environment.outputs.MSYSTEM}}
@@ -357,7 +357,7 @@ jobs:
           append-text: "${{ format('Completed: {0}', job.status) }}."
           conclusion: ${{ job.status }}
   artifacts:
-    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
+    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && 'windows-11-arm' || 'windows-latest' }}
     needs: pkg
     env:
       MSYSTEM: ${{ needs.pkg.outputs.msystem }}
