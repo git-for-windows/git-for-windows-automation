@@ -37,7 +37,7 @@ env:
 jobs:
   build:
     if: github.event.repository.owner.login == 'git-for-windows'
-    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && fromJSON('["Windows", "ARM64"]') || 'windows-latest' }}
+    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && 'windows-11-arm' || 'windows-latest' }}
     steps:
       - uses: actions/checkout@v4
 
