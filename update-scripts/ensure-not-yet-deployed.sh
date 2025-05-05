@@ -62,7 +62,7 @@ esac &&
 
 subdir="${architecture:-$arch}" &&
 case "$subdir" in
-any|x86_64) subdir=x86-64;;
+any) subdir=x86_64;;
 esac &&
 
 case "$pkgname" in
@@ -75,7 +75,7 @@ esac &&
 # repository. Error out if it was.
 
 file="$pkgname-${epoch:+$epoch~}$pkgver-$pkgrel-$arch.pkg.tar.xz" &&
-url="https://wingit.blob.core.windows.net/$subdir/$file" &&
+url="https://github.com/git-for-windows/pacman-repo/blob/$subdir/$file" &&
 echo "Looking at URL '$url'" >&2 &&
 if curl -sfI "$url"
 then
