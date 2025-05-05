@@ -8,7 +8,7 @@ on:
         description: 'The package to build'
         required: true
       build_only:
-        description: 'Skip deployment (if non-empty)'
+        description: 'Skip deployment (if "true")'
         required: false
       repo:
         description: 'The repo containing the package definition'
@@ -115,6 +115,7 @@ jobs:
           git -C /usr/src/$REPO reset --hard FETCH_HEAD
 
       - name: check if the package was already deployed
+        if: env.BUILD_ONLY != 'true'
         shell: bash
         run: |
           ./update-scripts/ensure-not-yet-deployed.sh${{ env.ARCHITECTURE != '' && format(' --architecture={0}', env.ARCHITECTURE) || '' }} "/usr/src/$REPO/$PACKAGE_TO_BUILD"
