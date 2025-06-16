@@ -32,7 +32,7 @@ then
 		version="${version%(*}.${version##*(}"
 		version=${version%)}
 		;;
-	*[^0-9.]*|*..*|.*|*.) die "Invalid version: '$version'";;
+	*[!0-9.]*|*..*|.*|*.) die "Invalid version: '$version'";;
 	*.*.*.*)
 		# major.minor.patch.extra
 		v0="${version#*.*.*.}"
