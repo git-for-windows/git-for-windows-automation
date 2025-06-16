@@ -244,7 +244,12 @@ jobs:
             ARTIFACTS_TO_BUILD="mingit"
             test "$ARCHITECTURE" = aarch64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD mingit-busybox"
             test -f bundle-artifacts/mingit-only || {
-              test "$ARCHITECTURE" = i686 || ARTIFACTS_TO_BUILD="installer portable archive $ARTIFACTS_TO_BUILD"
+              case "$ARCHITECTURE,$GIT_VERSION" in
+              i686,v2.49*|i686,v2[5-9][0-9]*) ;; # only build MinGit for i686 Git 2.49+
+              *)
+                ARTIFACTS_TO_BUILD="installer portable archive $ARTIFACTS_TO_BUILD"
+                ;;
+              esac
               test "$ARCHITECTURE" != x86_64 || ARTIFACTS_TO_BUILD="$ARTIFACTS_TO_BUILD nuget"
             }
           }
@@ -294,7 +299,11 @@ jobs:
             core.info('Preparing artifact build matrix...')
             const createArtifactsMatrix = require('./create-artifacts-matrix')
             try {
-              const output = createArtifactsMatrix(process.env.ARTIFACTS_TO_BUILD, process.env.ARCHITECTURE)
+              const output = createArtifactsMatrix(
+                process.env.ARTIFACTS_TO_BUILD,
+                process.env.ARCHITECTURE,
+                ${{ github.repository_visibility == 'private' && 'true' || 'false' }}
+              )
               core.info(`Will be using the following matrix: ${JSON.stringify(output)}`)
               return output
             } catch (e) {
@@ -677,14 +686,19 @@ jobs:
         shell: pwsh
         run: |
           $exePath = Get-ChildItem -Path artifacts/*.exe | %{$_.FullName}
-          $installer = Start-Process -PassThru -Wait -FilePath "$exePath" -ArgumentList "/SILENT /VERYSILENT /NORESTART /SUPPRESSMSGBOXES /ALLOWDOWNGRADE=1 /LOG=installer.log"
+          $installer = Start-Process -PassThru -Wait -FilePath "$exePath" -ArgumentList "/SILENT /VERYSILENT /NORESTART /SUPPRESSMSGBOXES /ALLOWDOWNGRADE=1 /ALLOWINSTALLING32ON64=1 /LOG=installer.log"
           $exitCode = $installer.ExitCode
           if ($exitCode -ne 0) {
             Write-Host "::error::Installer failed with exit code $exitCode!"
             exit 1
           }
-          "$env:ProgramFiles\Git\usr\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
-          "$env:ProgramFiles\Git\${{env.MINGW_PREFIX}}\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
+          if ("${env:ARCHITECTURE}" -eq "i686") {
+            "${env:ProgramFiles(x86)}\Git\usr\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
+            "${env:ProgramFiles(x86)}\Git\${{env.MINGW_PREFIX}}\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
+          } else {
+            "$env:ProgramFiles\Git\usr\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
+            "$env:ProgramFiles\Git\${{env.MINGW_PREFIX}}\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
+          }
       - name: Publish installer log
         if: matrix.artifact.name == 'installer' && (failure() || success())
         uses: actions/upload-artifact@v4

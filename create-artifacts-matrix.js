@@ -1,4 +1,4 @@
-module.exports = (artifactsString, architecture) => {
+module.exports = (artifactsString, architecture, allowI686) => {
     const artifacts = artifactsString.split(' ')
 
     if (artifacts.length < 1) {
@@ -13,7 +13,7 @@ module.exports = (artifactsString, architecture) => {
         }
     ]
 
-    if (architecture !== 'i686') validArtifacts.unshift({
+    if (allowI686 || architecture !== 'i686') validArtifacts.unshift({
         name: 'installer',
         filePrefix: 'Git',
         fileExtension: 'exe'
