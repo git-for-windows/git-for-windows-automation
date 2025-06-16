@@ -11,7 +11,7 @@ on:
         required: true
       git_artifacts_aarch64_workflow_run_id:
         description: 'ID of the git-artifacts (aarch64) workflow run'
-        required: true
+        required: false
 
 env:
   GIT_CONFIG_PARAMETERS: "'user.name=gitforwindowshelper-bot' 'user.email=gitforwindowshelper-bot@users.noreply.github.com'"
@@ -51,7 +51,9 @@ jobs:
             } = require('./github-release')
 
             const directories = []
-            for (const arch of architectures) {
+            for (const arch of architectures.filter(
+              e => process.env.AARCH64_WORKFLOW_RUN_ID !== '' || e.name !== 'aarch64'
+            )) {
               const architecture = arch.name
               console.error(`Processing architecture: ${architecture}`)
               const workflowRunId = process.env[`${architecture.toUpperCase()}_WORKFLOW_RUN_ID`]
@@ -203,6 +205,7 @@ jobs:
             for (const arch of architectures) {
               const architecture = arch.name
               const pkgDir = `pkg-${architecture}`
+              if (architecture === 'aarch64' && !fs.existsSync(pkgDir)) continue
               for (const fileName of fs.readdirSync(pkgDir)) {
                 if (fileName.indexOf('.tar.') > 0) artifacts.push({
                   name: fileName,

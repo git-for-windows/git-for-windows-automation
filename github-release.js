@@ -131,6 +131,7 @@ const processBundleArtifacts = () => {
   }
 
   for (const architecture of architectures) {
+    if (architecture.name === 'aarch64' && !fs.existsSync(`sha256sums-${architecture.name}/sha256sums.txt`)) continue
     fs.readFileSync(`sha256sums-${architecture.name}/sha256sums.txt`)
       .toString()
       .split('\n')
