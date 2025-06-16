@@ -36,9 +36,13 @@ then
 	*.*.*.*)
 		# major.minor.patch.extra
 		v0="${version#*.*.*.}"
-		previous_version_prefix=${version%.$v0}
+		previous_version=${version%.$v0}
+		previous_version_prefix=$previous_version
 		;;
-	*.*.*) previous_version_prefix=${version%.*}.$((${version##*.}-1));; # major.minor.patch
+	*.*.*)
+		previous_version=${version%.*}.$((${version##*.}-1))
+		previous_version_prefix=$previous_version
+		;; # major.minor.patch
 	*) die "Invalid version: '$version'";;
 	esac
 	branch_name=git-$version
@@ -47,6 +51,18 @@ else
 	test -n "$previous_version_prefix" || die "Invalid version: '$version'"
 	branch_name=mingit-$previous_version_prefix.x-releases
 fi
+case "$previous_version" in
+2.46.3)
+	# There was no Git for Windows v2.46.3, so we use v2.46.2
+	previous_version=2.46.2
+	previous_version_prefix=2.46.2
+	;;
+2.47.2)
+	# There was no Git for Windows v2.47.2, so we use v2.47.1(2)
+	previous_version=2.47.1.2
+	previous_version_prefix=2.47.1
+	;;
+esac
 grep_version_regex="$(echo "$previous_version_prefix" | sed 's/\./\\\\&/g')"
 
 handle_repo () {
