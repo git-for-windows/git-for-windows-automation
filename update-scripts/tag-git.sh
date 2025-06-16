@@ -58,7 +58,11 @@ else
 		if ! grep -q "^\\* Comes with \\[Git $base_tag\\]" "$build_extra_dir"/ReleaseNotes.md
 		then
 			url=https://github.com/git/git/blob/$base_tag &&
-			adoc="$(echo "${base_tag#v}" | sed 's/-rc[0-9]*$//').adoc" &&
+			case "$base_tag" in
+			v2.43.7|v2.44.4|v2.45.4|v2.46.4|v2.47.3|v2.48.2|v2.49.1) ext=txt;;
+			*) ext=adoc;;
+			esac &&
+			adoc="$(echo "${base_tag#v}" | sed 's/-rc[0-9]*$//').$ext" &&
 			url=$url/Documentation/RelNotes/$adoc &&
 			release_note="Comes with [Git $base_tag]($url)." &&
 			(cd "$build_extra_dir" && node ./add-release-note.js --commit feature "$release_note")
