@@ -298,14 +298,18 @@ const uploadGitArtifacts = async (context, token, owner, repo, releaseId, gitArt
 const pushGitTag = (context, setSecret, token, owner, repo, tagName, bundlePath) => {
   context.log(`Pushing Git tag ${tagName}`)
   const { callGit } = require('./repository-updates')
-  callGit(['clone',
-    '--bare', '--single-branch', '--branch', 'main', '--depth', '50',
-    `https://github.com/${owner}/${repo}`, 'git'
-  ])
 
-  // Allow Git to fetch non-local objects by pretending to be a partial clone
-  callGit(['--git-dir', 'git', 'config', 'remote.origin.promisor', 'true'])
-  callGit(['--git-dir', 'git', 'config', 'remote.origin.partialCloneFilter', 'blob:none'])
+  const { existsSync } = require('fs')
+  if (!existsSync('git')) {
+    callGit(['clone',
+      '--bare', '--single-branch', '--branch', 'main', '--depth', '50',
+      `https://github.com/${owner}/${repo}`, 'git'
+    ])
+
+    // Allow Git to fetch non-local objects by pretending to be a partial clone
+    callGit(['--git-dir', 'git', 'config', 'remote.origin.promisor', 'true'])
+    callGit(['--git-dir', 'git', 'config', 'remote.origin.partialCloneFilter', 'blob:none'])
+  }
 
   callGit(['--git-dir', 'git', 'fetch', bundlePath, `refs/tags/${tagName}:refs/tags/${tagName}`])
   const auth = Buffer.from(`PATH:${token}`).toString('base64')
