@@ -126,12 +126,12 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   if (repo === 'build-extra') {
     // Add `versions/package-versions-$ver*.txt`
     const fs = require('fs')
-    if (fs.existsSync('bundle-artifacts/ver')) {
+    if (options.ver || fs.existsSync('bundle-artifacts/ver')) {
       const filesToCommit = []
-      const ver = fs.readFileSync('bundle-artifacts/ver').toString().trim()
+      const ver = options.ver || fs.readFileSync('bundle-artifacts/ver').toString().trim()
       if (!options.mingitOnly) {
         fs.renameSync(
-          'installer-x86_64/package-versions.txt',
+          options.packageVersionsPath || 'installer-x86_64/package-versions.txt',
           `${repo}/versions/package-versions-${ver}.txt`
         )
         callGit([
@@ -141,7 +141,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
         filesToCommit.push(`versions/package-versions-${ver}.txt`)
       }
       fs.renameSync(
-        'mingit-x86_64/package-versions.txt',
+        options.mingitPackageVersionsPath || 'mingit-x86_64/package-versions.txt',
         `${repo}/versions/package-versions-${ver}-MinGit.txt`
       )
       callGit([

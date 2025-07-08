@@ -1,4 +1,7 @@
 const publishEmbargoedRelease = async (source, target, tag) => {
+  const sourceTemplate = (({ token, repoName, ...o }) => o)(source) // remove token and repoName
+  const targetTemplate = (({ token, repoName, ...o }) => o)(target) // remove token and repoName
+
   const getAppInstallationToken = async (context) => {
     if (context.token) return context.token
 
@@ -61,10 +64,19 @@ const publishEmbargoedRelease = async (source, target, tag) => {
         if (curl.error) throw curl.error
       }
       if (asset.name.startsWith('all-')) {
-        for (const bundle of [`git.bundle`]) {
+        const d = 'bundle-artifacts-x86_64'
+        const unzipVer = spawnSync('unzip', ['-p', zipPath, `${d}/ver`, `${d}/release-branch`])
+        if (unzipVer.error) throw unzipVer.error
+        ;[context.ver, context.releaseBranch] = unzipVer.stdout.toString().split('\n')
+        if (!context.ver) throw new Error(`Failed to extract version from ${zipPath}`)
+        // The order in which `unzip -p` shows the context might be swapped
+        if (context.releaseBranch.match(/^\d/))
+          [context.ver, context.releaseBranch] = [context.releaseBranch, context.ver]
+
+        for (const bundle of [`build-extra.bundle`, `git.bundle`, `MINGW-packages.bundle`, `announce-${context.ver}`]) {
           const bundlePath = `${context.unpackedPath}/${bundle}`
           if (existsSync(bundlePath)) continue
-          const directoryInZip = 'bundle-artifacts-x86_64'
+          const directoryInZip = bundle === 'MINGW-packages.bundle' ? 'pkg-x86_64' : d
           console.log(`Extracting ${bundle} from ${asset.name}`)
           const unzip = spawnSync('unzip', ['-p', zipPath, `${directoryInZip}/${bundle}`], {
             stdio: ['ignore', openSync(`${context.unpackedPath}/${bundle}`, 'w'), 'inherit'],
@@ -139,6 +151,78 @@ const publishEmbargoedRelease = async (source, target, tag) => {
       }
     )
     console.log(`Release ${source.release.name} mirrored to ${target.repoOwner}/${target.repoName}`)
+
+    const { pushRepositoryUpdate, callGit } = require('./repository-updates')
+    if (isLatest) {
+      console.log(`Updating gitforwindows.org`)
+
+      const targetHomepage = { ...targetTemplate, repoName: 'git-for-windows.github.io' }
+      await pushRepositoryUpdate(
+        console,
+        setSecret,
+        targetHomepage.appId,
+        targetHomepage.privateKey,
+        targetHomepage.repoOwner,
+        targetHomepage.repoName,
+        'main'
+      )
+
+      console.log(`Updating MINGW-packages`)
+
+      const targetMINGWPackages = { ...targetTemplate, repoName: 'MINGW-packages' }
+      await pushRepositoryUpdate(
+        console,
+        setSecret,
+        targetMINGWPackages.appId,
+        targetMINGWPackages.privateKey,
+        targetMINGWPackages.repoOwner,
+        targetMINGWPackages.repoName,
+        'main',
+        `${source.unpackedPath}/MINGW-packages.bundle`,
+        {
+          mergeRef: source.releaseBranch,
+        }
+      )
+    }
+
+    console.log(`Updating build-extra`)
+
+    const sourceBuildExtra = { ...sourceTemplate, repoName: 'build-extra' }
+    const targetBuildExtra = { ...targetTemplate, repoName: 'build-extra' }
+    const buildExtraOptions = {
+      mergeRef: source.releaseBranch,
+      ver: source.ver,
+      mingitPackageVersionsPath: `${source.directory}/zips/package-versions-${source.ver}-MinGit.txt`,
+      postCloneHook: async (gitDir) => {
+        // add the embargoed repository as promisor, to get e.g. the release notes commit that is _not_ in the bundle
+        const url = `https://github.com/${sourceBuildExtra.repoOwner}/${sourceBuildExtra.repoName}`
+        callGit(['--git-dir', gitDir, 'remote', 'add', 'secondary', url])
+        const extraHeader = `Authorization: Basic ${Buffer.from(
+          `PAT:${await getAppInstallationToken(sourceBuildExtra)}`
+        ).toString('base64')}`
+        callGit(['--git-dir', gitDir, 'config', 'set', `http.${url}.extraHeader`, extraHeader])
+        callGit(['--git-dir', gitDir, 'config', 'set', 'remote.secondary.promisor', 'true'])
+        callGit(['--git-dir', gitDir, 'config', 'set', 'remote.secondary.partialCloneFilter', 'blob:none'])
+        callGit(['--git-dir', gitDir, 'fetch', 'secondary'])
+      },
+    }
+    const { existsSync } = require('fs')
+    if (!existsSync(`${source.directory}/zips/package-versions-${source.ver}.txt`)) buildExtraOptions.mingitOnly = true
+    else {
+      buildExtraOptions.packageVersionsPath = `${source.directory}/zips/package-versions-${source.ver}.txt`
+    }
+
+    await pushRepositoryUpdate(
+      console,
+      setSecret,
+      targetBuildExtra.appId,
+      targetBuildExtra.privateKey,
+      targetBuildExtra.repoOwner,
+      targetBuildExtra.repoName,
+      'main',
+      isLatest ? `${source.unpackedPath}/build-extra.bundle` : null,
+      buildExtraOptions
+    )
   }
 
   await mirrorRelease(source, target, tag)
