@@ -158,7 +158,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   const authorizationHeader = await getPushAuthorizationHeader(context, setSecret, appId, privateKey, owner, repo)
   callGit(['--git-dir', gitDir,
     '-c', `http.extraHeader=${authorizationHeader}`,
-    'push', `https://github.com/${owner}/${repo}`, refName, ...(options.extraPushRefs || [])
+    'push', `https://github.com/${owner}/${repo}`, `HEAD:${refName}`, ...(options.extraPushRefs || [])
   ])
   context.log(`Done pushing ref ${refName} to ${owner}/${repo}`)
 }
