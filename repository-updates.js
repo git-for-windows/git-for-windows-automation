@@ -98,9 +98,21 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   const bare = ['build-extra', 'git-for-windows.github.io'].includes(repo) ? '' : ['--bare']
   const branchOption = ['--single-branch', '--branch', refName, '--depth', '50']
   const url = `https://github.com/${owner}/${repo}`
-  callGit(['clone', ...bare, ...branchOption, url, repo])
+  const { existsSync } = require('fs')
+  const needToClone = !existsSync(repo)
+  if (needToClone) callGit(['clone', ...bare, ...branchOption, url, repo])
 
   const gitDir = `${repo}${bare ? '' : '/.git'}`
+
+  if (!needToClone) {
+    callGit(['--git-dir', gitDir, 'remote', 'set-url', 'origin', url])
+    callGit(['--git-dir', gitDir, 'fetch', 'origin', refName])
+    if (!bare) callGit(['-C', repo, 'switch', '-C', refName, 'FETCH_HEAD'])
+    else {
+      callGit(['--git-dir', gitDir, 'update-ref', `refs/heads/${refName}`, 'FETCH_HEAD'])
+      callGit(['--git-dir', gitDir, 'symbolic-ref', 'HEAD', `refs/heads/${refName}`])
+    }
+  }
 
   if (options.postCloneHook) await options.postCloneHook(gitDir)
 
