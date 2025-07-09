@@ -106,7 +106,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
     // Allow Git to fetch non-local objects by pretending to be a partial clone
     callGit(['--git-dir', gitDir, 'config', 'remote.origin.promisor', 'true'])
     callGit(['--git-dir', gitDir, 'config', 'remote.origin.partialCloneFilter', 'blob:none'])
-    mergeBundle(gitDir, !bare && repo, bundlePath, options.extraPushRefs ? options.extraPushRefs[0] : refName)
+    mergeBundle(gitDir, !bare && repo, bundlePath, options.mergeRef || (options.extraPushRefs ? options.extraPushRefs[0] : refName))
   }
 
   if (repo === 'build-extra') {
