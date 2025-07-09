@@ -102,6 +102,8 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
 
   const gitDir = `${repo}${bare ? '' : '/.git'}`
 
+  if (options.postCloneHook) await options.postCloneHook(gitDir)
+
   if (bundlePath) {
     // Allow Git to fetch non-local objects by pretending to be a partial clone
     callGit(['--git-dir', gitDir, 'config', 'remote.origin.promisor', 'true'])
