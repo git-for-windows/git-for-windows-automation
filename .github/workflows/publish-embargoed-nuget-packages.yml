@@ -1,0 +1,56 @@
+name: publish-embargoed-nuget-packages
+run-name: Publish embargoed NuGet packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      github-release-url:
+        description: 'The URL to the GitHub release that contains the package files'
+        required: true
+
+env:
+  GITHUB_RELEASE_URL: ${{ github.event.inputs.github-release-url }}
+  OWNER: ${{ github.repository_owner }}
+  GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
+  HOME: "${{github.workspace}}\\home"
+  USERPROFILE: "${{github.workspace}}\\home"
+
+jobs:
+  publish-embargoed-nuget-package:
+    runs-on: windows-latest
+    steps:
+      - name: sanity check
+        if: github.repository_visibility != 'private' || github.repository.fork == true
+        run: echo "This action is meant to be run in an embargoed org" >&2; exit 1
+      - uses: actions/checkout@v4
+      - name: download package files
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { downloadReleaseAssetsFromURL } = require('./github-release.js')
+            await downloadReleaseAssetsFromURL(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              process.env.GITHUB_RELEASE_URL,
+              filename => filename === 'all-artifacts.zip'
+            )
+      - name: Unpack NuGet packages
+        shell: bash
+        run: |
+          "$WINDIR/system32/tar.exe" -xf all-artifacts.zip nuget-x86_64/
+      - uses: nuget/setup-nuget@v2
+      - name: Upload NuGet packages
+        shell: bash
+        run: |
+          for nupkg in nuget-x86_64/*.nupkg
+          do
+            nuget push \
+              -NonInteractive \
+              -Verbosity detailed \
+              -Source https://api.nuget.org/v3/index.json \
+              -ApiKey '${{ secrets.NUGET_API_KEY }}' \
+              -Timeout 3000 \
+              "$nupkg" || exit 1
+          done
