@@ -1,0 +1,113 @@
+name: publish-embargoed-nuget-packages
+run-name: Publish embargoed NuGet packages
+
+on:
+  workflow_dispatch:
+    inputs:
+      github-release-url:
+        description: 'The URL to the GitHub release that contains the package files'
+        required: true
+
+env:
+  GITHUB_RELEASE_URL: ${{ github.event.inputs.github-release-url }}
+  OWNER: ${{ github.repository_owner }}
+  GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
+  HOME: "${{github.workspace}}\\home"
+  USERPROFILE: "${{github.workspace}}\\home"
+
+jobs:
+  publish-embargoed-nuget-package:
+    runs-on: windows-latest
+    steps:
+      - name: sanity check
+        run: |
+          case '${{ github.repository_visibility }},${{ github.repository.fork }}'
+          private,false) ;; # okay
+          *)
+            echo "::error::This action is meant to be run in an embargoed org" >&2
+            exit 1
+            ;;
+          esac
+
+          s="$(echo "$GITHUB_RELEASE_URL" |
+            sed -n 's|https://github.com/$OWNER/\([^/]+)/releases/tag/\([^/]+)$|REPOSITORY=\1\nTAG=\2|p')"
+          test -n "$s" || {
+            echo "::error:: Cannot parse URL '$GITHUB_RELEASE_URL'" >&2
+            exit 1
+          }
+          echo "$s" >>$GITHUB_ENV
+      - uses: actions/checkout@v4
+      - name: obtain info for check-run
+        id: token
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { getAccessTokenForRepo } = require('./github-release.js')
+            const token = await getAccessTokenForRepo(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              process.env.OWNER,
+              process.env.REPOSITORY
+            )
+            const githubApiRequest = require('./github-api-request')
+            const refData = await githubApiRequest(
+              console,
+              token,
+              'GET',
+              `/repos/${process.env.OWNER}/${process.env.REPOSITORY}/git/ref/tags/${process.env.TAG}`
+            )
+            core.exportVariable('REV', refData.object.sha)
+      - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPOSITORY }}
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPOSITORY }}
+          rev: ${{ env.REV }}
+          check-run-name: "publish-embargoed-nuget-packages"
+          title: "Publish ${{ env.TAG }} to the public Git for Windows NuGet feed"
+          summary: "This deploys the previously-embargoed embargoed Git for Windows ${{ env.TAG }} to the NuGet feed."
+          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+      - name: download package files
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { downloadReleaseAssetsFromURL } = require('./github-release.js')
+            await downloadReleaseAssetsFromURL(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              process.env.GITHUB_RELEASE_URL,
+              filename => filename === 'all-artifacts.zip'
+            )
+      - name: Unpack NuGet packages
+        shell: bash
+        run: |
+          "$WINDIR/system32/tar.exe" -xf all-artifacts.zip nuget-x86_64/
+      - uses: nuget/setup-nuget@v2
+      - name: Upload NuGet packages
+        shell: bash
+        run: |
+          for nupkg in nuget-x86_64/*.nupkg
+          do
+            nuget push \
+              -NonInteractive \
+              -Verbosity detailed \
+              -Source https://api.nuget.org/v3/index.json \
+              -ApiKey '${{ secrets.NUGET_API_KEY }}' \
+              -Timeout 3000 \
+              "$nupkg" || exit 1
+          done
+      - name: update check-run
+        if: always()
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: "${{ github.action_status == 'success' && 'Done!' || format('Completed: {0}', github.action_status) }}."
+          conclusion: ${{ github.action_status }}

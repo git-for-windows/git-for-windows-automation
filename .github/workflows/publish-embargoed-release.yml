@@ -1,0 +1,76 @@
+name: publish-embargoed-release
+run-name: Publish embargoed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag corresponding to the embargoed Git for Windows version'
+        required: true
+
+env:
+  TAG: ${{ github.event.inputs.tag }}
+  OWNER: ${{ github.repository_owner }}
+  REPOSITORY: git
+  TARGET_OWNER: git-for-windows
+  TARGET_REPOSITORY: git
+
+jobs:
+  publish-embargoed-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: sanity check
+        if: github.repository_visibility != 'private' || github.repository.fork == true
+        run: echo "This action is meant to be run in an embargoed org" >&2; exit 1
+      - name: determine revision
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const ref = await github.git.getRef({
+              owner: process.env.OWNER,
+              repo: process.env.REPOSITORY,
+              ref: `tags/${process.env.TAG}`,
+            })
+            core.exportVariable('REV', ref.data.object.sha)
+      - uses: actions/checkout@v4
+      - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPOSITORY }}
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPOSITORY }}
+          rev: ${{ env.REV }}
+          check-run-name: "publish-embargoed-release"
+          title: "Publish ${{ env.TAG }} as public Git for Windows version"
+          summary: "This publishes the previously-embargoed Git for Windows ${{ env.TAG }}."
+          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+      - name: Publish embargoed release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = process.env.TAG
+            const source = {
+              repoOwner: process.env.OWNER,
+              repoName: 'git',
+              appId: '${{ secrets.GH_APP_ID }}',
+              privateKey: ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},'
+            }
+
+            const target = {
+              repoOwner: process.env.TARGET_OWNER,
+              repoName: process.env.TARGET_REPOSITORY,
+              appId: '${{ secrets.PUBLIC_GH_APP_ID }}',
+              privateKey: ${{ toJSON(secrets.PUBLIC_GH_APP_PRIVATE_KEY) }},'
+            }
+            const { publishEmbargoedRelease } = require('./publish-embargoed-release')
+            await publishEmbargoedRelease(source, target, tag)
+      - name: update check-run
+        if: always()
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: "${{ github.action_status == 'success' && 'Done!' || format('Completed: {0}', github.action_status) }}."
+          conclusion: ${{ github.action_status }}

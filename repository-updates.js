@@ -98,26 +98,40 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   const bare = ['build-extra', 'git-for-windows.github.io'].includes(repo) ? '' : ['--bare']
   const branchOption = ['--single-branch', '--branch', refName, '--depth', '50']
   const url = `https://github.com/${owner}/${repo}`
-  callGit(['clone', ...bare, ...branchOption, url, repo])
+  const { existsSync } = require('fs')
+  const needToClone = !existsSync(repo)
+  if (needToClone) callGit(['clone', ...bare, ...branchOption, url, repo])
 
   const gitDir = `${repo}${bare ? '' : '/.git'}`
+
+  if (!needToClone) {
+    callGit(['--git-dir', gitDir, 'remote', 'set-url', 'origin', url])
+    callGit(['--git-dir', gitDir, 'fetch', 'origin', refName])
+    if (!bare) callGit(['-C', repo, 'switch', '-C', refName, 'FETCH_HEAD'])
+    else {
+      callGit(['--git-dir', gitDir, 'update-ref', `refs/heads/${refName}`, 'FETCH_HEAD'])
+      callGit(['--git-dir', gitDir, 'symbolic-ref', 'HEAD', `refs/heads/${refName}`])
+    }
+  }
+
+  if (options.postCloneHook) await options.postCloneHook(gitDir)
 
   if (bundlePath) {
     // Allow Git to fetch non-local objects by pretending to be a partial clone
     callGit(['--git-dir', gitDir, 'config', 'remote.origin.promisor', 'true'])
     callGit(['--git-dir', gitDir, 'config', 'remote.origin.partialCloneFilter', 'blob:none'])
-    mergeBundle(gitDir, !bare && repo, bundlePath, options.extraPushRefs ? options.extraPushRefs[0] : refName)
+    mergeBundle(gitDir, !bare && repo, bundlePath, options.mergeRef || (options.extraPushRefs ? options.extraPushRefs[0] : refName))
   }
 
   if (repo === 'build-extra') {
     // Add `versions/package-versions-$ver*.txt`
     const fs = require('fs')
-    if (fs.existsSync('bundle-artifacts/ver')) {
+    if (options.ver || fs.existsSync('bundle-artifacts/ver')) {
       const filesToCommit = []
-      const ver = fs.readFileSync('bundle-artifacts/ver').toString().trim()
+      const ver = options.ver || fs.readFileSync('bundle-artifacts/ver').toString().trim()
       if (!options.mingitOnly) {
         fs.renameSync(
-          'installer-x86_64/package-versions.txt',
+          options.packageVersionsPath || 'installer-x86_64/package-versions.txt',
           `${repo}/versions/package-versions-${ver}.txt`
         )
         callGit([
@@ -127,7 +141,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
         filesToCommit.push(`versions/package-versions-${ver}.txt`)
       }
       fs.renameSync(
-        'mingit-x86_64/package-versions.txt',
+        options.mingitPackageVersionsPath || 'mingit-x86_64/package-versions.txt',
         `${repo}/versions/package-versions-${ver}-MinGit.txt`
       )
       callGit([
@@ -158,7 +172,7 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
   const authorizationHeader = await getPushAuthorizationHeader(context, setSecret, appId, privateKey, owner, repo)
   callGit(['--git-dir', gitDir,
     '-c', `http.extraHeader=${authorizationHeader}`,
-    'push', `https://github.com/${owner}/${repo}`, refName, ...(options.extraPushRefs || [])
+    'push', `https://github.com/${owner}/${repo}`, `HEAD:${refName}`, ...(options.extraPushRefs || [])
   ])
   context.log(`Done pushing ref ${refName} to ${owner}/${repo}`)
 }
