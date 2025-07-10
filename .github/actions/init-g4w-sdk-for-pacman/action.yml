@@ -5,6 +5,13 @@ inputs:
     description: 'Whether to include a working `makepkg`'
     required: false
     default: 'false'
+  include-repo-add:
+    description: 'Whether to include a working `repo-add`'
+    required: false
+    default: 'false'
+  git-sdk-64-owner:
+    description: 'The owner of the git-sdk-64 repository to use'
+    required: false
 outputs:
   result:
     description: 'The path to the subset of the SDK'
@@ -17,10 +24,10 @@ runs:
       shell: bash
       run: |
         git clone --bare --depth=1 --single-branch --branch=main --filter=blob:none \
-          https://github.com/git-for-windows/git-sdk-64 .tmp &&
+          https://github.com/${{ inputs.git-sdk-64-owner }}/git-sdk-64 .tmp &&
         rev="$(git -C .tmp rev-parse HEAD)" &&
         echo "rev=$rev" >>$GITHUB_OUTPUT &&
-        echo "cache-key=g4w-sdk-$rev${{ inputs.include-makepkg != 'false' && '+makepkg' || '' }}" >>$GITHUB_OUTPUT
+        echo "cache-key=g4w-sdk-$rev${{ inputs.include-makepkg != 'false' && '+makepkg' || '' }}${{ inputs.include-repo-add != 'false' && '+repo-add' || '' }}" >>$GITHUB_OUTPUT
     - name: restore cached git-sdk-64 subset
       id: restore-g4w-sdk
       uses: actions/cache/restore@v4
@@ -82,6 +89,22 @@ runs:
 
             # print the result
             p' /usr/bin/gpg.exe >>"$sparse"
+        fi &&
+        if test false != '${{ inputs.include-repo-add }}'
+        then
+          printf "%s\n" >>"$sparse" \
+            /usr/lib/gnupg/keyboxd.exe \
+            /usr/bin/msys-ksba-[0-9]*.dll \
+            /usr/bin/gpg-agent.exe \
+            /usr/bin/repo-add \
+            /usr/bin/xz.exe \
+            /usr/bin/msys-lzma-[0-9]*.dll \
+            /usr/bin/bsdtar.exe \
+            /usr/bin/msys-crypto-[0-9]*.dll \
+            /usr/bin/msys-lz4-[0-9]*.dll \
+            /usr/bin/msys-zstd-[0-9]*.dll \
+            /usr/bin/msys-expat-[0-9]*.dll \
+            /usr/bin/vercmp.exe
         fi &&
         git checkout -- &&
 
