@@ -1,0 +1,44 @@
+name: publish-embargoed-release
+run-name: Publish embargoed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The tag corresponding to the embargoed Git for Windows version'
+        required: true
+
+env:
+  TAG: ${{ github.event.inputs.tag }}
+  OWNER: ${{ github.repository_owner }}
+  TARGET_OWNER: git-for-windows
+  TARGET_REPOSITORY: git
+
+jobs:
+  publish-embargoed-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: sanity check
+        if: github.repository_visibility != 'private' || github.repository.fork == true
+        run: echo "This action is meant to be run in an embargoed org" >&2; exit 1
+      - uses: actions/checkout@v4
+      - name: Publish embargoed release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const tag = process.env.TAG
+            const source = {
+              repoOwner: process.env.OWNER,
+              repoName: 'git',
+              appId: '${{ secrets.GH_APP_ID }}',
+              privateKey: ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},'
+            }
+
+            const target = {
+              repoOwner: process.env.TARGET_OWNER,
+              repoName: process.env.TARGET_REPOSITORY,
+              appId: '${{ secrets.PUBLIC_GH_APP_ID }}',
+              privateKey: ${{ toJSON(secrets.PUBLIC_GH_APP_PRIVATE_KEY) }},'
+            }
+            const { publishEmbargoedRelease } = require('./publish-embargoed-release')
+            await publishEmbargoedRelease(source, target, tag)
