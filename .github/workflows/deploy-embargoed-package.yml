@@ -20,8 +20,22 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: sanity check
-        if: github.repository_visibility != 'private' || github.repository.fork == true
-        run: echo "This action is meant to be run in an embargoed org" >&2; exit 1
+        run: |
+          case '${{ github.repository_visibility }},${{ github.repository.fork }}'
+          private,false) ;; # okay
+          *)
+            echo "::error::This action is meant to be run in an embargoed org" >&2
+            exit 1
+            ;;
+          esac
+
+          s="$(echo "$GITHUB_RELEASE_URL" |
+            sed -n 's|https://github.com/$OWNER/\([^/]+)/releases/tag/\([^/]+)$|REPOSITORY=\1\nTAG=\2|p')"
+          test -n "$s" || {
+            echo "::error:: Cannot parse URL '$GITHUB_RELEASE_URL'" >&2
+            exit 1
+          }
+          echo "$s" >>$GITHUB_ENV
       - uses: actions/checkout@v4
       - name: obtain tokens
         id: token
@@ -45,6 +59,38 @@ jobs:
               )
               console.log(callGit(['config', '--global', `http.https://github.com/${process.env.OWNER}/${repo}.extraHeader`, header]))
             }
+
+            // obtain rev for the Check Run
+            const { getAccessTokenForRepo } = require('./github-release.js')
+            const token = await getAccessTokenForRepo(
+              console,
+              core.setSecret,
+              ${{ secrets.GH_APP_ID }},
+              ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+              process.env.OWNER,
+              process.env.REPOSITORY
+            )
+            const githubApiRequest = require('./github-api-request')
+            const refData = await githubApiRequest(
+              console,
+              token,
+              'GET',
+              `/repos/${process.env.OWNER}/${process.env.REPOSITORY}/git/ref/tags/${process.env.TAG}`
+            )
+            core.exportVariable('REV', refData.object.sha)
+      - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPOSITORY }}
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPOSITORY }}
+          rev: ${{ env.REV }}
+          check-run-name: "deploy-embargoed-package"
+          title: "Deploying ${{ env.TAG }} to the public Git for Windows Pacman repository"
+          summary: "This deploys the previously-embargoed embargoed Pacman package ${{ env.TAG }}."
+          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: download package files
         uses: actions/github-script@v7
         with:
@@ -97,3 +143,11 @@ jobs:
         run: |
           echo "$azure_blobs_token" | base64 -w 0 | sed 's/^/::add-mask::/' # mask the base64-encoded token
           sh -x /usr/src/build-extra/pacman-helper.sh quick_add *.tar.*
+      - name: update check-run
+        if: always()
+        uses: ./.github/actions/check-run-action
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          append-text: "${{ github.action_status == 'success' && 'Done!' || format('Completed: {0}', github.action_status) }}."
+          conclusion: ${{ github.action_status }}
