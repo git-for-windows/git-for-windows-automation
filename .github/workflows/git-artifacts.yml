@@ -379,12 +379,12 @@ jobs:
         if: needs.pkg.outputs.check-run-state != '' && always()
         uses: actions/checkout@v4
       - name: Download pkg-${{env.ARCHITECTURE}}
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: pkg-${{env.ARCHITECTURE}}
           path: pkg-${{env.ARCHITECTURE}}
       - name: Download bundle-artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v5
         with:
           name: bundle-artifacts
           path: bundle-artifacts
