@@ -9,7 +9,6 @@ inputs:
     required: true
   owner:
     description: 'The owner of the target repository'
-    default: 'git-for-windows'
   repo:
     description: 'The name of the target repository'
   rev:
