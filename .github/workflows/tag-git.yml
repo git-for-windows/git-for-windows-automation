@@ -48,7 +48,7 @@ jobs:
               ref: 'heads/main',
             })
             core.exportVariable('REV', ref.object.sha)
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
         if: env.CREATE_CHECK_RUN != 'false'
         uses: ./.github/actions/check-run-action
