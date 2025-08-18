@@ -27,7 +27,7 @@ jobs:
     if: github.event.repository.owner.login == 'git-for-windows'
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         # Since we want to operate on _another_ repository, we sadly cannot use:
         #
         # permissions:

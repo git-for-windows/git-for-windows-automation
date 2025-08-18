@@ -19,7 +19,7 @@ jobs:
       - name: sanity check
         if: ${{ github.repository_owner == 'git-for-windows' }}
         run: echo "This action is not meant to be run on the Git for Windows repository" >&2 && exit 1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: identify actor
         id: actor
         uses: actions/github-script@v7
