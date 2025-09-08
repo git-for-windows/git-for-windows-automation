@@ -81,7 +81,7 @@ jobs:
           echo "GIT_REV=$(git rev-parse --verify "refs/tags/$EXISTING_GIT_TAG"^0)" >>$GITHUB_ENV
       - name: wait if workflow run has not finished yet
         if: env.TAG_GIT_WORKFLOW_RUN_ID != ''
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { waitForWorkflowRunToFinish } = require('./workflow-runs')
@@ -93,7 +93,7 @@ jobs:
               process.env.TAG_GIT_WORKFLOW_RUN_ID
             )
       - name: Get bundle-artifacts download URL
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         if: env.TAG_GIT_WORKFLOW_RUN_ID != ''
         id: get-bundle-artifacts-url
         with:
@@ -189,7 +189,7 @@ jobs:
           flavor: build-installers
           architecture: ${{env.architecture}}
       - name: Create artifact build matrix
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         id: artifact-build-matrix
         with:
           script: |
@@ -484,7 +484,7 @@ jobs:
           repositories: ${{ env.REPO }}
       - name: Add a PR comment suggesting to validate the installer manually
         if: matrix.artifact.name == 'installer' && github.event.inputs.architecture == 'x86_64'
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           github-token: ${{ steps.pr-comment-token.outputs.token }}
           script: |
@@ -577,7 +577,7 @@ jobs:
     needs: ['pkg', 'artifacts']
     steps:
       - name: gather all SHA-256 checksums
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         env:
           SHA256SUMS: ${{ toJSON(needs.artifacts.outputs) }}
         with:

@@ -37,7 +37,7 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: The `release` branch must be up to date
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const sha = await (async () => {
@@ -82,7 +82,7 @@ jobs:
             }
       - name: Get bundle-artifacts and sha256sums
         id: bundle-artifacts
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const { downloadBundleArtifacts } = require('./github-release')
@@ -119,7 +119,7 @@ jobs:
           path: bundle-artifacts/announce-*
       - name: Prepare a comment about the announcement email to the Pull Request
         id: announcement
-        uses: actions/github-script@v7
+        uses: actions/github-script@v8
         with:
           script: |
             const gitSHA = ${{ toJson(steps.bundle-artifacts.outputs.git-rev) }}
