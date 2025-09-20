@@ -20,7 +20,7 @@ runs:
           https://github.com/git-for-windows/git-sdk-64 .tmp &&
         rev="$(git -C .tmp rev-parse HEAD)" &&
         echo "rev=$rev" >>$GITHUB_OUTPUT &&
-        echo "cache-key=g4w-sdk-$rev${{ inputs.include-makepkg != 'false' && '+makepkg' || '' }}" >>$GITHUB_OUTPUT
+        echo "cache-key=g4w-sdk${{ inputs.include-makepkg != 'false' && '+makepkg' || '' }}-$rev" >>$GITHUB_OUTPUT
     - name: restore cached git-sdk-64 subset
       id: restore-g4w-sdk
       uses: actions/cache/restore@v4
