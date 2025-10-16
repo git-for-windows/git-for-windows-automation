@@ -1,0 +1,89 @@
+name: Drop Pacman package from SDKs
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'The Pacman package to drop from the SDKs'
+        required: true
+      commit-message:
+        description: 'Additional text to add to the commit message'
+        type: string
+        required: true
+
+env:
+  PACKAGE: ${{ github.event.inputs.package }}
+  COMMIT_MESSAGE: ${{ github.event.inputs.commit-message }}
+  GIT_CONFIG_PARAMETERS: "'user.name=Git for Windows Build Agent' 'user.email=ci@git-for-windows.build' 'windows.sdk64.path=${{ github.workspace }}' 'windows.sdk32.path=' 'http.sslbackend=schannel' 'core.autocrlf=false' 'checkout.workers=56'"
+  HOME: "${{ github.workspace }}\\home\\git-ci"
+  MSYSTEM: MSYS
+
+jobs:
+  drop-pacman-package:
+    strategy:
+      matrix:
+        sdk: [git-sdk-64, git-sdk-arm64, git-sdk-32]
+    runs-on: ${{ matrix.sdk == 'git-sdk-arm64' && 'windows-11-arm' || 'windows-latest' }}
+    steps:
+      - name: obtain installation access token
+        uses: actions/create-github-app-token@v2
+        id: sdk-repo-token
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ matrix.sdk }}
+      - name: clone ${{ matrix.sdk }}
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: true
+          repository: ${{ github.repository_owner }}/${{ matrix.sdk }}
+          token: ${{ steps.sdk-repo-token.outputs.token }}
+      - name: use the SDK's Bash and git.exe
+        run: "usr\\bin\\bash.exe -lc 'cygpath -aw /usr/bin >>$GITHUB_PATH && cygpath -aw /cmd >>$GITHUB_PATH'"
+      - name: Remove ${{ env.PACKAGE }}
+        shell: bash
+        run: |
+          set -x &&
+          . /etc/profile &&
+          # Log the output also to a file so that it can be inserted into the commit message later
+          cygpath -aw /tmp/commit-message.txt &&
+          (
+            set -x &&
+            pacman -Rns --noconfirm $PACKAGE;
+            echo $? >/tmp/exit.status
+          ) 2>&1 |
+          tee -a /tmp/commit-message.txt &&
+          exit $(cat /tmp/exit.status)
+      - name: commit & open PR
+        shell: bash
+        run: |
+          set -x &&
+          branch="drop-$PACKAGE-$(date +%s)" &&
+          git switch -c "$branch" &&
+          git add -A . &&
+          if git diff --cached --quiet; then
+            echo "::warning::${{ matrix.sdk }}: no changes to commit!"
+            exit 0
+          fi &&
+          commit_message="Drop package '$PACKAGE'
+
+          $COMMIT_MESSAGE
+
+          Here is the output of the command that was run in
+          ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}:
+
+          $(cat /tmp/commit-message.txt)" &&
+          git commit -m "$commit_message" &&
+          git push origin "$branch" &&
+          (
+            GH_TOKEN="${{ steps.sdk-repo-token.outputs.token }}" \
+            gh pr create \
+              --fill \
+              --head "$branch" \
+              --base main 2>&1;
+            echo $? >/tmp/exit.status
+          ) |
+          tee -a /tmp/pr-create-output.txt &&
+          test 0 = $(cat /tmp/exit.status) &&
+          sed -n 's/.*\(http[^ ]*\).*/::notice::Opened PR \1/p' /tmp/pr-create-output.txt
