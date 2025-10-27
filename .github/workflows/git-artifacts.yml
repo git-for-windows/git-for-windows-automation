@@ -130,7 +130,7 @@ jobs:
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: Re-publish bundle-artifacts so the next job can easily use it
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: bundle-artifacts
           path: bundle-artifacts
@@ -340,7 +340,7 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           append-text: 'The `${{env.MINGW_PACKAGE_PREFIX}}-git` package was built successfully'
       - name: Publish ${{env.MINGW_PACKAGE_PREFIX}}-git
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: pkg-${{env.ARCHITECTURE}}
           path: artifacts
@@ -469,7 +469,7 @@ jobs:
         run: |
           cp /usr/src/build-extra/mingit/root/etc/package-versions.txt artifacts/
       - name: Publish ${{matrix.artifact.name}}-${{env.ARCHITECTURE}}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         id: upload-artifact
         with:
           name: ${{matrix.artifact.name}}-${{env.ARCHITECTURE}}
@@ -538,7 +538,7 @@ jobs:
           "$env:ProgramFiles\Git\${{env.MINGW_PREFIX}}\bin" | Out-File -Encoding ascii -Append $env:GITHUB_PATH
       - name: Publish installer log
         if: matrix.artifact.name == 'installer' && (failure() || success())
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: installer.log
           path: installer.log
@@ -586,7 +586,7 @@ jobs:
             fs.mkdirSync('sha256sums')
             fs.writeFileSync('sha256sums/sha256sums.txt', Object.values(JSON.parse(process.env.SHA256SUMS)).join('\n'))
       - name: publish SHA-256 checksums
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: sha256sums
           path: sha256sums
