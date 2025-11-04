@@ -159,25 +159,9 @@ runs:
               draft: false,
               prerelease: isPrerelease,
               make_latest : !isPrerelease,
+              discussion_category_name: 'Announcements',
             }
           )
-
-          try {
-            await state.refreshToken()
-            console.log('Opening announcement (in Discussions)')
-            await updateRelease(
-              console,
-              state.accessToken,
-              '${{ inputs.owner }}',
-              '${{ inputs.repo }}',
-              release.id, {
-                discussion_category_name: 'Announcements',
-              }
-            )
-          } catch(e) {
-            console.log(`::warning::could not create Discussion`)
-            console.log(e)
-          }
           core.setOutput('token', state.accessToken)
     - name: Add a comment about the announcement email to the Pull Request
       if: inputs.pull-request-number != ''
