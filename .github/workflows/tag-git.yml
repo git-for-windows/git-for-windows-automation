@@ -1,5 +1,5 @@
 name: tag-git
-run-name: "Tag Git ${{ inputs.snapshot == 'true' && 'snapshot ' || '' }}at ${{ inputs.owner }}/${{ inputs.repo }}@${{ inputs.rev }}"
+run-name: "Tag ${{ inputs.mingit-only == 'true' && 'Min' || '' }}Git ${{ inputs.snapshot == 'true' && 'snapshot ' || '' }}at ${{ inputs.owner }}/${{ inputs.repo }}@${{ inputs.rev }}"
 
 on:
   workflow_dispatch:
@@ -11,22 +11,36 @@ on:
       owner:
         description: 'Optionally override from where to fetch the specified rev'
         required: true
-        default: git-for-windows
+        default:
       repo:
         description: 'Optionally override from where to fetch the specified rev'
         required: true
         default: git
+      release-branch:
+        description: 'The branch name to use for this release'
+        required: false
+        default: main
+      release-date:
+        description: 'Override the release date (defaults to today)'
+        required: false
       snapshot:
         description: 'A flag indicating whether this is a snapshot or a full Git for Windows release'
         required: true
         default: "true"
+      mingit-only:
+        description: 'A flag indicating whether this is a MinGit-only release (AKA MinGit backport)'
+        required: false
+        default: "false"
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
-  OWNER: "${{github.event.inputs.owner}}"
+  OWNER: "${{github.event.inputs.owner || github.repository_owner }}"
   REPO: "${{github.event.inputs.repo}}"
   REV: "${{github.event.inputs.rev}}"
+  RELEASE_BRANCH: "${{github.event.inputs.release-branch}}"
+  RELEASE_DATE: "${{github.event.inputs.release-date}}"
   SNAPSHOT: "${{github.event.inputs.snapshot}}"
+  MINGIT_ONLY: "${{github.event.inputs.mingit-only}}"
   CREATE_CHECK_RUN: "true"
   NODEJS_VERSION: 16
 
@@ -59,19 +73,38 @@ jobs:
           repo: ${{ env.REPO }}
           rev: ${{ env.REV }}
           check-run-name: "tag-git"
-          title: "Tag Git @${{ env.REV }}"
-          summary: "Tag Git @${{ env.REV }}"
+          title: "Tag ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git @${{ env.REV }}"
+          summary: "Tag ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git @${{ env.REV }}"
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
+      - name: configure token
+        if: github.repository_visibility == 'private'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs')
+            if (!fs.existsSync(process.env.HOME)) fs.mkdirSync(process.env.HOME)
+            const { callGit, getPushAuthorizationHeader } = require('./repository-updates.js')
+            for (const repo of ['build-extra', process.env.REPO]) {
+              const header = await getPushAuthorizationHeader(
+                console,
+                core.setSecret,
+                ${{ secrets.GH_APP_ID }},
+                ${{ toJSON(secrets.GH_APP_PRIVATE_KEY) }},
+                process.env.OWNER,
+                repo
+              )
+              console.log(callGit(['config', '--global', `http.https://github.com/${process.env.OWNER}/${repo}.extraHeader`, header]))
+            }
       - name: Configure user
-        run:
+        run: |
           USER_NAME="${{github.actor}}" &&
           USER_EMAIL="${{github.actor}}@users.noreply.github.com" &&
           git config --global user.name "$USER_NAME" &&
           git config --global user.email "$USER_EMAIL" &&
           echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >> $GITHUB_ENV
       - name: Clone build-extra
-        run: git clone --single-branch -b main https://github.com/git-for-windows/build-extra $RUNNER_TEMP/build-extra
+        run: git clone --single-branch -b "$RELEASE_BRANCH" https://github.com/$OWNER/build-extra $RUNNER_TEMP/build-extra
       - name: Prepare home directory for GPG signing
         if: env.GPGKEY != ''
         run: |
@@ -93,14 +126,27 @@ jobs:
           GPGKEY: ${{secrets.GPGKEY}}
         run: |
           git clone --bare --filter=blob:none https://github.com/git/git &&
-          git -C git.git fetch --tags --filter=blob:none "https://github.com/$OWNER/$REPO" main:refs/remotes/origin/main "$REV" &&
+          if test git-for-windows != "$OWNER"
+          then
+            git --git-dir=git.git fetch --tags --filter=blob:none https://github.com/git-for-windows/git
+          fi &&
+          git -C git.git fetch --tags --filter=blob:none "https://github.com/$OWNER/$REPO" "$RELEASE_BRANCH:refs/remotes/origin/$RELEASE_BRANCH" "$REV" &&
 
           sh -x "$GITHUB_WORKSPACE/update-scripts/tag-git.sh" \
             ${{ env.SNAPSHOT != 'true' && '--no-snapshot-version' || ''}} \
             --git-dir="git.git" \
             --build-extra-dir="$RUNNER_TEMP/build-extra" \
             --artifacts-dir="$GITHUB_WORKSPACE/bundle-artifacts" \
+            --release-branch="$RELEASE_BRANCH" \
+            --release-date="$RELEASE_DATE" \
+            $(test "$MINGIT_ONLY" = 'true' && echo '--mingit') \
             "$REV" &&
+
+          echo "$RELEASE_BRANCH" >bundle-artifacts/release-branch &&
+          if test true = "$MINGIT_ONLY"
+          then
+            >bundle-artifacts/mingit-only
+          fi &&
 
           echo "tag-name=$(cat bundle-artifacts/next_version)" >>$GITHUB_OUTPUT &&
           echo "Tag name: \`$(cat bundle-artifacts/next_version)\`" >>$GITHUB_STEP_SUMMARY
@@ -110,9 +156,9 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          title: "Tag Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
-          summary: "Tag Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
-          append-text: 'Tagged Git ${{ steps.generate.outputs.tag-name }}'
+          title: "Tag ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
+          summary: "Tag ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git ${{ steps.generate.outputs.tag-name }} @${{ env.REV }}"
+          append-text: "Tagged ${{ env.MINGIT_ONLY == 'true' && 'Min' || '' }}Git ${{ steps.generate.outputs.tag-name }}"
       - name: 'Publish Pipeline Artifact: bundle-artifacts'
         uses: actions/upload-artifact@v5
         with:
