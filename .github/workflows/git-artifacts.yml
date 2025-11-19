@@ -418,6 +418,14 @@ jobs:
             git -C $d fetch origin "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" &&
             git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
           fi
+      - name: Prepare some command-line options
+        run: |
+          # Build the `--pkg=<pkg>` list
+          printf 'PKG_OPTS=%s\n' \
+            "$(ls pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-*.tar.* |
+              sed '/\.sig$/d;/archimport/d;/cvs/d;/p4/d;/gitweb/d;s/^/--pkg=/' |
+              tr '\n' ' ')" >>$GITHUB_ENV &&
+          echo "VERSION_OPT=--version=$(cat pkg-"$ARCHITECTURE"/ver)" >>$GITHUB_ENV
       - name: Prepare home directory for code-signing
         env:
           CODESIGN_P12: ${{secrets.CODESIGN_P12}}
@@ -434,27 +442,24 @@ jobs:
           set -x
           eval /usr/src/build-extra/please.sh \
             make_installers_from_mingw_w64_git \
-            --version=$(cat pkg-$ARCHITECTURE/ver) \
+            $VERSION_OPT \
             -o artifacts \
             --${{matrix.artifact.name}}-mingit \
-            --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-[0-9]*.tar.xz \
-            --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-doc-html-[0-9]*.tar.xz
+            $PKG_OPTS
       - name: Build ${{env.ARCHITECTURE}} ${{matrix.artifact.name}}
         id: build
         run: |
           set -x
-          version=$(cat pkg-$ARCHITECTURE/ver) &&
           if test mingit-busybox = ${{matrix.artifact.name}}
           then
-            version="${version}-busybox"
+            VERSION_OPT="$VERSION_OPT-busybox"
           fi &&
           eval /usr/src/build-extra/please.sh \
             make_installers_from_mingw_w64_git \
-            --version=$version \
+            $VERSION_OPT \
             -o artifacts \
             --${{matrix.artifact.name}} \
-            --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-[0-9]*.tar.xz \
-            --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-doc-html-[0-9]*.tar.xz &&
+            $PKG_OPTS &&
           if test portable = '${{matrix.artifact.name}}' && test -n "$(git config alias.signtool)"
           then
             git signtool artifacts/PortableGit-*.exe
