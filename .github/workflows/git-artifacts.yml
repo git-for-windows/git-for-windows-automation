@@ -432,7 +432,13 @@ jobs:
         if: matrix.artifact.name == 'nuget'
         run: |
           set -x
-          eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$(cat pkg-$ARCHITECTURE/ver) -o artifacts --${{matrix.artifact.name}}-mingit --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-[0-9]*.tar.xz --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-doc-html-[0-9]*.tar.xz
+          eval /usr/src/build-extra/please.sh \
+            make_installers_from_mingw_w64_git \
+            --version=$(cat pkg-$ARCHITECTURE/ver) \
+            -o artifacts \
+            --${{matrix.artifact.name}}-mingit \
+            --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-[0-9]*.tar.xz \
+            --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-doc-html-[0-9]*.tar.xz
       - name: Build ${{env.ARCHITECTURE}} ${{matrix.artifact.name}}
         id: build
         run: |
@@ -442,7 +448,13 @@ jobs:
           then
             version="${version}-busybox"
           fi &&
-          eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$version -o artifacts --${{matrix.artifact.name}} --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-[0-9]*.tar.xz --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-doc-html-[0-9]*.tar.xz &&
+          eval /usr/src/build-extra/please.sh \
+            make_installers_from_mingw_w64_git \
+            --version=$version \
+            -o artifacts \
+            --${{matrix.artifact.name}} \
+            --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-[0-9]*.tar.xz \
+            --pkg=pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-git-doc-html-[0-9]*.tar.xz &&
           if test portable = '${{matrix.artifact.name}}' && test -n "$(git config alias.signtool)"
           then
             git signtool artifacts/PortableGit-*.exe
