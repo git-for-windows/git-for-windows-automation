@@ -418,6 +418,14 @@ jobs:
             git -C $d fetch origin "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" &&
             git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
           fi
+      - name: Prepare some command-line options
+        run: |
+          # Build the `--pkg=<pkg>` list
+          printf 'PKG_OPTS=%s\n' \
+            "$(ls pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-*.tar.* |
+              sed '/\.sig$/d;/archimport/d;/cvs/d;/p4/d;/gitweb/d;s/^/--pkg=/' |
+              tr '\n' ' ')" >>$GITHUB_ENV &&
+          echo "VERSION_OPT=--version=$(cat pkg-"$ARCHITECTURE"/ver)" >>$GITHUB_ENV
       - name: Prepare home directory for code-signing
         env:
           CODESIGN_P12: ${{secrets.CODESIGN_P12}}
@@ -432,17 +440,26 @@ jobs:
         if: matrix.artifact.name == 'nuget'
         run: |
           set -x
-          eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$(cat pkg-${{env.ARCHITECTURE}}/ver) -o artifacts --${{matrix.artifact.name}}-mingit --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-[0-9]*.tar.xz --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-doc-html-[0-9]*.tar.xz
+          eval /usr/src/build-extra/please.sh \
+            make_installers_from_mingw_w64_git \
+            $VERSION_OPT \
+            -o artifacts \
+            --${{matrix.artifact.name}}-mingit \
+            $PKG_OPTS
       - name: Build ${{env.ARCHITECTURE}} ${{matrix.artifact.name}}
         id: build
         run: |
           set -x
-          version=$(cat pkg-${{env.ARCHITECTURE}}/ver) &&
           if test mingit-busybox = ${{matrix.artifact.name}}
           then
-            version="${version}-busybox"
+            VERSION_OPT="$VERSION_OPT-busybox"
           fi &&
-          eval /usr/src/build-extra/please.sh make_installers_from_mingw_w64_git --version=$version -o artifacts --${{matrix.artifact.name}} --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-[0-9]*.tar.xz --pkg=pkg-${{env.ARCHITECTURE}}/${{env.MINGW_PACKAGE_PREFIX}}-git-doc-html-[0-9]*.tar.xz &&
+          eval /usr/src/build-extra/please.sh \
+            make_installers_from_mingw_w64_git \
+            $VERSION_OPT \
+            -o artifacts \
+            --${{matrix.artifact.name}} \
+            $PKG_OPTS &&
           if test portable = '${{matrix.artifact.name}}' && test -n "$(git config alias.signtool)"
           then
             git signtool artifacts/PortableGit-*.exe
@@ -459,11 +476,11 @@ jobs:
         run: |
           cp /usr/src/build-extra/installer/package-versions.txt artifacts/ &&
           a=$PWD/artifacts &&
-          p=$PWD/pkg-${{env.ARCHITECTURE}} &&
+          p=$PWD/pkg-$ARCHITECTURE &&
           (cd /usr/src/build-extra &&
           mkdir -p cached-source-packages &&
           cp "$p"/*-pdb* cached-source-packages/ &&
-          GIT_CONFIG_PARAMETERS="'windows.sdk${{env.SDK_REPO_ARCH}}.path='" ./please.sh bundle_pdbs --arch=${{env.ARCHITECTURE}} --directory="$a" installer/package-versions.txt)
+          GIT_CONFIG_PARAMETERS="'windows.sdk$SDK_REPO_ARCH.path='" ./please.sh bundle_pdbs --arch=$ARCHITECTURE --directory="$a" installer/package-versions.txt)
       - name: Copy package-versions (MinGit)
         if: matrix.artifact.name == 'mingit'
         run: |
