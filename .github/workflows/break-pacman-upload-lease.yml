@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Clone build-extra
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: git-for-windows/build-extra
       - name: Break the lease

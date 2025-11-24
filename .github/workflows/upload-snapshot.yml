@@ -29,7 +29,7 @@ jobs:
   upload-snapshot:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: download `bundle-artifacts`
         id: bundle-artifacts
         uses: actions/github-script@v8
@@ -242,7 +242,7 @@ jobs:
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           append-text: 'Created release at ${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}'
       - name: clone gh-pages
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: ${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}
           ref: gh-pages
