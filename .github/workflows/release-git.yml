@@ -107,13 +107,13 @@ jobs:
 
             core.setOutput('release-notes', result.releaseNotes)
       - name: Re-publish bundle-artifacts so the next job can easily use it
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: bundle-artifacts
           path: bundle-artifacts
       - name: Publish announcement mail as a stand-alone artifact
         id: announcement-email
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: announcement
           path: bundle-artifacts/announce-*

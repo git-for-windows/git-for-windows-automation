@@ -280,7 +280,7 @@ jobs:
           append-text: 'The build was successful!'
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: artifacts
           path: artifacts
