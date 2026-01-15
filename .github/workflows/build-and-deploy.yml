@@ -244,7 +244,7 @@ jobs:
                     x86_64,*) echo "mingw64";;
                     i686,*) echo "mingw32";;
                     ,mingw-w64-wintoast) echo "mingw32 mingw64 clangarm64";; # We're (cross-)compiling via Visual Studio
-                    ,mingw-w64-git-credential-manager) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built x86 artifacts and using them for all three platforms
+                    ,mingw-w64-git-credential-manager) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built artifacts for all three platforms
                     ,mingw-w64-git-lfs) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built artifacts from Git LFS' official release page
                     ,*) echo "mingw32 mingw64";;
                     esac
