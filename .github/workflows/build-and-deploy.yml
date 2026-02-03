@@ -126,6 +126,7 @@ jobs:
         run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra /usr/src/build-extra
 
       - name: update the SDK ("pacman -Syyu")
+        if: env.PACKAGE_TO_BUILD != 'mingw-w64-git'
         timeout-minutes: 20
         shell: powershell
         run: |
