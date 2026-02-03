@@ -235,7 +235,7 @@ jobs:
           esac &&
 
           {
-            test -f /usr/bin/git ||
+            test ! -f /usr/bin/git.exe || rm /usr/bin/git.exe
             printf '#!/bin/sh\n\nexec '$GIT_EXE' "$@"\n' >/usr/bin/git
           } &&
 
