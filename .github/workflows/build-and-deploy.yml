@@ -40,6 +40,7 @@ jobs:
     if: github.event.repository.owner.login == 'git-for-windows'
     runs-on: ${{ github.event.inputs.architecture == 'aarch64' && 'windows-11-arm' || 'windows-latest' }}
     steps:
+      - uses: mxschmitt/action-tmate/detached@v3
       - uses: actions/checkout@v6
 
         # Since we want to operate on _another_ repository, we sadly cannot use:
