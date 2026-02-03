@@ -2,6 +2,7 @@ name: build-and-deploy
 run-name: Build${{ inputs.build_only == '' && ' and deploy' || '' }} ${{ !startsWith(inputs.package, 'mingw-w64-') && inputs.repo != 'MSYS2-packages' && inputs.package != 'git-extra' && inputs.package != 'git-for-windows-keyring' && 'mingw-w64-' || '' }}${{ inputs.package }}${{ inputs.architecture && format(' ({0})', inputs.architecture) || '' }}
 
 on:
+  push:
   workflow_dispatch:
     inputs:
       package:
@@ -24,12 +25,12 @@ on:
         required: false
 
 env:
-  PACKAGE_TO_BUILD: "${{ github.event.inputs.package }}"
-  BUILD_ONLY: "${{ github.event.inputs.build_only }}"
+  PACKAGE_TO_BUILD: mingw-w64-git
+  BUILD_ONLY:
   OWNER: "git-for-windows"
-  REPO: "${{ github.event.inputs.repo }}"
-  REF: "${{ github.event.inputs.ref }}"
-  ARCHITECTURE: "${{ github.event.inputs.architecture }}"
+  REPO: MINGW-packages
+  REF: 52bfcf05d90511c71fc949d7afea50af65a8f563
+  ARCHITECTURE:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
   ACTOR: "${{ github.event.inputs.actor || github.triggering_actor }}"
   CREATE_CHECK_RUN: true
