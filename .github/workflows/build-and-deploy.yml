@@ -236,7 +236,10 @@ jobs:
 
           {
             test ! -f /usr/bin/git.exe || rm /usr/bin/git.exe
-            printf '#!/bin/sh\n\nexec '$GIT_EXE' "$@"\n' >/usr/bin/git
+            printf '#!/bin/sh\n\nexport GIT_EXEC_PATH=%s\nPATH=%s:$GIT_EXEC_PATH:$PATH\nexec %s "$@"\n' \
+              "${GIT_EXE%/bin/git.exe}/libexec/git-core" \
+              "${GIT_EXE%/git.exe}" \
+              "$GIT_EXE" >/usr/bin/git
           } &&
 
           MINGW_ARCHS_TO_BUILD=$(
