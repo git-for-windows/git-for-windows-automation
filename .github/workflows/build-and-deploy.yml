@@ -235,8 +235,11 @@ jobs:
           esac &&
 
           {
-            test -f /usr/bin/git ||
-            printf '#!/bin/sh\n\nexec '$GIT_EXE' "$@"\n' >/usr/bin/git
+            test ! -f /usr/bin/git.exe || rm /usr/bin/git.exe
+            printf '#!/bin/sh\n\nexport GIT_EXEC_PATH=%s\nPATH=%s:$GIT_EXEC_PATH:$PATH\nexec %s "$@"\n' \
+              "${GIT_EXE%/bin/git.exe}/libexec/git-core" \
+              "${GIT_EXE%/git.exe}" \
+              "$GIT_EXE" >/usr/bin/git
           } &&
 
           MINGW_ARCHS_TO_BUILD=$(
@@ -252,7 +255,8 @@ jobs:
           )
 
           cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
-          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH=$MINGW_ARCHS_TO_BUILD $MAKEPKG -s --noconfirm &&
+          case "$PACKAGE_TO_BUILD" in mingw-w64-git) DASH_S=;; *) DASH_S=-s;; esac &&
+          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH=$MINGW_ARCHS_TO_BUILD $MAKEPKG $DASH_S --noconfirm &&
           cp *.pkg.tar* "$dir/" &&
 
           if test -n "$BUILD_SRC"
