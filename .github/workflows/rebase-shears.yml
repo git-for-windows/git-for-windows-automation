@@ -1,0 +1,51 @@
+name: Merging-Rebase Automation
+run-name: Rebase the shears/seen branch
+
+on:
+  workflow_dispatch:
+
+jobs:
+  rebase:
+    if: github.event.repository.owner.login == 'git-for-windows'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout automation repo
+        uses: actions/checkout@v4
+        with:
+          path: automation
+
+      - name: Clone git-for-windows/git
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/git
+          fetch-depth: 0
+          path: git
+
+      - name: Configure git
+        working-directory: git
+        run: |
+          git config user.name "Git for Windows Build Agent"
+          git config user.email "ci@git-for-windows.build"
+
+      - name: Add upstream remote
+        working-directory: git
+        run: |
+          git remote add upstream https://github.com/git/git.git || true
+          git fetch upstream --no-tags
+
+      - name: Run rebase
+        working-directory: git
+        run: |
+          BRANCH=seen
+          UPSTREAM=upstream/$BRANCH
+
+          echo "::group::Fetching shears/$BRANCH"
+          git fetch origin "shears/$BRANCH"
+          echo "::endgroup::"
+
+          if test 0 = "$(git rev-list --count "origin/shears/$BRANCH..$UPSTREAM")"; then
+            echo "::notice::Nothing to do for shears/$BRANCH: $UPSTREAM has no new commits"
+            exit 0
+          fi
+
+          "$GITHUB_WORKSPACE/automation/rebase-branch.sh" "shears/$BRANCH" "$UPSTREAM"
