@@ -14,7 +14,7 @@
 # The script creates a worktree, rebases the branch, and leaves the result
 # ready for inspection or push.
 
-set -e
+set -ex
 
 die () {
 	echo "error: $*" >&2
