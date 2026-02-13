@@ -38,6 +38,7 @@ git rev-parse --verify "$UPSTREAM_BRANCH" >/dev/null 2>&1 ||
 
 # Set up worktree
 WORKTREE_DIR="$PWD/rebase-worktree-${SHEARS_BRANCH##*/}"
+REPORT_FILE="$WORKTREE_DIR/conflict-report.md"
 
 echo "::group::Setup worktree"
 echo "Creating worktree at $WORKTREE_DIR..."
@@ -64,6 +65,17 @@ if test "$UPSTREAM_AHEAD" -eq 0; then
 	echo "::notice::Nothing to rebase: upstream has no new commits"
 	exit 0
 fi
+
+# Save original values for the range-diff (before any future sync/adoption)
+ORIG_OLD_MARKER=$OLD_MARKER
+ORIG_TIP_OID=$TIP_OID
+
+# Initialize report
+cat >"$REPORT_FILE" <<EOF
+## Rebase Summary: ${SHEARS_BRANCH##*/}
+
+**From**: $(git show --no-patch --format='[%h](https://github.com/git-for-windows/git/commit/%H) (%s, %as)' "$TIP_OID") ([$(git rev-parse --short "$OLD_MARKER")..$(git rev-parse --short "$TIP_OID")](https://github.com/git-for-windows/git/compare/$(git rev-parse "$OLD_MARKER")...$(git rev-parse "$TIP_OID")))
+EOF
 
 # Create new marker with two parents: upstream + origin/main
 GFW_MAIN_BRANCH="origin/main"
@@ -94,5 +106,30 @@ PARENT_COUNT=$(git rev-list --parents -1 "$MARKER_IN_RESULT" | wc -w)
 test "$PARENT_COUNT" -eq 3 || # commit itself + 2 parents
 	die "Marker should have 2 parents, found $((PARENT_COUNT - 1))"
 
+# Generate range-diff comparing original patches with rebased patches
+RANGE_DIFF=$(git range-diff "$ORIG_OLD_MARKER..$ORIG_TIP_OID" \
+	"$MARKER_IN_RESULT..HEAD" || echo "Unable to generate range-diff")
+
+# Finalize report
+NEW_TIP=$(git rev-parse HEAD)
+cat >>"$REPORT_FILE" <<EOF
+**To**: $(git show --no-patch --format='[%h](https://github.com/git-for-windows/git/commit/%H) (%s, %as)' "$NEW_TIP") ([$(git rev-parse --short "$MARKER_IN_RESULT")..$(git rev-parse --short "$NEW_TIP")](https://github.com/git-for-windows/git/compare/$(git rev-parse "$MARKER_IN_RESULT")...$NEW_TIP))
+
+<details>
+<summary>Range-diff (click to expand)</summary>
+
+\`\`\`
+$RANGE_DIFF
+\`\`\`
+
+</details>
+
+EOF
+
 echo "Rebase completed: $(git rev-parse --short HEAD)"
-echo "To push: git push --force origin $(git rev-parse HEAD):$SHEARS_BRANCH"
+cat "$REPORT_FILE"
+
+# Write to GitHub Actions job summary
+if test -n "$GITHUB_STEP_SUMMARY"; then
+	cat "$REPORT_FILE" >>"$GITHUB_STEP_SUMMARY"
+fi
