@@ -55,8 +55,8 @@ jobs:
             *)    UPSTREAM="upstream/$BRANCH" ;;
           esac
 
-          echo "::group::Fetching shears/$BRANCH"
-          git fetch origin "shears/$BRANCH"
+          echo "::group::Fetching shears branches"
+          git fetch origin shears/seen shears/next shears/main shears/maint
           echo "::endgroup::"
 
           if test 0 = "$(git rev-list --count "origin/shears/$BRANCH..$UPSTREAM")"; then
