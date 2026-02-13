@@ -1,8 +1,21 @@
 name: Merging-Rebase Automation
-run-name: Rebase the shears/seen branch
+run-name: Rebase the shears/${{ inputs.branch }} branch
 
 on:
   workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Shears branch to update (seen, next, main, or maint)'
+        required: true
+        type: choice
+        options:
+          - seen
+          - next
+          - main
+          - maint
+
+env:
+  BRANCH: ${{ inputs.branch || 'seen' }}
 
 jobs:
   rebase:
@@ -37,8 +50,10 @@ jobs:
         id: rebase
         working-directory: git
         run: |
-          BRANCH=seen
-          UPSTREAM=upstream/$BRANCH
+          case "$BRANCH" in
+            main) UPSTREAM="upstream/master" ;;
+            *)    UPSTREAM="upstream/$BRANCH" ;;
+          esac
 
           echo "::group::Fetching shears/$BRANCH"
           git fetch origin "shears/$BRANCH"
