@@ -34,6 +34,7 @@ jobs:
           git fetch upstream --no-tags
 
       - name: Run rebase
+        id: rebase
         working-directory: git
         run: |
           BRANCH=seen
@@ -48,4 +49,38 @@ jobs:
             exit 0
           fi
 
-          "$GITHUB_WORKSPACE/automation/rebase-branch.sh" "shears/$BRANCH" "$UPSTREAM"
+          if "$GITHUB_WORKSPACE/automation/rebase-branch.sh" "shears/$BRANCH" "$UPSTREAM"; then
+            echo "to_push=shears/$BRANCH" >>"$GITHUB_OUTPUT"
+          else
+            echo "failed_worktree=$PWD/rebase-worktree-$BRANCH" >>"$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Create bundle
+        if: always() && steps.rebase.outputs.to_push
+        working-directory: git
+        run: |
+          mkdir -p upload
+          branch="${{ steps.rebase.outputs.to_push }}"
+          git bundle create "upload/${branch##*/}.bundle" "$branch" ^origin/main
+
+      - name: Create worktree archive on failure
+        if: always() && steps.rebase.outputs.failed_worktree
+        run: |
+          worktree="${{ steps.rebase.outputs.failed_worktree }}"
+          mkdir -p git/upload
+          name=${worktree##*rebase-worktree-}
+          rebase_head_arg=
+          git -C "$worktree" rev-parse --verify REBASE_HEAD >/dev/null 2>&1 &&
+            rebase_head_arg=REBASE_HEAD
+          git -C "$worktree" bundle create "$GITHUB_WORKSPACE/git/upload/$name.bundle" \
+            HEAD $rebase_head_arg --all ^origin/main
+          tar -czf "git/upload/$name.tar.gz" -C "$worktree" .
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: rebase-result
+          path: git/upload/
+          if-no-files-found: warn
