@@ -44,6 +44,7 @@ find_correspondence () {
 }
 
 # Run a rebase, automatically skipping commits that match upstream exactly
+# and trying to reuse sibling resolutions via merge-tree
 # Usage: run_rebase <rebase-args...>
 run_rebase () {
 	if GIT_EDITOR=: git rebase "$@" 2>&1; then
@@ -65,6 +66,21 @@ run_rebase () {
 				break
 			fi
 			continue
+		fi
+
+		# Try sibling correspondence (reuse their resolution via merge-tree)
+		if test -n "$SIBLING_MAP" &&
+		   corresponding_oid=$(find_correspondence "$rebase_head_oid" "$SIBLING_MAP"); then
+			echo "::notice::Found sibling correspondence: $corresponding_oid for $rebase_head_oneline"
+			if result_tree=$(git merge-tree --write-tree HEAD^ REBASE_HEAD "$corresponding_oid") &&
+			   git read-tree --reset -u "$result_tree" &&
+			   git commit -C REBASE_HEAD; then
+				echo "::notice::Used sibling resolution from: $corresponding_oid"
+				if GIT_EDITOR=: git rebase --continue; then
+					break
+				fi
+				continue
+			fi
 		fi
 
 		die "Conflict requires manual resolution: $rebase_head_oneline"
@@ -165,6 +181,24 @@ EOF
 # Generate upstream correspondence map (our commits vs upstream, for trivial skips)
 UPSTREAM_MAP="$WORKTREE_DIR/upstream-correspondence.map"
 generate_correspondence_map "$OLD_MARKER..$TIP_OID" "$OLD_UPSTREAM..$NEW_UPSTREAM" "$UPSTREAM_MAP"
+
+# Generate sibling correspondence map (seen→next→main→maint hierarchy)
+# When rebasing main, the next branch may already have resolved the same conflicts;
+# when rebasing next, the seen branch is the sibling.
+SIBLING_MAP=""
+case "${SHEARS_BRANCH##*/}" in
+maint) SIBLING_BRANCH="origin/shears/main" ;;
+main) SIBLING_BRANCH="origin/shears/next" ;;
+next) SIBLING_BRANCH="origin/shears/seen" ;;
+*)    SIBLING_BRANCH="" ;;
+esac
+if test -n "$SIBLING_BRANCH" && git rev-parse --verify "$SIBLING_BRANCH" >/dev/null 2>&1; then
+	SIBLING_MARKER=$(git rev-parse "$SIBLING_BRANCH^{/Start.the.merging-rebase}" 2>/dev/null) || SIBLING_MARKER=""
+	if test -n "$SIBLING_MARKER"; then
+		SIBLING_MAP="$WORKTREE_DIR/sibling-correspondence.map"
+		generate_correspondence_map "$OLD_MARKER..$TIP_OID" "$SIBLING_MARKER..$SIBLING_BRANCH" "$SIBLING_MAP"
+	fi
+fi
 
 # Create new marker with two parents: upstream + origin/main
 echo "::group::Creating marker and running rebase"
