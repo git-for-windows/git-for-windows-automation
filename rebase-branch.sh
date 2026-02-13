@@ -25,10 +25,50 @@ usage () {
 	die "usage: $0 <shears-branch> <upstream-branch>"
 }
 
-# Run a rebase, failing on conflicts (for now)
+# Generate a correspondence map between two commit ranges using range-diff
+# Usage: generate_correspondence_map <our-range> <their-range> <output-file>
+generate_correspondence_map () {
+	git -c core.abbrev=false range-diff --no-color "$1" "$2" >"$3" || :
+}
+
+# Find a corresponding commit in a map file
+# Usage: find_correspondence <oid> <map-file>
+# Returns: corresponding OID on stdout, exit 0 if found, 1 if not
+# Sets CORRESPONDENCE_TYPE to "=" (identical) or "!" (modified)
+find_correspondence () {
+	test -s "$2" || return 1
+	match=$(sed -n "s/^[0-9]*: $1 \([!=]\) [0-9]*: \([0-9a-f]*\).*/\1 \2/p" "$2" | head -1)
+	test -n "$match" || return 1
+	CORRESPONDENCE_TYPE=${match% *}
+	echo "${match#* }"
+}
+
+# Run a rebase, automatically skipping commits that match upstream exactly
 # Usage: run_rebase <rebase-args...>
 run_rebase () {
-	GIT_EDITOR=: git rebase "$@"
+	if GIT_EDITOR=: git rebase "$@" 2>&1; then
+		return
+	fi
+
+	REBASE_MERGE_DIR=$(git rev-parse --git-path rebase-merge)
+	while test -d "$REBASE_MERGE_DIR"; do
+		git rev-parse --verify REBASE_HEAD >/dev/null 2>&1 ||
+			die "rebase metadata exists but REBASE_HEAD is missing"
+		rebase_head_oid=$(git rev-parse REBASE_HEAD)
+		rebase_head_oneline=$(git show --no-patch --format='%h %s' REBASE_HEAD)
+
+		# Check upstream correspondence (= means identical, skip it)
+		if corresponding_oid=$(find_correspondence "$rebase_head_oid" "$UPSTREAM_MAP") &&
+		   test "$CORRESPONDENCE_TYPE" = "="; then
+			echo "::notice::Trivial skip (upstream: $corresponding_oid): $rebase_head_oneline"
+			if GIT_EDITOR=: git rebase --skip; then
+				break
+			fi
+			continue
+		fi
+
+		die "Conflict requires manual resolution: $rebase_head_oneline"
+	done
 }
 
 # Parse arguments
@@ -121,6 +161,10 @@ cat >"$REPORT_FILE" <<EOF
 
 **From**: $(git show --no-patch --format='[%h](https://github.com/git-for-windows/git/commit/%H) (%s, %as)' "$TIP_OID") ([$(git rev-parse --short "$OLD_MARKER")..$(git rev-parse --short "$TIP_OID")](https://github.com/git-for-windows/git/compare/$(git rev-parse "$OLD_MARKER")...$(git rev-parse "$TIP_OID")))
 EOF
+
+# Generate upstream correspondence map (our commits vs upstream, for trivial skips)
+UPSTREAM_MAP="$WORKTREE_DIR/upstream-correspondence.map"
+generate_correspondence_map "$OLD_MARKER..$TIP_OID" "$OLD_UPSTREAM..$NEW_UPSTREAM" "$UPSTREAM_MAP"
 
 # Create new marker with two parents: upstream + origin/main
 echo "::group::Creating marker and running rebase"
