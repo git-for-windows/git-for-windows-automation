@@ -68,20 +68,21 @@ run_rebase () {
 			continue
 		fi
 
-		# Try sibling correspondence (reuse their resolution via merge-tree)
-		if test -n "$SIBLING_MAP" &&
-		   corresponding_oid=$(find_correspondence "$rebase_head_oid" "$SIBLING_MAP"); then
-			echo "::notice::Found sibling correspondence: $corresponding_oid for $rebase_head_oneline"
+		# Try previous/sibling correspondences (reuse their resolution via merge-tree)
+		for map_file in "$PREVIOUS_MAP" "$SIBLING_MAP"; do
+			test -s "$map_file" || continue
+			corresponding_oid=$(find_correspondence "$rebase_head_oid" "$map_file") || continue
+			echo "::notice::Found correspondence: $corresponding_oid for $rebase_head_oneline"
 			if result_tree=$(git merge-tree --write-tree HEAD^ REBASE_HEAD "$corresponding_oid") &&
 			   git read-tree --reset -u "$result_tree" &&
 			   git commit -C REBASE_HEAD; then
-				echo "::notice::Used sibling resolution from: $corresponding_oid"
+				echo "::notice::Used resolution from: $corresponding_oid"
 				if GIT_EDITOR=: git rebase --continue; then
-					break
+					break 2
 				fi
-				continue
+				continue 2
 			fi
-		fi
+		done
 
 		die "Conflict requires manual resolution: $rebase_head_oneline"
 	done
@@ -130,9 +131,15 @@ GFW_MAIN_BRANCH="origin/main"
 BEHIND_COUNT=$(git rev-list --count "$TIP_OID..$GFW_MAIN_BRANCH") ||
 	die "Could not determine how far behind $GFW_MAIN_BRANCH we are"
 
+PREVIOUS_MAP=""
+
 if test "$BEHIND_COUNT" -gt 0; then
 	if git rev-list --grep='^Start the merging-rebase' "$TIP_OID..$GFW_MAIN_BRANCH" | grep -q .; then
-		# origin/main was rebased — adopt its state directly
+		# origin/main was rebased — generate correspondence before adopting
+		PREVIOUS_MAP="$WORKTREE_DIR/previous-correspondence.map"
+		MAIN_MARKER=$(git rev-parse "$GFW_MAIN_BRANCH^{/Start.the.merging-rebase}")
+		generate_correspondence_map "$MAIN_MARKER..$GFW_MAIN_BRANCH" "$OLD_MARKER..$TIP_OID" "$PREVIOUS_MAP"
+
 		echo "::notice::origin/main was rebased, adopting its $BEHIND_COUNT commits"
 		git checkout -B "$SHEARS_BRANCH" "$GFW_MAIN_BRANCH" ||
 			die "Could not adopt $GFW_MAIN_BRANCH"
