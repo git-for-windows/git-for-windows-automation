@@ -59,16 +59,45 @@ echo "::notice::Old upstream: $OLD_UPSTREAM"
 echo "::notice::New upstream: $NEW_UPSTREAM"
 echo "::notice::Current tip: $TIP_OID"
 
-# Check if there's anything to rebase
-UPSTREAM_AHEAD=$(git rev-list --count "$OLD_UPSTREAM..$NEW_UPSTREAM")
-if test "$UPSTREAM_AHEAD" -eq 0; then
-	echo "::notice::Nothing to rebase: upstream has no new commits"
-	exit 0
-fi
-
-# Save original values for the range-diff (before any future sync/adoption)
+# Save original values for the range-diff (before any sync/adoption)
 ORIG_OLD_MARKER=$OLD_MARKER
 ORIG_TIP_OID=$TIP_OID
+
+# Sync with origin/main if it has commits we don't have yet
+GFW_MAIN_BRANCH="origin/main"
+BEHIND_COUNT=$(git rev-list --count "$TIP_OID..$GFW_MAIN_BRANCH") ||
+	die "Could not determine how far behind $GFW_MAIN_BRANCH we are"
+
+if test "$BEHIND_COUNT" -gt 0; then
+	if git rev-list --grep='^Start the merging-rebase' "$TIP_OID..$GFW_MAIN_BRANCH" | grep -q .; then
+		# origin/main was rebased — adopt its state directly
+		echo "::notice::origin/main was rebased, adopting its $BEHIND_COUNT commits"
+		git checkout -B "$SHEARS_BRANCH" "$GFW_MAIN_BRANCH" ||
+			die "Could not adopt $GFW_MAIN_BRANCH"
+		TIP_OID=$(git rev-parse HEAD)
+		OLD_MARKER=$(git rev-parse "HEAD^{/Start.the.merging-rebase}")
+		OLD_UPSTREAM=$(git rev-parse "$OLD_MARKER^1")
+	else
+		echo "::notice::Syncing $BEHIND_COUNT commits from $GFW_MAIN_BRANCH"
+		echo "::group::Rebasing $BEHIND_COUNT commits from $GFW_MAIN_BRANCH on top of $SHEARS_BRANCH"
+		GIT_EDITOR=: git rebase -r HEAD "$GFW_MAIN_BRANCH"
+		git checkout -B "$SHEARS_BRANCH" ||
+			die "Could not update $SHEARS_BRANCH"
+		TIP_OID=$(git rev-parse HEAD)
+		echo "::endgroup::"
+	fi
+fi
+
+# Check if there's anything to rebase after syncing
+UPSTREAM_AHEAD=$(git rev-list --count "$OLD_UPSTREAM..$NEW_UPSTREAM")
+if test "$UPSTREAM_AHEAD" -eq 0; then
+	echo "::notice::Nothing to rebase: upstream has no new commits since $OLD_UPSTREAM"
+	# Still need to push if we synced
+	if test "$BEHIND_COUNT" -gt 0 && test -n "$GITHUB_OUTPUT"; then
+		echo "to_push=$SHEARS_BRANCH" >>"$GITHUB_OUTPUT"
+	fi
+	exit 0
+fi
 
 # Initialize report
 cat >"$REPORT_FILE" <<EOF
@@ -78,7 +107,6 @@ cat >"$REPORT_FILE" <<EOF
 EOF
 
 # Create new marker with two parents: upstream + origin/main
-GFW_MAIN_BRANCH="origin/main"
 echo "::group::Creating marker and running rebase"
 MARKER_OID=$(git commit-tree "$UPSTREAM_BRANCH^{tree}" \
 	-p "$UPSTREAM_BRANCH" \
