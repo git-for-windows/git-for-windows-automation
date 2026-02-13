@@ -64,7 +64,7 @@ jobs:
             exit 0
           fi
 
-          if "$GITHUB_WORKSPACE/automation/rebase-branch.sh" "shears/$BRANCH" "$UPSTREAM"; then
+          if "$GITHUB_WORKSPACE/automation/rebase-branch.sh" "shears/$BRANCH" "$UPSTREAM" "$GITHUB_WORKSPACE/automation"; then
             echo "to_push=shears/$BRANCH" >>"$GITHUB_OUTPUT"
           else
             echo "failed_worktree=$PWD/rebase-worktree-$BRANCH" >>"$GITHUB_OUTPUT"

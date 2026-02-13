@@ -2,11 +2,12 @@
 #
 # Rebase a shears/* branch onto a new upstream base.
 #
-# Usage: rebase-branch.sh <shears-branch> <upstream-branch>
+# Usage: rebase-branch.sh <shears-branch> <upstream-branch> [<scripts-dir>]
 #
 # Parameters:
 #   shears-branch   - The branch to rebase (e.g., shears/seen)
 #   upstream-branch - The upstream branch to rebase onto (e.g., upstream/seen)
+#   scripts-dir     - Optional: directory containing this script and agents
 #
 # Preconditions:
 #   - Must be run from a git repository with both branches fetched
@@ -92,6 +93,7 @@ run_rebase () {
 test $# -ge 2 || usage
 SHEARS_BRANCH=$1
 UPSTREAM_BRANCH=$2
+SCRIPTS_DIR=${3:-$(cd "$(dirname "$0")" && pwd)}
 
 # Validate branches exist
 git rev-parse --verify "origin/$SHEARS_BRANCH" >/dev/null 2>&1 ||
