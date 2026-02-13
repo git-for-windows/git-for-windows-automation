@@ -25,6 +25,12 @@ usage () {
 	die "usage: $0 <shears-branch> <upstream-branch>"
 }
 
+# Run a rebase, failing on conflicts (for now)
+# Usage: run_rebase <rebase-args...>
+run_rebase () {
+	GIT_EDITOR=: git rebase "$@"
+}
+
 # Parse arguments
 test $# -ge 2 || usage
 SHEARS_BRANCH=$1
@@ -80,7 +86,7 @@ if test "$BEHIND_COUNT" -gt 0; then
 	else
 		echo "::notice::Syncing $BEHIND_COUNT commits from $GFW_MAIN_BRANCH"
 		echo "::group::Rebasing $BEHIND_COUNT commits from $GFW_MAIN_BRANCH on top of $SHEARS_BRANCH"
-		GIT_EDITOR=: git rebase -r HEAD "$GFW_MAIN_BRANCH"
+		run_rebase -r HEAD "$GFW_MAIN_BRANCH"
 		git checkout -B "$SHEARS_BRANCH" ||
 			die "Could not update $SHEARS_BRANCH"
 		TIP_OID=$(git rev-parse HEAD)
@@ -133,7 +139,7 @@ git replace --graft "$MARKER_OID" "$UPSTREAM_BRANCH" ||
 REBASE_TODO_COUNT=$(git rev-list --count "$OLD_MARKER..$TIP_OID")
 echo "Rebasing $REBASE_TODO_COUNT commits onto $MARKER_OID"
 
-GIT_EDITOR=: git rebase -r --onto "$MARKER_OID" "$OLD_MARKER"
+run_rebase -r --onto "$MARKER_OID" "$OLD_MARKER"
 echo "::endgroup::"
 
 # Clean up graft and verify
