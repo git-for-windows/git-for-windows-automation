@@ -70,10 +70,12 @@ run_rebase () {
 		fi
 
 		# Try previous/sibling correspondences (reuse their resolution via merge-tree)
+		tried_correspondences=""
 		for map_file in "$PREVIOUS_MAP" "$SIBLING_MAP"; do
 			test -s "$map_file" || continue
 			corresponding_oid=$(find_correspondence "$rebase_head_oid" "$map_file") || continue
 			echo "::notice::Found correspondence: $corresponding_oid for $rebase_head_oneline"
+			tried_correspondences="${tried_correspondences:+$tried_correspondences }$corresponding_oid"
 			if result_tree=$(git merge-tree --write-tree HEAD^ REBASE_HEAD "$corresponding_oid") &&
 			   git read-tree --reset -u "$result_tree" &&
 			   git commit -C REBASE_HEAD; then
@@ -86,7 +88,7 @@ run_rebase () {
 		done
 
 		# Non-trivial conflict — invoke AI
-		if resolve_conflict_with_ai; then
+		if resolve_conflict_with_ai "$tried_correspondences"; then
 			break
 		fi
 	done
@@ -145,8 +147,9 @@ run_copilot () {
 }
 
 # Resolve a single conflict with AI
-# Usage: resolve_conflict_with_ai
+# Usage: resolve_conflict_with_ai [<tried-correspondences>]
 resolve_conflict_with_ai () {
+	tried_correspondences=$1
 	conflicting_files=$(git diff --name-only --diff-filter=U)
 	echo "Conflict detected in: $conflicting_files"
 
@@ -155,6 +158,15 @@ resolve_conflict_with_ai () {
 	for file in $conflicting_files; do
 		log_l_commands="${log_l_commands}$(generate_log_l_commands "$file")"
 	done
+
+	# Add context about tried correspondences
+	correspondence_context=""
+	if test -n "$tried_correspondences"; then
+		correspondence_context="
+Note: We found corresponding commits from previous/sibling rebases but they did not apply cleanly:
+$tried_correspondences
+You may want to examine these with 'cd \"$WORKTREE_DIR\" && git show <oid>' for hints on how to resolve."
+	fi
 
 	prompt="Resolve merge conflict during rebase of commit REBASE_HEAD.
 
@@ -165,7 +177,7 @@ IMPORTANT:
 - Read and edit files only inside: $WORKTREE_DIR
 
 Conflicting files: $conflicting_files
-
+$correspondence_context
 Investigation commands:
 - See the patch: cd \"$WORKTREE_DIR\" && git show REBASE_HEAD
 - See conflict markers: view \"$WORKTREE_DIR/<file>\"
