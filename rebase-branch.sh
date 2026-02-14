@@ -92,6 +92,23 @@ run_rebase () {
 	done
 }
 
+# Generate git log -L commands for the conflicting hunks in a file
+# Usage: generate_log_l_commands <file>
+# Outputs one command per hunk to stdout
+generate_log_l_commands () {
+	git diff -- "$1" | grep '^@@ ' | while IFS= read -r hunk_header; do
+		line_range=$(echo "$hunk_header" | sed -n 's/^@@ -[0-9,]* +\([0-9]*\),*\([0-9]*\) @@.*/\1 \2/p')
+		if test -n "$line_range"; then
+			start=${line_range% *}
+			count=${line_range#* }
+			count=${count:-1}
+			end=$((start + count - 1))
+			if test "$end" -lt "$start"; then end=$start; fi
+			echo "cd \"$WORKTREE_DIR\" && git log -L $start,$end:$1 REBASE_HEAD..HEAD"
+		fi
+	done
+}
+
 # Run copilot with standard tool permissions
 # Usage: run_copilot <prompt>
 # Outputs to stdout (also tees to stderr for logging)
@@ -133,6 +150,12 @@ resolve_conflict_with_ai () {
 	conflicting_files=$(git diff --name-only --diff-filter=U)
 	echo "Conflict detected in: $conflicting_files"
 
+	# Generate git log -L commands for each conflicting file
+	log_l_commands=""
+	for file in $conflicting_files; do
+		log_l_commands="${log_l_commands}$(generate_log_l_commands "$file")"
+	done
+
 	prompt="Resolve merge conflict during rebase of commit REBASE_HEAD.
 
 IMPORTANT:
@@ -147,7 +170,9 @@ Investigation commands:
 - See the patch: cd \"$WORKTREE_DIR\" && git show REBASE_HEAD
 - See conflict markers: view \"$WORKTREE_DIR/<file>\"
 - Check if upstreamed: cd \"$WORKTREE_DIR\" && git range-diff REBASE_HEAD^! REBASE_HEAD..
-
+- Try higher creation factor: cd \"$WORKTREE_DIR\" && git range-diff --creation-factor=200 REBASE_HEAD^! REBASE_HEAD..
+- See upstream changes to conflicting lines:
+${log_l_commands}
 Decision rules:
 1. If range-diff shows correspondence (e.g. '1: abc = 1: def'), output: skip <upstream-oid>
 2. If patch needs surgical resolution, edit files, stage with 'cd \"$WORKTREE_DIR\" && git add', output: continue
