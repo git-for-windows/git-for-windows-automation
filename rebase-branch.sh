@@ -223,6 +223,75 @@ Your FINAL line must be exactly: skip <oid>, continue, or fail"
 		;;
 	continue)
 		echo "::notice::Resolved conflict surgically: $rebase_head_oneline"
+
+		# Verify build before committing the resolution
+		echo "::group::Verifying build"
+		{ make -j$(nproc) 2>&1; echo $? >make.exitcode; } | tee make.log
+		if test "$(cat make.exitcode)" != 0; then
+			echo "::endgroup::"
+			echo "::warning::Build failed after conflict resolution, giving AI another chance"
+
+			retry_prompt="Build failed after your conflict resolution. Fix the compilation error.
+
+IMPORTANT:
+- The target repository/worktree is: $WORKTREE_DIR
+- For each shell command, start with: cd \"$WORKTREE_DIR\" &&
+- Read and edit files only inside: $WORKTREE_DIR
+
+Files with conflicts: $(git diff --name-only --diff-filter=U)
+
+Investigation:
+- See full build log: view \"$WORKTREE_DIR/make.log\"
+- See your changes: cd \"$WORKTREE_DIR\" && git diff
+- Edit files to fix, then: cd \"$WORKTREE_DIR\" && git add <file>
+
+Build errors (last 15 lines):
+$(tail -15 make.log)
+
+Output 'continue' when fixed, or 'fail' if you cannot fix it.
+Your FINAL line must be exactly: continue or fail"
+
+			retry_output=$(run_copilot "$retry_prompt")
+			retry_exit_code=$?
+
+			echo "::group::AI Retry Output"
+			echo "$retry_output"
+			if test $retry_exit_code -ne 0; then
+				echo "::warning::Copilot exited with code $retry_exit_code"
+			fi
+			echo "::endgroup::"
+
+			retry_decision=$(echo "$retry_output" | sed -n '/^continue$/p; /^fail$/p' | tail -1)
+
+			if test "$retry_decision" != "continue"; then
+				echo "::error::AI could not fix build failure: $rebase_head_oneline"
+				exit 2
+			fi
+
+			# Verify build again
+			echo "::group::Verifying build (retry)"
+			{ make -j$(nproc) 2>&1; echo $? >make.exitcode; } | tee make.log
+			if test "$(cat make.exitcode)" != 0; then
+				echo "::endgroup::"
+				echo "::error::Build still fails after retry"
+				cat >>"$REPORT_FILE" <<-BUILD_FAIL_EOF
+
+				#### BUILD FAILED: $(git show --no-patch --format=reference REBASE_HEAD)
+
+				Build failed after conflict resolution. Last 50 lines:
+
+				\`\`\`
+				$(tail -50 make.log)
+				\`\`\`
+
+				BUILD_FAIL_EOF
+				exit 2
+			fi
+			echo "::endgroup::"
+		else
+			echo "::endgroup::"
+		fi
+		rm -f make.log
 		if GIT_EDITOR=: git rebase --continue; then
 			return 0
 		fi
