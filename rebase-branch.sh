@@ -204,9 +204,33 @@ Your FINAL line must be exactly: skip <oid>, continue, or fail"
 	fi
 	echo "::endgroup::"
 
-	# Extract the decision from the last meaningful line
-	decision=$(echo "$ai_output" | sed -n '/^continue$/p; /^skip [0-9a-f]/p; /^skip$/p; /^fail$/p' | tail -1)
-	decision_verb=$(echo "$decision" | awk '{print $1}')
+	# Extract the decision from the last meaningful line.
+	# Copilot appends a stats trailer (key: value lines) after the actual
+	# output, separated by blank lines. The sed script finds the last
+	# decision keyword (continue/skip/fail) that is followed only by
+	# blank lines and stats-like lines until EOF.
+	decision=$(echo "$ai_output" | sed -n '
+		/^continue$/b found
+		/^skip [0-9a-f][0-9a-f]*$/b found
+		/^skip$/b found
+		/^fail$/b found
+		b
+		:found
+		h
+		${ p; q }
+		n
+		/^$/!b
+		:emptyloop
+		n
+		/^$/b emptyloop
+		:stats
+		/[A-Za-z][^:]\{0,30\}:$/{ n; /^ /!b; :ind; ${ g; p; q }; n; /^ /b ind; b stats }
+		/^[^:]\{1,30\}: /!b
+		${ g; p; q }
+		n
+		b stats
+	')
+	decision_verb=$(echo "$decision" | awk '{print tolower($1)}')
 
 	case "$decision_verb" in
 	skip)
