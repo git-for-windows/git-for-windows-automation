@@ -16,6 +16,7 @@ on:
 
 env:
   BRANCH: ${{ inputs.branch || 'seen' }}
+  COPILOT_MODEL: claude-opus-4.6
 
 jobs:
   rebase:
@@ -26,6 +27,9 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: automation
+
+      - name: Set up Copilot CLI
+        run: npm install -g @github/copilot
 
       - name: Clone git-for-windows/git
         uses: actions/checkout@v4
@@ -49,6 +53,11 @@ jobs:
       - name: Run rebase
         id: rebase
         working-directory: git
+        # Copilot CLI authenticates via GH_TOKEN, which needs a fine-grained PAT
+        # with the "Copilot Requests" permission (Account permissions section).
+        # Create one at https://github.com/settings/personal-access-tokens/new
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
         run: |
           case "$BRANCH" in
             main) UPSTREAM="upstream/master" ;;

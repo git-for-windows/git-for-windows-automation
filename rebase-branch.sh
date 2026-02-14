@@ -85,8 +85,121 @@ run_rebase () {
 			fi
 		done
 
-		die "Conflict requires manual resolution: $rebase_head_oneline"
+		# Non-trivial conflict — invoke AI
+		if resolve_conflict_with_ai; then
+			break
+		fi
 	done
+}
+
+# Run copilot with standard tool permissions
+# Usage: run_copilot <prompt>
+# Outputs to stdout (also tees to stderr for logging)
+# Runs from the automation repo root so that .github/agents/ there is used
+# (not any .github/agents/ in the worktree, which is untrusted remote code).
+run_copilot () {
+	(cd "$SCRIPTS_DIR" &&
+	  export WORKTREE_DIR &&
+	  copilot -p "$1" \
+		--add-dir "$WORKTREE_DIR" \
+		${COPILOT_MODEL:+--model "$COPILOT_MODEL"} \
+		--agent conflict-resolver \
+		--allow-tool 'view' \
+		--allow-tool 'write' \
+		--allow-tool 'shell(awk)' \
+		--allow-tool 'shell(cat)' \
+		--allow-tool 'shell(git show)' \
+		--allow-tool 'shell(git diff)' \
+		--allow-tool 'shell(git log)' \
+		--allow-tool 'shell(git range-diff)' \
+		--allow-tool 'shell(git add)' \
+		--allow-tool 'shell(git grep)' \
+		--allow-tool 'shell(git rev-list)' \
+		--allow-tool 'shell(git checkout)' \
+		--allow-tool 'shell(git rm)' \
+		--allow-tool 'shell(grep)' \
+		--allow-tool 'shell(head)' \
+		--allow-tool 'shell(ls)' \
+		--allow-tool 'shell(sed)' \
+		--allow-tool 'shell(tail)' \
+		2>&1
+	  echo $? >"$WORKTREE_DIR/copilot.exitcode") | tee /dev/stderr
+	return $(cat "$WORKTREE_DIR/copilot.exitcode")
+}
+
+# Resolve a single conflict with AI
+# Usage: resolve_conflict_with_ai
+resolve_conflict_with_ai () {
+	conflicting_files=$(git diff --name-only --diff-filter=U)
+	echo "Conflict detected in: $conflicting_files"
+
+	prompt="Resolve merge conflict during rebase of commit REBASE_HEAD.
+
+IMPORTANT:
+- The target repository/worktree is: $WORKTREE_DIR
+- You are launched from a different directory only to load the custom agent.
+- For each shell command, start with: cd \"$WORKTREE_DIR\" &&
+- Read and edit files only inside: $WORKTREE_DIR
+
+Conflicting files: $conflicting_files
+
+Investigation commands:
+- See the patch: cd \"$WORKTREE_DIR\" && git show REBASE_HEAD
+- See conflict markers: view \"$WORKTREE_DIR/<file>\"
+- Check if upstreamed: cd \"$WORKTREE_DIR\" && git range-diff REBASE_HEAD^! REBASE_HEAD..
+
+Decision rules:
+1. If range-diff shows correspondence (e.g. '1: abc = 1: def'), output: skip <upstream-oid>
+2. If patch needs surgical resolution, edit files, stage with 'cd \"$WORKTREE_DIR\" && git add', output: continue
+3. If unresolvable, output: fail
+
+Your FINAL line must be exactly: skip <oid>, continue, or fail"
+
+	echo "Invoking AI for conflict resolution..."
+	ai_output=$(run_copilot "$prompt")
+	ai_exit_code=$?
+
+	# Log the AI output in a collapsible group
+	echo "::group::AI Output for $rebase_head_oneline"
+	echo "$ai_output"
+	if test $ai_exit_code -ne 0; then
+		echo "::warning::Copilot exited with code $ai_exit_code"
+	fi
+	echo "::endgroup::"
+
+	# Extract the decision from the last meaningful line
+	decision=$(echo "$ai_output" | sed -n '/^continue$/p; /^skip [0-9a-f]/p; /^skip$/p; /^fail$/p' | tail -1)
+	decision_verb=$(echo "$decision" | awk '{print $1}')
+
+	case "$decision_verb" in
+	skip)
+		upstream_oid=$(echo "$decision" | awk '{print $2}')
+		if test -n "$upstream_oid"; then
+			echo "::notice::Skipping commit (upstream: $upstream_oid): $rebase_head_oneline"
+		else
+			echo "::notice::Skipping commit (obsolete): $rebase_head_oneline"
+		fi
+		if GIT_EDITOR=: git rebase --skip; then
+			return 0
+		fi
+		return 1
+		;;
+	continue)
+		echo "::notice::Resolved conflict surgically: $rebase_head_oneline"
+		if GIT_EDITOR=: git rebase --continue; then
+			return 0
+		fi
+		return 1
+		;;
+	fail)
+		echo "::error::AI could not resolve conflict: $rebase_head_oneline"
+		exit 2
+		;;
+	*)
+		echo "::error::Unexpected AI decision '$decision_verb': $rebase_head_oneline"
+		exit 2
+		;;
+	esac
 }
 
 # Parse arguments
@@ -94,6 +207,11 @@ test $# -ge 2 || usage
 SHEARS_BRANCH=$1
 UPSTREAM_BRANCH=$2
 SCRIPTS_DIR=${3:-$(cd "$(dirname "$0")" && pwd)}
+
+# Validate environment
+command -v copilot >/dev/null 2>&1 || die "copilot CLI not found in PATH"
+test -n "${GH_TOKEN:-${GITHUB_TOKEN:-}}" ||
+	die "GH_TOKEN or GITHUB_TOKEN must be set"
 
 # Validate branches exist
 git rev-parse --verify "origin/$SHEARS_BRANCH" >/dev/null 2>&1 ||
