@@ -58,11 +58,23 @@ run_rebase () {
 			die "rebase metadata exists but REBASE_HEAD is missing"
 		rebase_head_oid=$(git rev-parse REBASE_HEAD)
 		rebase_head_oneline=$(git show --no-patch --format='%h %s' REBASE_HEAD)
+		rebase_head_ref=$(git show --no-patch --format=reference REBASE_HEAD)
 
 		# Check upstream correspondence (= means identical, skip it)
 		if corresponding_oid=$(find_correspondence "$rebase_head_oid" "$UPSTREAM_MAP") &&
 		   test "$CORRESPONDENCE_TYPE" = "="; then
+			echo "$rebase_head_oid $corresponding_oid" >>"$SKIPPED_MAP_FILE"
 			echo "::notice::Trivial skip (upstream: $corresponding_oid): $rebase_head_oneline"
+			cat >>"$REPORT_FILE" <<-SKIP_EOF
+
+			#### Skipped (trivial): $rebase_head_ref
+
+			Upstream equivalent: $(git show --no-patch --format=reference "$corresponding_oid" || echo "$corresponding_oid")
+
+			Detected via exact range-diff match (no AI needed).
+
+			SKIP_EOF
+			CONFLICTS_SKIPPED=$((CONFLICTS_SKIPPED + 1))
 			if GIT_EDITOR=: git rebase --skip; then
 				break
 			fi
@@ -80,6 +92,14 @@ run_rebase () {
 			   git read-tree --reset -u "$result_tree" &&
 			   git commit -C REBASE_HEAD; then
 				echo "::notice::Used resolution from: $corresponding_oid"
+				cat >>"$REPORT_FILE" <<-CORR_EOF
+
+				#### Resolved via correspondence: $rebase_head_ref
+
+				Used resolution from: $(git show --no-patch --format=reference "$corresponding_oid" || echo "$corresponding_oid")
+
+				CORR_EOF
+				CONFLICTS_RESOLVED=$((CONFLICTS_RESOLVED + 1))
 				if GIT_EDITOR=: git rebase --continue; then
 					break 2
 				fi
@@ -236,10 +256,28 @@ Your FINAL line must be exactly: skip <oid>, continue, or fail"
 	skip)
 		upstream_oid=$(echo "$decision" | awk '{print $2}')
 		if test -n "$upstream_oid"; then
+			echo "$rebase_head_oid $upstream_oid" >>"$SKIPPED_MAP_FILE"
 			echo "::notice::Skipping commit (upstream: $upstream_oid): $rebase_head_oneline"
+			cat >>"$REPORT_FILE" <<-SKIP_EOF
+
+			#### Skipped: $rebase_head_ref
+
+			Upstream equivalent: $(git show --no-patch --format=reference "$upstream_oid" || echo "$upstream_oid")
+
+			<details>
+			<summary>Range-diff</summary>
+
+			\`\`\`
+			$(git range-diff --creation-factor=999 "$rebase_head_oid^!" "$upstream_oid^!" || echo "Unable to generate range-diff")
+			\`\`\`
+
+			</details>
+
+			SKIP_EOF
 		else
 			echo "::notice::Skipping commit (obsolete): $rebase_head_oneline"
 		fi
+		CONFLICTS_SKIPPED=$((CONFLICTS_SKIPPED + 1))
 		if GIT_EDITOR=: git rebase --skip; then
 			return 0
 		fi
@@ -247,6 +285,7 @@ Your FINAL line must be exactly: skip <oid>, continue, or fail"
 		;;
 	continue)
 		echo "::notice::Resolved conflict surgically: $rebase_head_oneline"
+		CONFLICTS_RESOLVED=$((CONFLICTS_RESOLVED + 1))
 
 		# Verify build before committing the resolution
 		echo "::group::Verifying build"
@@ -300,7 +339,7 @@ Your FINAL line must be exactly: continue or fail"
 				echo "::error::Build still fails after retry"
 				cat >>"$REPORT_FILE" <<-BUILD_FAIL_EOF
 
-				#### BUILD FAILED: $(git show --no-patch --format=reference REBASE_HEAD)
+				#### BUILD FAILED: $rebase_head_ref
 
 				Build failed after conflict resolution. Last 50 lines:
 
@@ -323,10 +362,32 @@ Your FINAL line must be exactly: continue or fail"
 		;;
 	fail)
 		echo "::error::AI could not resolve conflict: $rebase_head_oneline"
+		cat >>"$REPORT_FILE" <<-FAIL_EOF
+
+		#### FAILED: $rebase_head_ref
+
+		AI could not resolve this conflict. Full output:
+
+		\`\`\`
+		$ai_output
+		\`\`\`
+
+		FAIL_EOF
 		exit 2
 		;;
 	*)
 		echo "::error::Unexpected AI decision '$decision_verb': $rebase_head_oneline"
+		cat >>"$REPORT_FILE" <<-UNK_EOF
+
+		#### FAILED: $rebase_head_ref
+
+		Unexpected AI decision: '$decision_verb'. Full output:
+
+		\`\`\`
+		$ai_output
+		\`\`\`
+
+		UNK_EOF
 		exit 2
 		;;
 	esac
@@ -435,6 +496,11 @@ cat >"$REPORT_FILE" <<EOF
 **From**: $(git show --no-patch --format='[%h](https://github.com/git-for-windows/git/commit/%H) (%s, %as)' "$TIP_OID") ([$(git rev-parse --short "$OLD_MARKER")..$(git rev-parse --short "$TIP_OID")](https://github.com/git-for-windows/git/compare/$(git rev-parse "$OLD_MARKER")...$(git rev-parse "$TIP_OID")))
 EOF
 
+CONFLICTS_SKIPPED=0
+CONFLICTS_RESOLVED=0
+SKIPPED_MAP_FILE="$WORKTREE_DIR/skipped-commits.map"
+: >"$SKIPPED_MAP_FILE"
+
 # Generate upstream correspondence map (our commits vs upstream, for trivial skips)
 UPSTREAM_MAP="$WORKTREE_DIR/upstream-correspondence.map"
 generate_correspondence_map "$OLD_MARKER..$TIP_OID" "$OLD_UPSTREAM..$NEW_UPSTREAM" "$UPSTREAM_MAP"
@@ -489,10 +555,32 @@ test "$PARENT_COUNT" -eq 3 || # commit itself + 2 parents
 RANGE_DIFF=$(git range-diff "$ORIG_OLD_MARKER..$ORIG_TIP_OID" \
 	"$MARKER_IN_RESULT..HEAD" || echo "Unable to generate range-diff")
 
+# Annotate range-diff with upstream OIDs for skipped commits
+if test -s "$SKIPPED_MAP_FILE"; then
+	SED_SCRIPT=$(sed 's/\([^ ]*\) \(.*\)/s,\1,\1 (upstream: \2),/' "$SKIPPED_MAP_FILE")
+	RANGE_DIFF=$(echo "$RANGE_DIFF" | sed "$SED_SCRIPT")
+fi
+# Also annotate from the upstream correspondence map (catches commits that
+# git rebase dropped silently without ever entering the conflict loop)
+if test -s "$UPSTREAM_MAP"; then
+	SED_SCRIPT=$(sed -n 's/^[0-9]*: \([0-9a-f]*\) [!=] [0-9]*: \([0-9a-f]*\).*/s,\1 \([^(]\),\1 (upstream: \2) \\1,/p' "$UPSTREAM_MAP")
+	if test -n "$SED_SCRIPT"; then
+		RANGE_DIFF=$(echo "$RANGE_DIFF" | sed "$SED_SCRIPT")
+	fi
+fi
+
 # Finalize report
 NEW_TIP=$(git rev-parse HEAD)
 cat >>"$REPORT_FILE" <<EOF
 **To**: $(git show --no-patch --format='[%h](https://github.com/git-for-windows/git/commit/%H) (%s, %as)' "$NEW_TIP") ([$(git rev-parse --short "$MARKER_IN_RESULT")..$(git rev-parse --short "$NEW_TIP")](https://github.com/git-for-windows/git/compare/$(git rev-parse "$MARKER_IN_RESULT")...$NEW_TIP))
+
+### Statistics
+
+| Metric | Count |
+|--------|------:|
+| Total conflicts | $((CONFLICTS_SKIPPED + CONFLICTS_RESOLVED)) |
+| Skipped (upstreamed) | $CONFLICTS_SKIPPED |
+| Resolved surgically | $CONFLICTS_RESOLVED |
 
 <details>
 <summary>Range-diff (click to expand)</summary>
