@@ -50,6 +50,11 @@ jobs:
           git remote add upstream https://github.com/git/git.git || true
           git fetch upstream --no-tags
 
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libcurl4-openssl-dev libexpat-dev gettext zlib1g-dev
+
       - name: Run rebase
         id: rebase
         working-directory: git
