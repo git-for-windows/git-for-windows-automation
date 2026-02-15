@@ -14,9 +14,15 @@ on:
           - next
           - main
           - maint
+      push:
+        description: 'Push the result after successful rebase'
+        required: false
+        type: boolean
+        default: false
 
 env:
   BRANCH: ${{ inputs.branch || 'all' }}
+  PUSH: ${{ inputs.push || 'true' }}
   COPILOT_MODEL: claude-opus-4.6
 
 jobs:
@@ -168,3 +174,21 @@ jobs:
           name: rebase-result
           path: git/upload/
           if-no-files-found: warn
+
+      - name: Obtain installation access token
+        if: always() && env.PUSH == 'true' && (steps.rebase-single.outputs.to_push || steps.rebase-all.outputs.to_push)
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: git
+
+      - name: Push results
+        if: always() && env.PUSH == 'true' && steps.app-token.outputs.token && (steps.rebase-single.outputs.to_push || steps.rebase-all.outputs.to_push)
+        working-directory: git
+        run: |
+          AUTH="$(echo -n 'x-access-token:${{ steps.app-token.outputs.token }}' | base64)"
+          GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
+            git push --force origin ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}
