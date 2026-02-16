@@ -1,21 +1,22 @@
 name: Merging-Rebase Automation
-run-name: Rebase the shears/${{ inputs.branch }} branch
+run-name: Rebase ${{ inputs.branch == 'all' && 'all shears/* branches' || format('the shears/{} branch', inputs.branch) }}
 
 on:
   workflow_dispatch:
     inputs:
       branch:
-        description: 'Shears branch to update (seen, next, main, or maint)'
+        description: 'Shears branch to update (seen, next, main, maint, or all)'
         required: true
         type: choice
         options:
+          - all
           - seen
           - next
           - main
           - maint
 
 env:
-  BRANCH: ${{ inputs.branch || 'seen' }}
+  BRANCH: ${{ inputs.branch || 'all' }}
   COPILOT_MODEL: claude-opus-4.6
 
 jobs:
@@ -55,8 +56,9 @@ jobs:
           sudo apt-get update -q
           sudo apt-get install -y -q libcurl4-openssl-dev libexpat-dev gettext zlib1g-dev
 
-      - name: Run rebase
-        id: rebase
+      - name: Run rebase (single branch)
+        id: rebase-single
+        if: env.BRANCH != 'all'
         working-directory: git
         # Copilot CLI authenticates via GH_TOKEN, which needs a fine-grained PAT
         # with the "Copilot Requests" permission (Account permissions section).
@@ -81,30 +83,83 @@ jobs:
           if "$GITHUB_WORKSPACE/automation/rebase-branch.sh" "shears/$BRANCH" "$UPSTREAM" "$GITHUB_WORKSPACE/automation"; then
             echo "to_push=shears/$BRANCH" >>"$GITHUB_OUTPUT"
           else
-            echo "failed_worktree=$PWD/rebase-worktree-$BRANCH" >>"$GITHUB_OUTPUT"
+            echo "failed_worktrees=$PWD/rebase-worktree-$BRANCH" >>"$GITHUB_OUTPUT"
             exit 1
           fi
 
-      - name: Create bundle
-        if: always() && steps.rebase.outputs.to_push
+      - name: Run rebase (all branches)
+        id: rebase-all
+        if: env.BRANCH == 'all'
+        working-directory: git
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          echo "::group::Fetching shears branches"
+          git fetch origin shears/seen shears/next shears/main shears/maint
+          echo "::endgroup::"
+
+          to_push=""
+          failed_worktrees=""
+
+          for BRANCH in seen next main maint; do
+            case "$BRANCH" in
+              main) UPSTREAM="upstream/master" ;;
+              *)    UPSTREAM="upstream/$BRANCH" ;;
+            esac
+
+            if test 0 = "$(git rev-list --count "origin/shears/$BRANCH..$UPSTREAM")"; then
+              echo "::notice::Nothing to do for shears/$BRANCH: $UPSTREAM has no new commits"
+              if test -n "$GITHUB_STEP_SUMMARY"; then
+                cat >>"$GITHUB_STEP_SUMMARY" <<-UPTODATE_EOF
+          ## Rebase Summary: $BRANCH
+
+          Already up to date with \`$UPSTREAM\`; nothing to rebase.
+
+          UPTODATE_EOF
+              fi
+              continue
+            fi
+
+            if "$GITHUB_WORKSPACE/automation/rebase-branch.sh" "shears/$BRANCH" "$UPSTREAM" "$GITHUB_WORKSPACE/automation"; then
+              to_push="${to_push:+$to_push }shears/$BRANCH"
+            else
+              echo "::error::Rebase failed for shears/$BRANCH"
+              failed_worktrees="${failed_worktrees:+$failed_worktrees }$PWD/rebase-worktree-$BRANCH"
+            fi
+          done
+
+          echo "to_push=$to_push" >>"$GITHUB_OUTPUT"
+          echo "failed_worktrees=$failed_worktrees" >>"$GITHUB_OUTPUT"
+
+          # Fail the step if any rebase failed
+          test -z "$failed_worktrees"
+
+      - name: Create bundles and archives
+        if: always()
         working-directory: git
         run: |
+          set -x
           mkdir -p upload
-          branch="${{ steps.rebase.outputs.to_push }}"
-          git bundle create "upload/${branch##*/}.bundle" "$branch" ^origin/main
 
-      - name: Create worktree archive on failure
-        if: always() && steps.rebase.outputs.failed_worktree
-        run: |
-          worktree="${{ steps.rebase.outputs.failed_worktree }}"
-          mkdir -p git/upload
-          name=${worktree##*rebase-worktree-}
-          rebase_head_arg=
-          git -C "$worktree" rev-parse --verify REBASE_HEAD >/dev/null 2>&1 &&
-            rebase_head_arg=REBASE_HEAD
-          git -C "$worktree" bundle create "$GITHUB_WORKSPACE/git/upload/$name.bundle" \
-            HEAD $rebase_head_arg --all ^origin/main
-          tar -czf "git/upload/$name.tar.gz" -C "$worktree" .
+          # Bundles for successful branches
+          for branch in ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}; do
+            name=${branch##*/}
+            git bundle create "upload/$name.bundle" "$branch" ^origin/main
+          done
+
+          # Bundles and archives for failed branches
+          for worktree in ${{ steps.rebase-single.outputs.failed_worktrees }} ${{ steps.rebase-all.outputs.failed_worktrees }}; do
+            test -d "$worktree" || continue
+            name=${worktree##*rebase-worktree-}
+            rebase_head_arg=
+            git -C "$worktree" rev-parse --verify REBASE_HEAD >/dev/null 2>&1 &&
+              rebase_head_arg=REBASE_HEAD
+            git -C "$worktree" for-each-ref --format='%(refname)' |
+              grep -v '^refs/tags/' |
+              sed 's,^refs/remotes/origin/,^refs/remotes/origin/,' |
+              git -C "$worktree" bundle create "../upload/$name.bundle" --stdin HEAD $rebase_head_arg
+            tar -czf "upload/$name.tar.gz" -C "$worktree" .
+          done
 
       - name: Upload artifacts
         if: always()
