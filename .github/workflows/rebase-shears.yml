@@ -74,7 +74,8 @@ jobs:
               const r = await github.rest.git.getRef({ owner, repo: 'git', ref: `heads/${branch}` })
               if (r.data.object.sha !== prevRefs[key]) return
             }
-            core.notice(`Nothing changed since ${previous.html_url}, skipping`)
+            const originRun = prevRefs['run'] || previous.html_url
+            core.notice(`Nothing changed since ${originRun}, skipping`)
             core.setOutput('skip', 'true')
             core.exportVariable('PUSH', 'false')
       - name: Checkout automation repo
@@ -119,6 +120,9 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            let refState = process.env.REF_STATE
+            if (!refState.includes('\nrun '))
+              refState += `\nrun ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
             const jobs = await github.rest.actions.listJobsForWorkflowRun({
               owner: context.repo.owner,
               repo: context.repo.repo,
@@ -131,7 +135,7 @@ jobs:
               check_run_id: job.id,
               output: {
                 title: 'Ref state',
-                summary: process.env.REF_STATE
+                summary: refState
               }
             })
 
