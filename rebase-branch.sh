@@ -208,10 +208,10 @@ ${log_l_commands}
 Decision rules:
 1. If range-diff shows correspondence (e.g. '1: abc = 1: def'), output: skip <upstream-oid>
 2. If the patch is obsolete (e.g. fixes code removed upstream), output: skip -- <reason>
-3. If patch needs surgical resolution, edit files, stage with 'cd \"$WORKTREE_DIR\" && git add', output: continue
+3. If patch needs surgical resolution, edit files, stage with 'cd \"$WORKTREE_DIR\" && git add', output: continue -- <brief summary of what you changed>
 4. If unresolvable, output: fail
 
-Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue, or fail"
+Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue -- <summary>, or fail"
 
 	echo "Invoking AI for conflict resolution..."
 	ai_output=$(run_copilot "$prompt")
@@ -232,6 +232,7 @@ Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue, or fail
 	# blank lines and stats-like lines until EOF.
 	decision=$(echo "$ai_output" | sed -n '
 		/^continue$/b found
+		/^continue -- /b found
 		/^skip [0-9a-f][0-9a-f]*$/b found
 		/^skip -- /b found
 		/^skip$/b found
@@ -296,6 +297,7 @@ Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue, or fail
 		return 1
 		;;
 	continue)
+		resolution_summary=$(echo "$decision" | sed -n 's/^continue -- //p')
 		echo "::notice::Resolved conflict surgically: $rebase_head_oneline"
 		CONFLICTS_RESOLVED=$((CONFLICTS_RESOLVED + 1))
 
@@ -367,6 +369,37 @@ Your FINAL line must be exactly: continue or fail"
 			echo "::endgroup::"
 		fi
 		rm -f make.log
+
+		# Commit the resolution; it may resolve to no change at all
+		if git diff --cached --quiet; then
+			cat >>"$REPORT_FILE" <<-NOOP_EOF
+
+			#### Dropped (empty after resolution): $rebase_head_ref
+
+			${resolution_summary:-Conflict resolution left no remaining changes (patch is now empty).}
+
+			NOOP_EOF
+		else
+			git commit -C REBASE_HEAD ||
+				die "git commit failed for $rebase_head_oneline"
+			resolution_rangediff=$(git range-diff --creation-factor=999 "$rebase_head_oid^!" HEAD^! || echo "Unable to generate range-diff")
+			cat >>"$REPORT_FILE" <<-CONTINUE_EOF
+
+			#### Resolved: $rebase_head_ref
+
+			${resolution_summary:-AI resolved this conflict surgically.}
+
+			<details>
+			<summary>Range-diff</summary>
+
+			\`\`\`
+			$resolution_rangediff
+			\`\`\`
+
+			</details>
+
+			CONTINUE_EOF
+		fi
 		if GIT_EDITOR=: git rebase --continue; then
 			return 0
 		fi
