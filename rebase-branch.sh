@@ -207,10 +207,11 @@ Investigation commands:
 ${log_l_commands}
 Decision rules:
 1. If range-diff shows correspondence (e.g. '1: abc = 1: def'), output: skip <upstream-oid>
-2. If patch needs surgical resolution, edit files, stage with 'cd \"$WORKTREE_DIR\" && git add', output: continue
-3. If unresolvable, output: fail
+2. If the patch is obsolete (e.g. fixes code removed upstream), output: skip -- <reason>
+3. If patch needs surgical resolution, edit files, stage with 'cd \"$WORKTREE_DIR\" && git add', output: continue
+4. If unresolvable, output: fail
 
-Your FINAL line must be exactly: skip <oid>, continue, or fail"
+Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue, or fail"
 
 	echo "Invoking AI for conflict resolution..."
 	ai_output=$(run_copilot "$prompt")
@@ -232,6 +233,7 @@ Your FINAL line must be exactly: skip <oid>, continue, or fail"
 	decision=$(echo "$ai_output" | sed -n '
 		/^continue$/b found
 		/^skip [0-9a-f][0-9a-f]*$/b found
+		/^skip -- /b found
 		/^skip$/b found
 		/^fail$/b found
 		b
@@ -255,7 +257,17 @@ Your FINAL line must be exactly: skip <oid>, continue, or fail"
 	case "$decision_verb" in
 	skip)
 		upstream_oid=$(echo "$decision" | awk '{print $2}')
-		if test -n "$upstream_oid"; then
+		skip_reason=$(echo "$decision" | sed -n 's/^skip -- //p')
+		if test -n "$skip_reason"; then
+			echo "::notice::Skipping commit (obsolete: $skip_reason): $rebase_head_oneline"
+			cat >>"$REPORT_FILE" <<-SKIP_EOF
+
+			#### Skipped (obsolete): $rebase_head_ref
+
+			Reason: $skip_reason
+
+			SKIP_EOF
+		elif test -n "$upstream_oid" && test "$upstream_oid" != "--"; then
 			echo "$rebase_head_oid $upstream_oid" >>"$SKIPPED_MAP_FILE"
 			echo "::notice::Skipping commit (upstream: $upstream_oid): $rebase_head_oneline"
 			cat >>"$REPORT_FILE" <<-SKIP_EOF

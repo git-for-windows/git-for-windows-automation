@@ -57,6 +57,9 @@ Common patterns:
   patch modifies → adapt our patch to use the new name
 - **Added context**: upstream added new code near our changes → preserve
   both upstream's additions and our modifications
+- **Obsolete patches**: upstream removed or rewrote the code that our
+  patch was fixing (e.g. a typo fix or Windows build fix in code that
+  no longer exists) → the downstream commit is no longer needed, `skip`
 - **Deleted files**: if upstream deleted a file our patch modifies,
   decide whether the patch intent is still relevant; if not, `git rm`
 
@@ -64,5 +67,7 @@ Common patterns:
 
 Your FINAL line of output must be exactly one of:
 - `skip <upstream-oid>` — the patch is already upstream (do NOT edit files)
+- `skip -- <reason>` — the patch is obsolete (do NOT edit files);
+  give a short one-line explanation, e.g. `skip -- code was removed upstream`
 - `continue` — you edited and staged files to resolve the conflict
 - `fail` — you cannot determine how to resolve the conflict
