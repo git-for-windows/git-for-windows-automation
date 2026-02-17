@@ -92,6 +92,16 @@ fi
 UPSTREAM_AHEAD=$(git rev-list --count "$OLD_UPSTREAM..$NEW_UPSTREAM")
 if test "$UPSTREAM_AHEAD" -eq 0; then
 	echo "::notice::Nothing to rebase: upstream has no new commits since $OLD_UPSTREAM"
+	cat >"$REPORT_FILE" <<-UPTODATE_EOF
+	## Rebase Summary: ${SHEARS_BRANCH##*/}
+
+	Already up to date with [Git for Windows' \`main\`](https://github.com/git-for-windows/git/compare/$(git rev-parse "$TIP_OID")...$(git rev-parse "$GFW_MAIN_BRANCH")) and with [\`${UPSTREAM_BRANCH}\`](https://github.com/git-for-windows/git/compare/$(git rev-parse "$TIP_OID")...$(git rev-parse "$NEW_UPSTREAM")).
+
+	UPTODATE_EOF
+	cat "$REPORT_FILE"
+	if test -n "$GITHUB_STEP_SUMMARY"; then
+		cat "$REPORT_FILE" >>"$GITHUB_STEP_SUMMARY"
+	fi
 	# Still need to push if we synced
 	if test "$BEHIND_COUNT" -gt 0 && test -n "$GITHUB_OUTPUT"; then
 		echo "to_push=$SHEARS_BRANCH" >>"$GITHUB_OUTPUT"
