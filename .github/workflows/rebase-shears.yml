@@ -1,7 +1,9 @@
 name: Merging-Rebase Automation
-run-name: Rebase ${{ inputs.branch == 'all' && 'all shears/* branches' || format('the shears/{} branch', inputs.branch) }}
+run-name: Rebase ${{ (inputs.branch == '' || inputs.branch == 'all') && 'all shears/* branches' || format('the shears/{} branch', inputs.branch) }}
 
 on:
+  schedule:
+    - cron: '0 */6 * * *'
   workflow_dispatch:
     inputs:
       branch:
@@ -22,23 +24,71 @@ on:
 
 env:
   BRANCH: ${{ inputs.branch || 'all' }}
-  PUSH: ${{ inputs.push || 'true' }}
+  PUSH: ${{ github.event_name == 'schedule' && 'true' || inputs.push || 'true' }}
   COPILOT_MODEL: claude-opus-4.6
 
 jobs:
   rebase:
     if: github.event.repository.owner.login == 'git-for-windows'
     runs-on: ubuntu-latest
+    permissions:
+      checks: write
     steps:
+      - name: Check if rebase is needed
+        id: precheck
+        if: github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // To avoid expensive clones when nothing changed, each run records
+            // the ref tips it saw (GfW main + upstream branches) in its check
+            // run output via the Checks API. On schedule triggers, we compare
+            // current refs against the previous run's recorded state and skip
+            // the rebase entirely if nothing moved.
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: context.workflow,
+              per_page: 2
+            })
+            const previous = runs.data.workflow_runs.find(r => r.id !== context.runId)
+            let summary = ''
+            if (previous) {
+              const checkRuns = await github.rest.checks.listForSuite({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                check_suite_id: previous.check_suite_id
+              })
+              summary = checkRuns.data.check_runs[0]?.output?.summary || ''
+            }
+            const prevRefs = Object.fromEntries(
+              summary.split('\n').filter(Boolean).map(l => l.split(' '))
+            )
+            const branches = ['main', 'seen', 'next', 'master', 'maint']
+            const expected = branches.map(b => b === 'main' ? 'origin/main' : `upstream/${b}`)
+            if (!expected.every(k => prevRefs[k])) return
+            core.exportVariable('REF_STATE', summary)
+            for (const branch of branches) {
+              const owner = branch === 'main' ? '${{ github.repository_owner }}' : 'git'
+              const key = branch === 'main' ? 'origin/main' : `upstream/${branch}`
+              const r = await github.rest.git.getRef({ owner, repo: 'git', ref: `heads/${branch}` })
+              if (r.data.object.sha !== prevRefs[key]) return
+            }
+            core.notice(`Nothing changed since ${previous.html_url}, skipping`)
+            core.setOutput('skip', 'true')
+            core.exportVariable('PUSH', 'false')
       - name: Checkout automation repo
+        if: steps.precheck.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           path: automation
 
       - name: Set up Copilot CLI
+        if: steps.precheck.outputs.skip != 'true'
         run: npm install -g @github/copilot
 
       - name: Clone git-for-windows/git
+        if: steps.precheck.outputs.skip != 'true'
         uses: actions/checkout@v4
         with:
           repository: ${{ github.repository_owner }}/git
@@ -46,25 +96,54 @@ jobs:
           path: git
 
       - name: Configure git
+        if: steps.precheck.outputs.skip != 'true'
         working-directory: git
         run: |
           git config user.name "Git for Windows Build Agent"
           git config user.email "ci@git-for-windows.build"
 
       - name: Add upstream remote
+        if: steps.precheck.outputs.skip != 'true'
         working-directory: git
         run: |
           git remote add upstream https://github.com/git/git.git || true
           git fetch upstream --no-tags
+          cat >>"$GITHUB_ENV" <<-EOF
+          REF_STATE<<REFS
+          $(git for-each-ref --format='%(refname:strip=2) %(objectname)' refs/remotes/origin/main refs/remotes/upstream/seen refs/remotes/upstream/next refs/remotes/upstream/master refs/remotes/upstream/maint)
+          REFS
+          EOF
+
+      - name: Record ref state
+        if: env.REF_STATE
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobs = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            })
+            const job = jobs.data.jobs.find(j => j.name === '${{ github.job }}')
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: job.id,
+              output: {
+                title: 'Ref state',
+                summary: process.env.REF_STATE
+              }
+            })
 
       - name: Install build dependencies
+        if: steps.precheck.outputs.skip != 'true'
         run: |
           sudo apt-get update -q
           sudo apt-get install -y -q libcurl4-openssl-dev libexpat-dev gettext zlib1g-dev
 
       - name: Run rebase (single branch)
         id: rebase-single
-        if: env.BRANCH != 'all'
+        if: env.BRANCH != 'all' && steps.precheck.outputs.skip != 'true'
         working-directory: git
         # Copilot CLI authenticates via GH_TOKEN, which needs a fine-grained PAT
         # with the "Copilot Requests" permission (Account permissions section).
@@ -95,7 +174,7 @@ jobs:
 
       - name: Run rebase (all branches)
         id: rebase-all
-        if: env.BRANCH == 'all'
+        if: env.BRANCH == 'all' && steps.precheck.outputs.skip != 'true'
         working-directory: git
         env:
           GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
@@ -141,7 +220,7 @@ jobs:
           test -z "$failed_worktrees"
 
       - name: Create bundles and archives
-        if: always()
+        if: always() && steps.precheck.outputs.skip != 'true'
         working-directory: git
         run: |
           set -x
@@ -168,7 +247,7 @@ jobs:
           done
 
       - name: Upload artifacts
-        if: always()
+        if: always() && steps.precheck.outputs.skip != 'true'
         uses: actions/upload-artifact@v4
         with:
           name: rebase-result
