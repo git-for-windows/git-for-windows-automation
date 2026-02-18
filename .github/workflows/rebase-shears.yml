@@ -268,7 +268,7 @@ jobs:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: git
+          repositories: git,shears-builds
 
       - name: Push results
         if: always() && env.PUSH == 'true' && steps.app-token.outputs.token && (steps.rebase-single.outputs.to_push || steps.rebase-all.outputs.to_push)
@@ -315,3 +315,135 @@ jobs:
               -f "output[title]=shears/$name rebase failed" \
               -F "output[summary]=@$report"
           done
+
+      - name: Mirror results to PRs
+        if: always() && env.PUSH == 'true' && steps.app-token.outputs.token
+        working-directory: git
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          builds_repo="${{ github.repository_owner }}/shears-builds"
+          run_id="$GITHUB_RUN_ID"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run_id"
+          AUTH="$(echo -n 'x-access-token:${{ steps.app-token.outputs.token }}' | base64)"
+          errors=0
+
+          push_to_builds () {
+            GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
+              git push "https://github.com/$builds_repo" "$@"
+          }
+
+          # Successful rebases: create regular PRs
+          for branch in ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}; do
+            name=${branch##*/}
+            worktree="rebase-worktree-$name"
+            test -d "$worktree" || continue
+            marker=$(git -C "$worktree" rev-parse "HEAD^{/Start.the.merging-rebase}") || {
+              echo "::error::Cannot find marker for shears/$name"
+              errors=1
+              continue
+            }
+            tip=$(git -C "$worktree" rev-parse HEAD)
+            report="$worktree/conflict-report.md"
+            test -f "$report" || continue
+
+            push_to_builds \
+              "$marker:refs/heads/base/shears/$name-$run_id" \
+              "$tip:refs/heads/shears/$name-$run_id" || {
+              echo "::error::Failed to push shears/$name to $builds_repo"
+              errors=1
+              continue
+            }
+
+            title="Rebase shears/$name (#$run_id)"
+            {
+              echo "[Workflow run]($run_url)"
+              echo
+              cat "$report"
+            } >"$worktree/pr-body.md"
+
+            pr_url=$(gh api "repos/$builds_repo/pulls" \
+              -f "title=$title" \
+              -f "head=shears/$name-$run_id" \
+              -f "base=base/shears/$name-$run_id" \
+              -F "body=@$worktree/pr-body.md" \
+              --jq '.html_url') || {
+              echo "::error::Failed to create PR for shears/$name"
+              errors=1
+              continue
+            }
+            echo "::notice::Created PR '$title': $pr_url"
+          done
+
+          # Failed rebases: create draft PRs, upload artifacts
+          for worktree in ${{ steps.rebase-single.outputs.failed_worktrees }} ${{ steps.rebase-all.outputs.failed_worktrees }}; do
+            test -d "$worktree" || continue
+            name=${worktree##*rebase-worktree-}
+            report="$worktree/conflict-report.md"
+
+            tip=$("$GITHUB_WORKSPACE/automation/stash-with-conflicts.sh" "$worktree") || {
+              echo "::warning::Failed to create state commit for shears/$name, using HEAD"
+              tip=$(git -C "$worktree" rev-parse HEAD)
+            }
+            marker=$(git -C "$worktree" rev-parse "HEAD^{/Start.the.merging-rebase}") || {
+              echo "::warning::Marker not found for shears/$name, trying merge-base"
+              marker=$(git -C "$worktree" merge-base HEAD REBASE_HEAD) || {
+                echo "::error::Cannot determine base for shears/$name, skipping"
+                errors=1
+                continue
+              }
+            }
+
+            push_to_builds \
+              "$marker:refs/heads/base/shears/$name-$run_id" \
+              "$tip:refs/heads/shears/$name-$run_id" || {
+              echo "::error::Failed to push shears/$name to $builds_repo"
+              errors=1
+              continue
+            }
+
+            title="FAILED: Rebase shears/$name (#$run_id)"
+            {
+              echo "[Workflow run]($run_url) failed to rebase shears/$name."
+              echo
+              test -f "$report" && cat "$report"
+            } >"$worktree/pr-body.md"
+
+            pr_url=$(gh api "repos/$builds_repo/pulls" \
+              -f "title=$title" \
+              -f "head=shears/$name-$run_id" \
+              -f "base=base/shears/$name-$run_id" \
+              -F "body=@$worktree/pr-body.md" \
+              -F "draft=true" \
+              --jq '.html_url') || {
+              echo "::error::Failed to create draft PR for shears/$name"
+              errors=1
+              continue
+            }
+            echo "::notice::Created draft PR '$title': $pr_url"
+
+            # Upload bundle and worktree archive as release assets
+            assets=""
+            test -f "upload/$name.bundle" &&
+              assets="$assets upload/$name.bundle#Git bundle"
+            test -f "upload/$name.tar.gz" &&
+              assets="$assets upload/$name.tar.gz#Worktree archive"
+            if test -n "$assets"; then
+              tag="shears-$name-$run_id"
+              gh release create "$tag" \
+                --repo "$builds_repo" \
+                --target "$tip" \
+                --title "$title" \
+                --notes "See [draft PR]($pr_url)" \
+                --prerelease \
+                $assets || {
+                echo "::warning::Failed to upload artifacts for shears/$name"
+              }
+              gh api "repos/$builds_repo/issues/${pr_url##*/}/comments" \
+                -f "body=Artifacts: [release assets](https://github.com/$builds_repo/releases/tag/$tag)" || {
+                echo "::warning::Failed to comment artifact link for shears/$name"
+              }
+            fi
+          done
+
+          exit $errors
