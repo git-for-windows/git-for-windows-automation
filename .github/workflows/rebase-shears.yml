@@ -104,11 +104,13 @@ jobs:
           git config user.email "ci@git-for-windows.build"
 
       - name: Add upstream remote
+        id: fetch
         if: steps.precheck.outputs.skip != 'true'
         working-directory: git
         run: |
           git remote add upstream https://github.com/git/git.git || true
           git fetch upstream --no-tags
+          echo "main_sha=$(git rev-parse origin/main)" >>"$GITHUB_OUTPUT"
           cat >>"$GITHUB_ENV" <<-EOF
           REF_STATE<<REFS
           $(git for-each-ref --format='%(refname:strip=2) %(objectname)' refs/remotes/origin/main refs/remotes/upstream/seen refs/remotes/upstream/next refs/remotes/upstream/master refs/remotes/upstream/maint)
@@ -259,7 +261,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Obtain installation access token
-        if: always() && env.PUSH == 'true' && (steps.rebase-single.outputs.to_push || steps.rebase-all.outputs.to_push)
+        if: always() && env.PUSH == 'true' && steps.precheck.outputs.skip != 'true'
         uses: actions/create-github-app-token@v2
         id: app-token
         with:
@@ -275,3 +277,41 @@ jobs:
           AUTH="$(echo -n 'x-access-token:${{ steps.app-token.outputs.token }}' | base64)"
           GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
             git push --force origin ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}
+
+      - name: Create check runs
+        if: always() && env.PUSH == 'true' && steps.app-token.outputs.token
+        working-directory: git
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          head_sha="${{ steps.fetch.outputs.main_sha }}"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          for branch in ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}; do
+            name=${branch##*/}
+            report="rebase-worktree-$name/conflict-report.md"
+            test -f "$report" || continue
+            gh api "repos/${{ github.repository_owner }}/git/check-runs" \
+              -f "name=shears-$name" \
+              -f "head_sha=$head_sha" \
+              -f "status=completed" \
+              -f "conclusion=success" \
+              -f "details_url=$run_url" \
+              -f "output[title]=shears/$name rebased successfully" \
+              -F "output[summary]=@$report"
+          done
+
+          for worktree in ${{ steps.rebase-single.outputs.failed_worktrees }} ${{ steps.rebase-all.outputs.failed_worktrees }}; do
+            test -d "$worktree" || continue
+            name=${worktree##*rebase-worktree-}
+            report="$worktree/conflict-report.md"
+            test -f "$report" || report=/dev/null
+            gh api "repos/${{ github.repository_owner }}/git/check-runs" \
+              -f "name=shears-$name" \
+              -f "head_sha=$head_sha" \
+              -f "status=completed" \
+              -f "conclusion=failure" \
+              -f "details_url=$run_url" \
+              -f "output[title]=shears/$name rebase failed" \
+              -F "output[summary]=@$report"
+          done
