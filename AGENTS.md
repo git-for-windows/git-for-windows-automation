@@ -23,6 +23,26 @@ Slash command (e.g., /deploy) → GitForWindowsHelper (Azure Function)
 
 This "mirror back" technique allows versioning source code independently of workflow definitions.
 
+## Critical Contracts with GitForWindowsHelper
+
+The GitForWindowsHelper GitHub App dispatches workflows **by filename**. Renaming any of these workflows requires a coordinated change in `gfw-helper-github-app`:
+
+- `open-pr.yml`
+- `updpkgsums.yml`
+- `build-and-deploy.yml`
+- `tag-git.yml`
+- `git-artifacts.yml`
+- `release-git.yml`
+- `upload-snapshot.yml`
+
+The helper app also parses check-run names and summaries to drive cascading behavior. These patterns must remain stable:
+
+- Check-run names: `tag-git`, `git-artifacts-x86_64`, `git-artifacts-i686`, `git-artifacts-aarch64`, `deploy`, `build`
+- Summary patterns like `Tag Git <version> @<sha>` and `Build Git <version> artifacts from commit <sha>`
+- Artifact names: `bundle-artifacts`, `pkg-<arch>`, `sha256sums`, `<artifact>-<arch>` (e.g., `installer-x86_64`)
+
+Changing any of these without updating `gfw-helper-github-app` will break the automation.
+
 ## Key Workflows
 
 ### Component Updates
@@ -38,8 +58,10 @@ This "mirror back" technique allows versioning source code independently of work
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
 | `tag-git.yml` | `/git-artifacts` command (via GitForWindowsHelper) | Tags a Git commit, generates release notes and bundle artifacts |
-| `git-artifacts.yml` | Triggered after tag-git | Builds release artifacts: installer, Portable Git, MinGit, archive, NuGet |
+| `git-artifacts.yml` | Cascading trigger after `tag-git` completes | Builds release artifacts: installer, Portable Git, MinGit, archive, NuGet |
 | `release-git.yml` | `/release` command | Publishes artifacts as GitHub release, deploys Pacman packages, updates website |
+
+The release flow has cascading triggers: `/git-artifacts` → `tag-git.yml` → (on success) `git-artifacts.yml` for each architecture → (optionally) `upload-snapshot.yml` for snapshot builds.
 
 ### Other Workflows
 
@@ -142,18 +164,29 @@ Git for Windows builds for three architectures:
 
 ## Relationship with Other Repositories
 
-| Repository | Relationship |
-|------------|--------------|
-| [git-for-windows/git](https://github.com/git-for-windows/git) | Main Git fork; issues trigger `/open pr`, PRs trigger `/git-artifacts` and `/release` |
-| [git-for-windows/gfw-helper-github-app](https://github.com/git-for-windows/gfw-helper-github-app) | Azure Function that receives slash commands and triggers workflows here |
-| [git-for-windows/build-extra](https://github.com/git-for-windows/build-extra) | Build scripts, release notes, installer definitions |
-| [git-for-windows/MINGW-packages](https://github.com/git-for-windows/MINGW-packages) | MINGW package definitions |
-| [git-for-windows/MSYS2-packages](https://github.com/git-for-windows/MSYS2-packages) | MSYS2 package definitions |
-| [git-for-windows/git-for-windows.github.io](https://github.com/git-for-windows/git-for-windows.github.io) | Git for Windows website |
+Workflows in this repository intentionally push updates to these external repositories:
+
+| Repository | What gets pushed |
+|------------|------------------|
+| [git-for-windows/git](https://github.com/git-for-windows/git) | Release tags, check-run status |
+| [git-for-windows/build-extra](https://github.com/git-for-windows/build-extra) | Release notes, package versions, MINGW-packages bundle |
+| [git-for-windows/MINGW-packages](https://github.com/git-for-windows/MINGW-packages) | Package update PRs, PKGBUILD updates |
+| [git-for-windows/MSYS2-packages](https://github.com/git-for-windows/MSYS2-packages) | Package update PRs |
+| [git-for-windows/pacman-repo](https://github.com/git-for-windows/pacman-repo) | Package deployment metadata |
+| [git-for-windows/git-for-windows.github.io](https://github.com/git-for-windows/git-for-windows.github.io) | Website version updates |
+| [git-for-windows/git-snapshots](https://github.com/git-for-windows/git-snapshots) | Snapshot release artifacts |
+| git-sdk-32, git-sdk-64, git-sdk-arm64 | SDK synchronization triggers |
+
+Additionally, [git-for-windows/gfw-helper-github-app](https://github.com/git-for-windows/gfw-helper-github-app) is the Azure Function that receives slash commands and triggers workflows here.
+
+Treat these cross-repository updates as API contracts: changing refs, artifact names, or bundle contents can break downstream jobs.
 
 ## Coding Conventions
 
+Preserve these conventions when editing:
+
 ### JavaScript
+- Reuse existing root modules from `actions/github-script` instead of duplicating API/auth logic
 - All modules use CommonJS (`module.exports` / `require()`)
 - Async/await for asynchronous operations
 - Modules are designed to be usable both from GitHub Actions and command line
@@ -171,6 +204,12 @@ Git for Windows builds for three architectures:
 - Pass parameters via `inputs`
 - Use composite actions for reusable functionality
 - Always include `if: github.event.repository.owner.login == 'git-for-windows'` to prevent forks from accidentally running workflows
+- Keep GitHub App auth flow consistent (`GH_APP_ID` + `GH_APP_PRIVATE_KEY`, installation token exchange)
+- Preserve mirrored check-run behavior in workflows that act on other repositories
+
+### Release Branch Semantics
+
+The `release-git.yml` workflow expects the `release` branch to fast-forward to `main` when started. It uses composite actions referenced at `@release` (e.g., `.github/actions/github-release@release`). This allows modifying action code and re-running failed jobs without affecting in-flight releases.
 
 ## Development Tips
 
@@ -181,3 +220,17 @@ Git for Windows builds for three architectures:
 3. **Check run state**: When debugging check run mirroring issues, the state file at `$RUNNER_TEMP/check-run.state` contains encrypted state.
 
 4. **Setup Git for Windows SDK**: Workflows use [setup-git-for-windows-sdk](https://github.com/git-for-windows/setup-git-for-windows-sdk) action to get the build environment.
+
+## Validating Changes
+
+This repository has no local `npm test` or lint scripts. When making changes, validate by:
+
+1. **Workflow filenames**: Check that any renamed workflows are also updated in `gfw-helper-github-app` dispatch logic.
+
+2. **Check-run names/summaries**: Verify that check-run names and summary patterns match what `gfw-helper-github-app` parsers expect.
+
+3. **Artifact names/paths**: Ensure artifact names consumed across jobs and composite actions remain consistent.
+
+4. **Cross-repo changes**: If a change touches slash-command behavior, mirror it in `gfw-helper-github-app` and run `npm run lint` and `npm test` there.
+
+5. **Secret usage**: Do not introduce new secret names without ensuring all calling workflows and environments are updated together.
