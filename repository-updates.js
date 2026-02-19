@@ -138,6 +138,60 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
     'push', `https://github.com/${owner}/${repo}`, refName
   ])
   context.log(`Done pushing ref ${refName} to ${owner}/${repo}`)
+
+  // For MINGW-packages, also push the MSYS2 sync branch from the bundle
+  // See https://github.com/msys2/MINGW-packages/pull/26470
+  // Note: This code only runs for non-RC releases (guarded by the action's `if` condition)
+  if (repo === 'MINGW-packages' && bundlePath) {
+    const fs = require('fs')
+    const version = fs.readFileSync('bundle-artifacts/next_version').toString().trim()
+    const msys2SyncBranch = `msys2-sync-${version}`
+
+    // The bundle contains a commit based on msys2/master, so we need to fetch
+    // the prerequisite commits first. Parse the bundle header to find them
+    // (lines starting with `-` before the first blank line).
+    // Bundle files are binary (text header followed by packfile data), so we
+    // read the first 1024 bytes as raw bytes and search for the \n\n that
+    // separates the header from the binary packfile data, to avoid decoding
+    // arbitrary binary content as UTF-8.
+    const fd = fs.openSync(bundlePath, 'r')
+    const buf = Buffer.alloc(1024)
+    fs.readSync(fd, buf)
+    fs.closeSync(fd)
+    const headerEnd = buf.indexOf(Buffer.from([0x0a, 0x0a]))
+    const bundleHeader = buf.subarray(0, headerEnd).toString('utf-8')
+    const prerequisites = bundleHeader
+      .split('\n')
+      .filter(line => line.startsWith('-'))
+      .map(line => line.slice(1).split(' ')[0])
+
+    if (prerequisites.length > 0) {
+      // Check which prerequisites are missing locally using cat-file --batch-check
+      const { spawnSync } = require('child_process')
+      const catFile = spawnSync('git', ['--git-dir', gitDir, 'cat-file', '--batch-check'], {
+        input: prerequisites.join('\n'),
+        encoding: 'utf-8'
+      })
+      const missing = catFile.stdout
+        .split('\n')
+        .filter(line => line.endsWith(' missing'))
+        .map(line => line.split(' ')[0])
+
+      if (missing.length > 0) {
+        context.log(`Fetching ${missing.length} prerequisite(s) from msys2/MINGW-packages`)
+        callGit(['--git-dir', gitDir, 'fetch', '--depth', '1',
+          'https://github.com/msys2/MINGW-packages', ...missing
+        ])
+      }
+    }
+
+    callGit(['--git-dir', gitDir, 'fetch', bundlePath, msys2SyncBranch])
+    callGit(['--git-dir', gitDir,
+      '-c', `http.extraHeader=${authorizationHeader}`,
+      'push', `https://github.com/${owner}/${repo}`, `FETCH_HEAD:refs/heads/${msys2SyncBranch}`
+    ])
+    context.log(`::notice::Pushed MSYS2 sync branch ${msys2SyncBranch} to ${owner}/${repo}`)
+  }
 }
 
 const pushGitBranch = async (context, setSecret, appId, privateKey, owner, repo, pushRefSpec) => {

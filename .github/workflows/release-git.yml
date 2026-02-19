@@ -140,7 +140,24 @@ jobs:
               : `Git for Windows ${baseVersion} is available! ${releaseURL}`
             const blueskyLink = `https://bsky.app/intent/compose?text=${encodeURIComponent(skeet)}`
 
-            const body = `please [Share on Bluesky](${blueskyLink}) and send [the announcement email](${announcementURL}).`
+            let body = `please [Share on Bluesky](${blueskyLink}) and send [the announcement email](${announcementURL}).`
+
+            // Add MSYS2 PR link for non-RC releases
+            // See https://github.com/msys2/MINGW-packages/pull/26470
+            if (!rc) {
+              const msys2SyncBranch = `msys2-sync-${tagName}`
+              const releaseWorkflowRunURL = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`
+              const prTitle = encodeURIComponent(`mingw-w64-git: upgrade to Git for Windows ${ver}`)
+              const prBody = encodeURIComponent([
+                `This PR synchronizes the \`mingw-w64-git\` package definition from [Git for Windows](https://github.com/git-for-windows/MINGW-packages/tree/main/mingw-w64-git).`,
+                '',
+                `See ${releaseURL} for the release notes.`,
+                '',
+                `This branch was pushed by ${releaseWorkflowRunURL}`
+              ].join('\n'))
+              const msys2PrLink = `https://github.com/msys2/MINGW-packages/compare/master...git-for-windows:MINGW-packages:${msys2SyncBranch}?expand=1&title=${prTitle}&body=${prBody}`
+              body += `\n\nPlease wait for the [repository-updates job](${releaseWorkflowRunURL}) to finish, then [open the MSYS2 sync PR](${msys2PrLink}).`
+            }
 
             const q = `repo:${process.env.OWNER}/${process.env.REPO}+is:pr+is:open+${gitSHA}`
             const { data } = await github.rest.search.issuesAndPullRequests({ q })
