@@ -206,6 +206,7 @@ Preserve these conventions when editing:
 - Always include `if: github.event.repository.owner.login == 'git-for-windows'` to prevent forks from accidentally running workflows
 - Keep GitHub App auth flow consistent (`GH_APP_ID` + `GH_APP_PRIVATE_KEY`, installation token exchange)
 - Preserve mirrored check-run behavior in workflows that act on other repositories
+- **YAML block scalar indentation pitfall**: In `run: |` and `script: |` blocks, every line of content must be indented at least to the block's base indentation level. Lines with *less* indentation (including column 0) terminate the block scalar — YAML silently truncates the step's script at that point. This is especially treacherous for heredoc bodies and multi-line JS template literals whose content naturally starts at column 0. Mitigations: for shell heredocs, indent the body and the delimiter to the YAML block's base indentation; for multi-line JS strings, use `[...].join('\n')` so each array element is a single indented line.
 
 ### Release Branch Semantics
 
