@@ -150,7 +150,7 @@ Investigation commands:
 
 Decision rules:
 1. If range-diff shows correspondence (e.g. '1: abc = 1: def'), output: skip <upstream-oid>
-2. If patch needs surgical resolution, edit files, stage with 'git -C \"$WORKTREE_DIR\" add', output: continue
+2. If patch needs surgical resolution, edit files, stage with 'cd \"$WORKTREE_DIR\" && git add', output: continue
 3. If unresolvable, output: fail
 
 Your FINAL line must be exactly: skip <oid>, continue, or fail"
