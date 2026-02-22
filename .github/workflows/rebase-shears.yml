@@ -1,0 +1,449 @@
+name: Merging-Rebase Automation
+run-name: Rebase ${{ (inputs.branch == '' || inputs.branch == 'all') && 'all shears/* branches' || format('the shears/{} branch', inputs.branch) }}
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Shears branch to update (seen, next, main, maint, or all)'
+        required: true
+        type: choice
+        options:
+          - all
+          - seen
+          - next
+          - main
+          - maint
+      push:
+        description: 'Push the result after successful rebase'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  BRANCH: ${{ inputs.branch || 'all' }}
+  PUSH: ${{ github.event_name == 'schedule' && 'true' || inputs.push || 'true' }}
+  COPILOT_MODEL: claude-opus-4.6
+
+jobs:
+  rebase:
+    if: github.event.repository.owner.login == 'git-for-windows'
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+    steps:
+      - name: Check if rebase is needed
+        id: precheck
+        if: github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // To avoid expensive clones when nothing changed, each run records
+            // the ref tips it saw (GfW main + upstream branches) in its check
+            // run output via the Checks API. On schedule triggers, we compare
+            // current refs against the previous run's recorded state and skip
+            // the rebase entirely if nothing moved.
+            const runs = await github.rest.actions.listWorkflowRuns({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              workflow_id: context.workflow,
+              per_page: 2
+            })
+            const previous = runs.data.workflow_runs.find(r => r.id !== context.runId)
+            let summary = ''
+            if (previous) {
+              const checkRuns = await github.rest.checks.listForSuite({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                check_suite_id: previous.check_suite_id
+              })
+              summary = checkRuns.data.check_runs[0]?.output?.summary || ''
+            }
+            const prevRefs = Object.fromEntries(
+              summary.split('\n').filter(Boolean).map(l => l.split(' '))
+            )
+            const branches = ['main', 'seen', 'next', 'master', 'maint']
+            const expected = branches.map(b => b === 'main' ? 'origin/main' : `upstream/${b}`)
+            if (!expected.every(k => prevRefs[k])) return
+            core.exportVariable('REF_STATE', summary)
+            for (const branch of branches) {
+              const owner = branch === 'main' ? '${{ github.repository_owner }}' : 'git'
+              const key = branch === 'main' ? 'origin/main' : `upstream/${branch}`
+              const r = await github.rest.git.getRef({ owner, repo: 'git', ref: `heads/${branch}` })
+              if (r.data.object.sha !== prevRefs[key]) return
+            }
+            const originRun = prevRefs['run'] || previous.html_url
+            core.notice(`Nothing changed since ${originRun}, skipping`)
+            core.setOutput('skip', 'true')
+            core.exportVariable('PUSH', 'false')
+      - name: Checkout automation repo
+        if: steps.precheck.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          path: automation
+
+      - name: Set up Copilot CLI
+        if: steps.precheck.outputs.skip != 'true'
+        run: npm install -g @github/copilot
+
+      - name: Clone git-for-windows/git
+        if: steps.precheck.outputs.skip != 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.repository_owner }}/git
+          fetch-depth: 0
+          path: git
+
+      - name: Configure git
+        if: steps.precheck.outputs.skip != 'true'
+        working-directory: git
+        run: |
+          git config user.name "Git for Windows Build Agent"
+          git config user.email "ci@git-for-windows.build"
+
+      - name: Add upstream remote
+        id: fetch
+        if: steps.precheck.outputs.skip != 'true'
+        working-directory: git
+        run: |
+          git remote add upstream https://github.com/git/git.git || true
+          git fetch upstream --no-tags
+          echo "main_sha=$(git rev-parse origin/main)" >>"$GITHUB_OUTPUT"
+          cat >>"$GITHUB_ENV" <<-EOF
+          REF_STATE<<REFS
+          $(git for-each-ref --format='%(refname:strip=2) %(objectname)' refs/remotes/origin/main refs/remotes/upstream/seen refs/remotes/upstream/next refs/remotes/upstream/master refs/remotes/upstream/maint)
+          REFS
+          EOF
+
+      - name: Record ref state
+        if: env.REF_STATE
+        uses: actions/github-script@v7
+        with:
+          script: |
+            let refState = process.env.REF_STATE
+            if (!refState.includes('\nrun '))
+              refState += `\nrun ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            const jobs = await github.rest.actions.listJobsForWorkflowRun({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              run_id: context.runId
+            })
+            const job = jobs.data.jobs.find(j => j.name === '${{ github.job }}')
+            await github.rest.checks.update({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              check_run_id: job.id,
+              output: {
+                title: 'Ref state',
+                summary: refState
+              }
+            })
+
+      - name: Install build dependencies
+        if: steps.precheck.outputs.skip != 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q libcurl4-openssl-dev libexpat-dev gettext zlib1g-dev
+
+      - name: Run rebase (single branch)
+        id: rebase-single
+        if: env.BRANCH != 'all' && steps.precheck.outputs.skip != 'true'
+        working-directory: git
+        # Copilot CLI authenticates via GH_TOKEN, which needs a fine-grained PAT
+        # with the "Copilot Requests" permission (Account permissions section).
+        # Create one at https://github.com/settings/personal-access-tokens/new
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          case "$BRANCH" in
+            main) UPSTREAM="upstream/master" ;;
+            *)    UPSTREAM="upstream/$BRANCH" ;;
+          esac
+
+          echo "::group::Fetching shears branches"
+          git fetch origin shears/seen shears/next shears/main shears/maint
+          echo "::endgroup::"
+
+          if test 0 = "$(git rev-list --count "origin/shears/$BRANCH..$UPSTREAM")"; then
+            echo "::notice::Nothing to do for shears/$BRANCH: $UPSTREAM has no new commits"
+            exit 0
+          fi
+
+          if "$GITHUB_WORKSPACE/automation/rebase-branch.sh" "shears/$BRANCH" "$UPSTREAM" "$GITHUB_WORKSPACE/automation"; then
+            echo "to_push=shears/$BRANCH" >>"$GITHUB_OUTPUT"
+          else
+            echo "failed_worktrees=$PWD/rebase-worktree-$BRANCH" >>"$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Run rebase (all branches)
+        id: rebase-all
+        if: env.BRANCH == 'all' && steps.precheck.outputs.skip != 'true'
+        working-directory: git
+        env:
+          GH_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+        run: |
+          echo "::group::Fetching shears branches"
+          git fetch origin shears/seen shears/next shears/main shears/maint
+          echo "::endgroup::"
+
+          to_push=""
+          failed_worktrees=""
+
+          for BRANCH in seen next main maint; do
+            case "$BRANCH" in
+              main) UPSTREAM="upstream/master" ;;
+              *)    UPSTREAM="upstream/$BRANCH" ;;
+            esac
+
+            if test 0 = "$(git rev-list --count "origin/shears/$BRANCH..$UPSTREAM")"; then
+              echo "::notice::Nothing to do for shears/$BRANCH: $UPSTREAM has no new commits"
+              if test -n "$GITHUB_STEP_SUMMARY"; then
+                cat >>"$GITHUB_STEP_SUMMARY" <<-UPTODATE_EOF
+          ## Rebase Summary: $BRANCH
+
+          Already up to date with \`$UPSTREAM\`; nothing to rebase.
+
+          UPTODATE_EOF
+              fi
+              continue
+            fi
+
+            if "$GITHUB_WORKSPACE/automation/rebase-branch.sh" "shears/$BRANCH" "$UPSTREAM" "$GITHUB_WORKSPACE/automation"; then
+              to_push="${to_push:+$to_push }shears/$BRANCH"
+            else
+              echo "::error::Rebase failed for shears/$BRANCH"
+              failed_worktrees="${failed_worktrees:+$failed_worktrees }$PWD/rebase-worktree-$BRANCH"
+            fi
+          done
+
+          echo "to_push=$to_push" >>"$GITHUB_OUTPUT"
+          echo "failed_worktrees=$failed_worktrees" >>"$GITHUB_OUTPUT"
+
+          # Fail the step if any rebase failed
+          test -z "$failed_worktrees"
+
+      - name: Create bundles and archives
+        if: always() && steps.precheck.outputs.skip != 'true'
+        working-directory: git
+        run: |
+          set -x
+          mkdir -p upload
+
+          # Bundles for successful branches
+          for branch in ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}; do
+            name=${branch##*/}
+            git bundle create "upload/$name.bundle" "$branch" ^origin/main
+          done
+
+          # Bundles and archives for failed branches
+          for worktree in ${{ steps.rebase-single.outputs.failed_worktrees }} ${{ steps.rebase-all.outputs.failed_worktrees }}; do
+            test -d "$worktree" || continue
+            name=${worktree##*rebase-worktree-}
+            rebase_head_arg=
+            git -C "$worktree" rev-parse --verify REBASE_HEAD >/dev/null 2>&1 &&
+              rebase_head_arg=REBASE_HEAD
+            git -C "$worktree" for-each-ref --format='%(refname)' |
+              grep -v '^refs/tags/' |
+              sed 's,^refs/remotes/origin/,^refs/remotes/origin/,' |
+              git -C "$worktree" bundle create "../upload/$name.bundle" --stdin HEAD $rebase_head_arg
+            tar -czf "upload/$name.tar.gz" -C "$worktree" .
+          done
+
+      - name: Upload artifacts
+        if: always() && steps.precheck.outputs.skip != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: rebase-result
+          path: git/upload/
+          if-no-files-found: warn
+
+      - name: Obtain installation access token
+        if: always() && env.PUSH == 'true' && steps.precheck.outputs.skip != 'true'
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: git,shears-builds
+
+      - name: Push results
+        if: always() && env.PUSH == 'true' && steps.app-token.outputs.token && (steps.rebase-single.outputs.to_push || steps.rebase-all.outputs.to_push)
+        working-directory: git
+        run: |
+          AUTH="$(echo -n 'x-access-token:${{ steps.app-token.outputs.token }}' | base64)"
+          GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
+            git push --force origin ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}
+
+      - name: Create check runs
+        if: always() && env.PUSH == 'true' && steps.app-token.outputs.token
+        working-directory: git
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          head_sha="${{ steps.fetch.outputs.main_sha }}"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+          for branch in ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}; do
+            name=${branch##*/}
+            report="rebase-worktree-$name/conflict-report.md"
+            test -f "$report" || continue
+            gh api "repos/${{ github.repository_owner }}/git/check-runs" \
+              -f "name=shears-$name" \
+              -f "head_sha=$head_sha" \
+              -f "status=completed" \
+              -f "conclusion=success" \
+              -f "details_url=$run_url" \
+              -f "output[title]=shears/$name rebased successfully" \
+              -F "output[summary]=@$report"
+          done
+
+          for worktree in ${{ steps.rebase-single.outputs.failed_worktrees }} ${{ steps.rebase-all.outputs.failed_worktrees }}; do
+            test -d "$worktree" || continue
+            name=${worktree##*rebase-worktree-}
+            report="$worktree/conflict-report.md"
+            test -f "$report" || report=/dev/null
+            gh api "repos/${{ github.repository_owner }}/git/check-runs" \
+              -f "name=shears-$name" \
+              -f "head_sha=$head_sha" \
+              -f "status=completed" \
+              -f "conclusion=failure" \
+              -f "details_url=$run_url" \
+              -f "output[title]=shears/$name rebase failed" \
+              -F "output[summary]=@$report"
+          done
+
+      - name: Mirror results to PRs
+        if: always() && env.PUSH == 'true' && steps.app-token.outputs.token
+        working-directory: git
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          builds_repo="${{ github.repository_owner }}/shears-builds"
+          run_id="$GITHUB_RUN_ID"
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$run_id"
+          AUTH="$(echo -n 'x-access-token:${{ steps.app-token.outputs.token }}' | base64)"
+          errors=0
+
+          push_to_builds () {
+            GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
+              git push "https://github.com/$builds_repo" "$@"
+          }
+
+          # Successful rebases: create regular PRs
+          for branch in ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}; do
+            name=${branch##*/}
+            worktree="rebase-worktree-$name"
+            test -d "$worktree" || continue
+            marker=$(git -C "$worktree" rev-parse "HEAD^{/Start.the.merging-rebase}") || {
+              echo "::error::Cannot find marker for shears/$name"
+              errors=1
+              continue
+            }
+            tip=$(git -C "$worktree" rev-parse HEAD)
+            report="$worktree/conflict-report.md"
+            test -f "$report" || continue
+
+            push_to_builds \
+              "$marker:refs/heads/base/shears/$name-$run_id" \
+              "$tip:refs/heads/shears/$name-$run_id" || {
+              echo "::error::Failed to push shears/$name to $builds_repo"
+              errors=1
+              continue
+            }
+
+            title="Rebase shears/$name (#$run_id)"
+            {
+              echo "[Workflow run]($run_url)"
+              echo
+              cat "$report"
+            } >"$worktree/pr-body.md"
+
+            pr_url=$(gh api "repos/$builds_repo/pulls" \
+              -f "title=$title" \
+              -f "head=shears/$name-$run_id" \
+              -f "base=base/shears/$name-$run_id" \
+              -F "body=@$worktree/pr-body.md" \
+              --jq '.html_url') || {
+              echo "::error::Failed to create PR for shears/$name"
+              errors=1
+              continue
+            }
+            echo "::notice::Created PR '$title': $pr_url"
+          done
+
+          # Failed rebases: create draft PRs, upload artifacts
+          for worktree in ${{ steps.rebase-single.outputs.failed_worktrees }} ${{ steps.rebase-all.outputs.failed_worktrees }}; do
+            test -d "$worktree" || continue
+            name=${worktree##*rebase-worktree-}
+            report="$worktree/conflict-report.md"
+
+            tip=$("$GITHUB_WORKSPACE/automation/stash-with-conflicts.sh" "$worktree") || {
+              echo "::warning::Failed to create state commit for shears/$name, using HEAD"
+              tip=$(git -C "$worktree" rev-parse HEAD)
+            }
+            marker=$(git -C "$worktree" rev-parse "HEAD^{/Start.the.merging-rebase}") || {
+              echo "::warning::Marker not found for shears/$name, trying merge-base"
+              marker=$(git -C "$worktree" merge-base HEAD REBASE_HEAD) || {
+                echo "::error::Cannot determine base for shears/$name, skipping"
+                errors=1
+                continue
+              }
+            }
+
+            push_to_builds \
+              "$marker:refs/heads/base/shears/$name-$run_id" \
+              "$tip:refs/heads/shears/$name-$run_id" || {
+              echo "::error::Failed to push shears/$name to $builds_repo"
+              errors=1
+              continue
+            }
+
+            title="FAILED: Rebase shears/$name (#$run_id)"
+            {
+              echo "[Workflow run]($run_url) failed to rebase shears/$name."
+              echo
+              test -f "$report" && cat "$report"
+            } >"$worktree/pr-body.md"
+
+            pr_url=$(gh api "repos/$builds_repo/pulls" \
+              -f "title=$title" \
+              -f "head=shears/$name-$run_id" \
+              -f "base=base/shears/$name-$run_id" \
+              -F "body=@$worktree/pr-body.md" \
+              -F "draft=true" \
+              --jq '.html_url') || {
+              echo "::error::Failed to create draft PR for shears/$name"
+              errors=1
+              continue
+            }
+            echo "::notice::Created draft PR '$title': $pr_url"
+
+            # Upload bundle and worktree archive as release assets
+            assets=""
+            test -f "upload/$name.bundle" &&
+              assets="$assets upload/$name.bundle#Git bundle"
+            test -f "upload/$name.tar.gz" &&
+              assets="$assets upload/$name.tar.gz#Worktree archive"
+            if test -n "$assets"; then
+              tag="shears-$name-$run_id"
+              gh release create "$tag" \
+                --repo "$builds_repo" \
+                --target "$tip" \
+                --title "$title" \
+                --notes "See [draft PR]($pr_url)" \
+                --prerelease \
+                $assets || {
+                echo "::warning::Failed to upload artifacts for shears/$name"
+              }
+              gh api "repos/$builds_repo/issues/${pr_url##*/}/comments" \
+                -f "body=Artifacts: [release assets](https://github.com/$builds_repo/releases/tag/$tag)" || {
+                echo "::warning::Failed to comment artifact link for shears/$name"
+              }
+            fi
+          done
+
+          exit $errors
