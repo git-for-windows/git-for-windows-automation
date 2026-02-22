@@ -48,7 +48,7 @@ jobs:
             const runs = await github.rest.actions.listWorkflowRuns({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              workflow_id: context.workflow,
+              workflow_id: ${{ toJSON(github.event.workflow) }},
               per_page: 2
             })
             const previous = runs.data.workflow_runs.find(r => r.id !== context.runId)
