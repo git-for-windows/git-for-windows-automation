@@ -80,7 +80,7 @@ jobs:
             core.exportVariable('PUSH', 'false')
       - name: Checkout automation repo
         if: steps.precheck.outputs.skip != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           path: automation
 
@@ -90,7 +90,7 @@ jobs:
 
       - name: Clone git-for-windows/git
         if: steps.precheck.outputs.skip != 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: ${{ github.repository_owner }}/git
           fetch-depth: 0
