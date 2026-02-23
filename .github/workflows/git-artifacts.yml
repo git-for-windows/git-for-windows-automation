@@ -317,7 +317,26 @@ jobs:
           if test -z "$EXISTING_GIT_TAG"
           then
             git commit -s -m "mingw-w64-git: new version ($version)" PKGBUILD &&
-            git bundle create "$b"/MINGW-packages.bundle origin/main..main
+
+            # Create MSYS2 sync branch: based on msys2/master with our mingw-w64-git/ content
+            # See https://github.com/msys2/MINGW-packages/pull/26470
+            msys2_sync_branch="msys2-sync-$version" &&
+            git fetch --depth 1 https://github.com/msys2/MINGW-packages master &&
+            git worktree add -b "$msys2_sync_branch" --no-checkout msys2-sync FETCH_HEAD &&
+            git -C msys2-sync sparse-checkout set mingw-w64-git &&
+            git -C msys2-sync checkout main -- mingw-w64-git &&
+            git -C msys2-sync commit -F - <<COMMIT_MSG &&
+          mingw-w64-git: upgrade to Git for Windows $version
+
+          This commit was created by:
+          $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID
+
+          See https://github.com/git-for-windows/git/releases/tag/$version for details.
+          COMMIT_MSG
+            echo "::notice::Created MSYS2 sync branch $msys2_sync_branch at $(git -C msys2-sync rev-parse HEAD)" &&
+            git worktree remove msys2-sync &&
+
+            git bundle create "$b"/MINGW-packages.bundle origin/main..main FETCH_HEAD.."$msys2_sync_branch"
           elif ! git update-index --ignore-submodules --refresh ||
             ! git diff-files --ignore-submodules ||
             ! git diff-index --cached --ignore-submodules HEAD
