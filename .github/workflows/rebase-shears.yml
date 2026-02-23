@@ -254,7 +254,7 @@ jobs:
 
       - name: Upload artifacts
         if: always() && steps.precheck.outputs.skip != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: rebase-result
           path: git/upload/
