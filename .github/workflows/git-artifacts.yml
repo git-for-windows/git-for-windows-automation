@@ -510,7 +510,7 @@ jobs:
         with:
           name: ${{matrix.artifact.name}}-${{env.ARCHITECTURE}}
           path: artifacts
-      - uses: actions/create-github-app-token@v2
+      - uses: actions/create-github-app-token@v3
         if: matrix.artifact.name == 'installer' && github.event.inputs.architecture == 'x86_64'
         id: pr-comment-token
         with:

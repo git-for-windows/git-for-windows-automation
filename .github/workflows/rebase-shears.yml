@@ -262,7 +262,7 @@ jobs:
 
       - name: Obtain installation access token
         if: always() && env.PUSH == 'true' && steps.precheck.outputs.skip != 'true'
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         id: app-token
         with:
           app-id: ${{ secrets.GH_APP_ID }}
