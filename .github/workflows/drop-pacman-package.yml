@@ -26,7 +26,7 @@ jobs:
     runs-on: ${{ matrix.sdk == 'git-sdk-arm64' && 'windows-11-arm' || 'windows-latest' }}
     steps:
       - name: obtain installation access token
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         id: sdk-repo-token
         with:
           app-id: ${{ secrets.GH_APP_ID }}
