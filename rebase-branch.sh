@@ -308,7 +308,7 @@ Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue -- <summ
 			<details>
 			<summary>Range-diff</summary>
 
-			$(range_diff_with_markup --creation-factor=999 "$rebase_head_oid^!" "$upstream_oid^!" || echo "Unable to generate range-diff")
+			$(range_diff_with_markup --creation-factor=999 --remerge-diff "$rebase_head_oid^!" "$upstream_oid^!" || echo "Unable to generate range-diff")
 
 			</details>
 
@@ -408,7 +408,7 @@ Your FINAL line must be exactly: continue or fail"
 		else
 			git commit -C REBASE_HEAD ||
 				die "git commit failed for $rebase_head_oneline"
-			resolution_rangediff=$(range_diff_with_markup --creation-factor=999 "$rebase_head_oid^!" HEAD^! || echo "Unable to generate range-diff")
+			resolution_rangediff=$(range_diff_with_markup --creation-factor=999 --remerge-diff "$rebase_head_oid^!" HEAD^! || echo "Unable to generate range-diff")
 			cat >>"$REPORT_FILE" <<-CONTINUE_EOF
 
 			#### Resolved: $rebase_head_ref
@@ -621,7 +621,7 @@ test "$PARENT_COUNT" -eq 3 || # commit itself + 2 parents
 	die "Marker should have 2 parents, found $((PARENT_COUNT - 1))"
 
 # Generate range-diff comparing original patches with rebased patches
-RANGE_DIFF=$(git range-diff "$ORIG_OLD_MARKER..$ORIG_TIP_OID" \
+RANGE_DIFF=$(git range-diff --remerge-diff "$ORIG_OLD_MARKER..$ORIG_TIP_OID" \
 	"$MARKER_IN_RESULT..HEAD" || echo "Unable to generate range-diff")
 
 # Annotate range-diff with upstream OIDs for skipped commits
