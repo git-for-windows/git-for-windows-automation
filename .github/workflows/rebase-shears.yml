@@ -356,6 +356,14 @@ jobs:
             }
 
             title="Rebase shears/$name (#$run_id)"
+            stats="$worktree/conflict-stats.txt"
+            if test -f "$stats"; then
+              eval "$(cat "$stats")"
+              total=$((skipped + resolved))
+              if test "$total" -gt 0; then
+                title="Rebase shears/$name: $total conflict(s) ($skipped skipped, $resolved resolved) (#$run_id)"
+              fi
+            fi
             {
               echo "[Workflow run]($run_url)"
               echo

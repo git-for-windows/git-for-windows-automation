@@ -44,6 +44,34 @@ find_correspondence () {
 	echo "${match#* }"
 }
 
+# Run git range-diff and mark up the output with ```diff code blocks for
+# Markdown rendering.  Accepts the same arguments as git range-diff.
+# Propagates the range-diff exit code on failure.
+range_diff_with_markup () {
+	_rdi=$(git range-diff "$@") || return
+	printf '%s\n' "$_rdi" | markup_range_diff
+}
+
+# Apply range-diff markup to already-produced range-diff text on stdin.
+markup_range_diff () {
+	sed -e '/^ \{0,3\}\(-\|[1-9][0-9]*\):/{a\
+\
+   ``````diff
+s/^ */* /;1b;i\
+   ``````\
+
+}' -e 's/^    /   /' -e '$a\
+   ``````' |
+	sed -e '/^$/{
+N
+/^\n   ``````diff/{
+N
+/diff\n   ``````/{
+$d
+N
+d}}}'
+}
+
 # Run a rebase, automatically skipping commits that match upstream exactly
 # and trying to reuse sibling resolutions via merge-tree
 # Usage: run_rebase <rebase-args...>
@@ -280,9 +308,7 @@ Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue -- <summ
 			<details>
 			<summary>Range-diff</summary>
 
-			\`\`\`
-			$(git range-diff --creation-factor=999 "$rebase_head_oid^!" "$upstream_oid^!" || echo "Unable to generate range-diff")
-			\`\`\`
+			$(range_diff_with_markup --creation-factor=999 --remerge-diff "$rebase_head_oid^!" "$upstream_oid^!" || echo "Unable to generate range-diff")
 
 			</details>
 
@@ -382,7 +408,7 @@ Your FINAL line must be exactly: continue or fail"
 		else
 			git commit -C REBASE_HEAD ||
 				die "git commit failed for $rebase_head_oneline"
-			resolution_rangediff=$(git range-diff --creation-factor=999 "$rebase_head_oid^!" HEAD^! || echo "Unable to generate range-diff")
+			resolution_rangediff=$(range_diff_with_markup --creation-factor=999 --remerge-diff "$rebase_head_oid^!" HEAD^! || echo "Unable to generate range-diff")
 			cat >>"$REPORT_FILE" <<-CONTINUE_EOF
 
 			#### Resolved: $rebase_head_ref
@@ -392,9 +418,7 @@ Your FINAL line must be exactly: continue or fail"
 			<details>
 			<summary>Range-diff</summary>
 
-			\`\`\`
 			$resolution_rangediff
-			\`\`\`
 
 			</details>
 
@@ -597,7 +621,7 @@ test "$PARENT_COUNT" -eq 3 || # commit itself + 2 parents
 	die "Marker should have 2 parents, found $((PARENT_COUNT - 1))"
 
 # Generate range-diff comparing original patches with rebased patches
-RANGE_DIFF=$(git range-diff "$ORIG_OLD_MARKER..$ORIG_TIP_OID" \
+RANGE_DIFF=$(git range-diff --remerge-diff "$ORIG_OLD_MARKER..$ORIG_TIP_OID" \
 	"$MARKER_IN_RESULT..HEAD" || echo "Unable to generate range-diff")
 
 # Annotate range-diff with upstream OIDs for skipped commits
@@ -630,9 +654,7 @@ cat >>"$REPORT_FILE" <<EOF
 <details>
 <summary>Range-diff (click to expand)</summary>
 
-\`\`\`
-$RANGE_DIFF
-\`\`\`
+$(printf '%s\n' "$RANGE_DIFF" | markup_range_diff)
 
 </details>
 
@@ -640,6 +662,10 @@ EOF
 
 echo "Rebase completed: $(git rev-parse --short HEAD)"
 cat "$REPORT_FILE"
+
+# Write conflict stats for the workflow to pick up in PR titles
+echo "skipped=$CONFLICTS_SKIPPED resolved=$CONFLICTS_RESOLVED" \
+	>"$WORKTREE_DIR/conflict-stats.txt"
 
 # Write to GitHub Actions job summary
 if test -n "$GITHUB_STEP_SUMMARY"; then
