@@ -663,6 +663,10 @@ EOF
 echo "Rebase completed: $(git rev-parse --short HEAD)"
 cat "$REPORT_FILE"
 
+# Write conflict stats for the workflow to pick up in PR titles
+echo "skipped=$CONFLICTS_SKIPPED resolved=$CONFLICTS_RESOLVED" \
+	>"$WORKTREE_DIR/conflict-stats.txt"
+
 # Write to GitHub Actions job summary
 if test -n "$GITHUB_STEP_SUMMARY"; then
 	cat "$REPORT_FILE" >>"$GITHUB_STEP_SUMMARY"
