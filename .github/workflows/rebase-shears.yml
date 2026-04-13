@@ -37,7 +37,7 @@ jobs:
       - name: Check if rebase is needed
         id: precheck
         if: github.event_name == 'schedule'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             // To avoid expensive clones when nothing changed, each run records
@@ -119,7 +119,7 @@ jobs:
 
       - name: Record ref state
         if: env.REF_STATE
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             let refState = process.env.REF_STATE
