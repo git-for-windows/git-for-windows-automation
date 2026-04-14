@@ -254,8 +254,9 @@ Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue -- <summ
 	echo "::endgroup::"
 
 	# Extract the decision from the last meaningful line.
-	# Copilot appends a stats trailer (key: value lines) after the actual
-	# output, separated by blank lines. The sed script finds the last
+	# Copilot appends a stats trailer after the actual output, separated
+	# by blank lines. The format may be "key: value" (colon-separated)
+	# or "Key   value" (space-aligned). The sed script finds the last
 	# decision keyword (continue/skip/fail) that is followed only by
 	# blank lines and stats-like lines until EOF.
 	decision=$(echo "$ai_output" | sed -n '
@@ -276,7 +277,10 @@ Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue -- <summ
 		/^$/b emptyloop
 		:stats
 		/[A-Za-z][^:]\{0,30\}:$/{ n; /^ /!b; :ind; ${ g; p; q }; n; /^ /b ind; b stats }
-		/^[^:]\{1,30\}: /!b
+		/^[^:]\{1,30\}: /b stats_line
+		/^[A-Za-z][A-Za-z]*  /b stats_line
+		b
+		:stats_line
 		${ g; p; q }
 		n
 		b stats
