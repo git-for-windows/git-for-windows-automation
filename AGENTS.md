@@ -69,13 +69,16 @@ The release flow has cascading triggers: `/git-artifacts` → `tag-git.yml` → 
 |----------|---------|
 | `upload-snapshot.yml` | Upload snapshot builds |
 | `drop-pacman-package.yml` | Remove packages from Pacman repository |
+| `remove-packages-from-pacman-repository.yml` | Remove named packages from the Pacman repository (replaces `drop-pacman-package.yml` for multi-package removal) |
 | `break-pacman-upload-lease.yml` | Handle Azure Blob Storage lease issues |
 | `prepare-embargoed-branches.yml` | Prepare embargoed security fix branches |
+| `rebase-shears.yml` | Automated merging-rebase of `shears/*` branches onto upstream; runs on a schedule and via `workflow_dispatch` |
 
 ## Directory Structure
 
 ```
 .github/
+├── agents/                     # Copilot agent definitions (e.g., conflict-resolver)
 ├── actions/                    # Composite actions
 │   ├── check-run-action/       # Creates/updates check runs in other repos
 │   ├── github-release/         # Handles GitHub release creation
@@ -94,6 +97,7 @@ update-scripts/
 └── ensure-not-yet-deployed.sh  # Prevents duplicate deployments
 
 *.js                            # Node.js modules for GitHub API operations
+*.sh                            # Shell helper scripts (rebase, stash, auth, etc.)
 ```
 
 ## Key JavaScript Modules
@@ -110,6 +114,18 @@ update-scripts/
 | `repository-updates.js` | Pushes updates to Git for Windows repositories |
 | `create-artifacts-matrix.js` | Generates build matrix for artifact builds |
 | `https-request.js` | Low-level HTTPS request wrapper |
+| `gently.js` | Try/catch wrapper returning a fallback value on failure |
+| `get-workflow-run-artifact.js` | Downloads a named artifact from a workflow run via Octokit |
+
+## Key Shell Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `rebase-branch.sh` | Rebases a `shears/*` branch onto a new upstream base using range-diff correspondence maps |
+| `stash-with-conflicts.sh` | Creates a stash-like octopus merge commit preserving full conflict state (unmerged index entries) |
+| `apply-stash-with-conflicts.sh` | Restores conflict state from a commit created by `stash-with-conflicts.sh` |
+| `gh-cli-auth-as-app.sh` | Authenticates the `gh` CLI as the GitForWindowsHelper GitHub App |
+| `prepare-embargoed-branches.sh` | Prepares branches for embargoed security releases |
 
 ## Check Run Mirroring
 
