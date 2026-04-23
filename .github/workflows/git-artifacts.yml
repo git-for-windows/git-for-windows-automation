@@ -255,17 +255,25 @@ jobs:
               $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)
           fi &&
           git reset --hard $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)
-      - name: Prepare home directory for code-signing
+      - name: Set up code-signing with Azure Artifact Signing
         env:
-          CODESIGN_P12: ${{secrets.CODESIGN_P12}}
-          CODESIGN_PASS: ${{secrets.CODESIGN_PASS}}
-        if: env.CODESIGN_P12 != '' && env.CODESIGN_PASS != '' && steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
+          AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
+          AZURE_CLIENT_SECRET: ${{secrets.AZURE_CLIENT_SECRET}}
+          AZURE_TENANT_ID: ${{secrets.AZURE_TENANT_ID}}
+          AZURE_SIGNING_ENDPOINT: ${{secrets.AZURE_SIGNING_ENDPOINT}}
+          AZURE_SIGNING_ACCOUNT: ${{secrets.AZURE_SIGNING_ACCOUNT}}
+          AZURE_SIGNING_CERTIFICATE_PROFILE: ${{secrets.AZURE_SIGNING_CERTIFICATE_PROFILE}}
+        if: env.AZURE_CLIENT_ID != '' && steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
-          cd home &&
-          mkdir -p .sig &&
-          echo -n "$CODESIGN_P12" | tr % '\n' | base64 -d >.sig/codesign.p12 &&
-          echo -n "$CODESIGN_PASS" >.sig/codesign.pass
-          git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
+          {
+            echo "AZURE_CLIENT_ID=$AZURE_CLIENT_ID"
+            echo "AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET"
+            echo "AZURE_TENANT_ID=$AZURE_TENANT_ID"
+            echo "AZURE_SIGNING_ENDPOINT=$AZURE_SIGNING_ENDPOINT"
+            echo "AZURE_SIGNING_ACCOUNT=$AZURE_SIGNING_ACCOUNT"
+            echo "AZURE_SIGNING_CERTIFICATE_PROFILE=$AZURE_SIGNING_CERTIFICATE_PROFILE"
+          } >>$GITHUB_ENV &&
+          git config --global alias.signtool "!sh \"$PWD/azure-signtool.sh\""
       - name: Prepare home directory for GPG signing
         timeout-minutes: 5
         if: env.GPGKEY != '' && steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
@@ -445,16 +453,25 @@ jobs:
               sed '/\.sig$/d;/archimport/d;/cvs/d;/p4/d;/gitweb/d;s/^/--pkg=/' |
               tr '\n' ' ')" >>$GITHUB_ENV &&
           echo "VERSION_OPT=--version=$(cat pkg-"$ARCHITECTURE"/ver)" >>$GITHUB_ENV
-      - name: Prepare home directory for code-signing
+      - name: Set up code-signing with Azure Artifact Signing
         env:
-          CODESIGN_P12: ${{secrets.CODESIGN_P12}}
-          CODESIGN_PASS: ${{secrets.CODESIGN_PASS}}
-        if: (matrix.artifact.name == 'installer' || matrix.artifact.name == 'portable') && env.CODESIGN_P12 != '' && env.CODESIGN_PASS != ''
+          AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
+          AZURE_CLIENT_SECRET: ${{secrets.AZURE_CLIENT_SECRET}}
+          AZURE_TENANT_ID: ${{secrets.AZURE_TENANT_ID}}
+          AZURE_SIGNING_ENDPOINT: ${{secrets.AZURE_SIGNING_ENDPOINT}}
+          AZURE_SIGNING_ACCOUNT: ${{secrets.AZURE_SIGNING_ACCOUNT}}
+          AZURE_SIGNING_CERTIFICATE_PROFILE: ${{secrets.AZURE_SIGNING_CERTIFICATE_PROFILE}}
+        if: (matrix.artifact.name == 'installer' || matrix.artifact.name == 'portable') && env.AZURE_CLIENT_ID != ''
         run: |
-          mkdir -p home/.sig &&
-          echo -n "$CODESIGN_P12" | tr % '\n' | base64 -d >home/.sig/codesign.p12 &&
-          echo -n "$CODESIGN_PASS" >home/.sig/codesign.pass &&
-          git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
+          {
+            echo "AZURE_CLIENT_ID=$AZURE_CLIENT_ID"
+            echo "AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET"
+            echo "AZURE_TENANT_ID=$AZURE_TENANT_ID"
+            echo "AZURE_SIGNING_ENDPOINT=$AZURE_SIGNING_ENDPOINT"
+            echo "AZURE_SIGNING_ACCOUNT=$AZURE_SIGNING_ACCOUNT"
+            echo "AZURE_SIGNING_CERTIFICATE_PROFILE=$AZURE_SIGNING_CERTIFICATE_PROFILE"
+          } >>$GITHUB_ENV &&
+          git config --global alias.signtool "!sh \"$PWD/azure-signtool.sh\""
       - name: Build ${{env.ARCHITECTURE}} ${{matrix.artifact.name}}-mingit
         if: matrix.artifact.name == 'nuget'
         run: |
