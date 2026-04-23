@@ -44,6 +44,10 @@ defaults:
 jobs:
   pkg:
     runs-on: ${{ github.event.inputs.architecture == 'aarch64' && 'windows-11-arm' || 'windows-latest' }}
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
     outputs:
       artifact_matrix: ${{ steps.artifact-build-matrix.outputs.result }}
       msystem: ${{steps.configure-environment.outputs.MSYSTEM}}
@@ -255,20 +259,24 @@ jobs:
               $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)
           fi &&
           git reset --hard $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)
+      - name: Azure Login (OIDC)
+        env:
+          AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
+        if: env.AZURE_CLIENT_ID != '' && steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
+        uses: azure/login@v3
+        with:
+          client-id: ${{secrets.AZURE_CLIENT_ID}}
+          tenant-id: ${{secrets.AZURE_TENANT_ID}}
+          allow-no-subscriptions: true
       - name: Set up code-signing with Azure Artifact Signing
         env:
           AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
-          AZURE_CLIENT_SECRET: ${{secrets.AZURE_CLIENT_SECRET}}
-          AZURE_TENANT_ID: ${{secrets.AZURE_TENANT_ID}}
           AZURE_SIGNING_ENDPOINT: ${{secrets.AZURE_SIGNING_ENDPOINT}}
           AZURE_SIGNING_ACCOUNT: ${{secrets.AZURE_SIGNING_ACCOUNT}}
           AZURE_SIGNING_CERTIFICATE_PROFILE: ${{secrets.AZURE_SIGNING_CERTIFICATE_PROFILE}}
         if: env.AZURE_CLIENT_ID != '' && steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
           {
-            echo "AZURE_CLIENT_ID=$AZURE_CLIENT_ID"
-            echo "AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET"
-            echo "AZURE_TENANT_ID=$AZURE_TENANT_ID"
             echo "AZURE_SIGNING_ENDPOINT=$AZURE_SIGNING_ENDPOINT"
             echo "AZURE_SIGNING_ACCOUNT=$AZURE_SIGNING_ACCOUNT"
             echo "AZURE_SIGNING_CERTIFICATE_PROFILE=$AZURE_SIGNING_CERTIFICATE_PROFILE"
@@ -386,6 +394,10 @@ jobs:
   artifacts:
     runs-on: ${{ github.event.inputs.architecture == 'aarch64' && 'windows-11-arm' || 'windows-latest' }}
     needs: pkg
+    permissions:
+      id-token: write
+      contents: read
+      actions: read
     env:
       MSYSTEM: ${{ needs.pkg.outputs.msystem }}
       MINGW_PREFIX: ${{ needs.pkg.outputs.mingw-prefix }}
@@ -453,20 +465,24 @@ jobs:
               sed '/\.sig$/d;/archimport/d;/cvs/d;/p4/d;/gitweb/d;s/^/--pkg=/' |
               tr '\n' ' ')" >>$GITHUB_ENV &&
           echo "VERSION_OPT=--version=$(cat pkg-"$ARCHITECTURE"/ver)" >>$GITHUB_ENV
+      - name: Azure Login (OIDC)
+        env:
+          AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
+        if: (matrix.artifact.name == 'installer' || matrix.artifact.name == 'portable') && env.AZURE_CLIENT_ID != ''
+        uses: azure/login@v3
+        with:
+          client-id: ${{secrets.AZURE_CLIENT_ID}}
+          tenant-id: ${{secrets.AZURE_TENANT_ID}}
+          allow-no-subscriptions: true
       - name: Set up code-signing with Azure Artifact Signing
         env:
           AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
-          AZURE_CLIENT_SECRET: ${{secrets.AZURE_CLIENT_SECRET}}
-          AZURE_TENANT_ID: ${{secrets.AZURE_TENANT_ID}}
           AZURE_SIGNING_ENDPOINT: ${{secrets.AZURE_SIGNING_ENDPOINT}}
           AZURE_SIGNING_ACCOUNT: ${{secrets.AZURE_SIGNING_ACCOUNT}}
           AZURE_SIGNING_CERTIFICATE_PROFILE: ${{secrets.AZURE_SIGNING_CERTIFICATE_PROFILE}}
         if: (matrix.artifact.name == 'installer' || matrix.artifact.name == 'portable') && env.AZURE_CLIENT_ID != ''
         run: |
           {
-            echo "AZURE_CLIENT_ID=$AZURE_CLIENT_ID"
-            echo "AZURE_CLIENT_SECRET=$AZURE_CLIENT_SECRET"
-            echo "AZURE_TENANT_ID=$AZURE_TENANT_ID"
             echo "AZURE_SIGNING_ENDPOINT=$AZURE_SIGNING_ENDPOINT"
             echo "AZURE_SIGNING_ACCOUNT=$AZURE_SIGNING_ACCOUNT"
             echo "AZURE_SIGNING_CERTIFICATE_PROFILE=$AZURE_SIGNING_CERTIFICATE_PROFILE"

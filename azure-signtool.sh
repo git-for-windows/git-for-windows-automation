@@ -6,10 +6,8 @@
 # using the pre-built sign tool from
 # https://github.com/dscho/prebuilt-dotnet-sign-tool instead.
 #
-# It expects the following environment variables:
-#   AZURE_CLIENT_ID                      - Azure AD app client ID
-#   AZURE_CLIENT_SECRET                  - Azure AD app client secret
-#   AZURE_TENANT_ID                      - Azure AD tenant ID
+# It expects the Azure CLI to be authenticated (via `azure/login` with
+# OIDC) and the following environment variables:
 #   AZURE_SIGNING_ENDPOINT               - Azure Artifact Signing endpoint URL
 #   AZURE_SIGNING_ACCOUNT                - Azure Artifact Signing account name
 #   AZURE_SIGNING_CERTIFICATE_PROFILE    - certificate profile name
@@ -43,6 +41,7 @@ fi
 s () {
 	"$sign_exe" code artifact-signing \
 		"$1" \
+		--azure-credential-type azure-cli \
 		--description "Git for Windows" \
 		--description-url "https://gitforwindows.org" \
 		-v information \
