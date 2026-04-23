@@ -7,10 +7,11 @@
 # https://github.com/dscho/prebuilt-dotnet-sign-tool instead.
 #
 # It expects the Azure CLI to be authenticated (via `azure/login` with
-# OIDC) and the following environment variables:
-#   AZURE_SIGNING_ENDPOINT               - Azure Artifact Signing endpoint URL
-#   AZURE_SIGNING_ACCOUNT                - Azure Artifact Signing account name
-#   AZURE_SIGNING_CERTIFICATE_PROFILE    - certificate profile name
+# OIDC) and the following environment variable:
+#   AZURE_SIGNING_OPTS - command-line arguments for the sign tool, e.g.
+#     --artifact-signing-endpoint <url>
+#     --artifact-signing-account <account>
+#     --artifact-signing-certificate-profile <profile>
 
 die () {
 	echo "$*" >&2
@@ -45,9 +46,7 @@ s () {
 		--description "Git for Windows" \
 		--description-url "https://gitforwindows.org" \
 		-v information \
-		--artifact-signing-endpoint "$AZURE_SIGNING_ENDPOINT" \
-		--artifact-signing-account "$AZURE_SIGNING_ACCOUNT" \
-		--artifact-signing-certificate-profile "$AZURE_SIGNING_CERTIFICATE_PROFILE"
+		$AZURE_SIGNING_OPTS
 }
 
 for f in "$@"

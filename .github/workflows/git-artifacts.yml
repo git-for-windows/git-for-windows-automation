@@ -271,16 +271,10 @@ jobs:
       - name: Set up code-signing with Azure Artifact Signing
         env:
           AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
-          AZURE_SIGNING_ENDPOINT: ${{secrets.AZURE_SIGNING_ENDPOINT}}
-          AZURE_SIGNING_ACCOUNT: ${{secrets.AZURE_SIGNING_ACCOUNT}}
-          AZURE_SIGNING_CERTIFICATE_PROFILE: ${{secrets.AZURE_SIGNING_CERTIFICATE_PROFILE}}
+          AZURE_SIGNING_OPTS: ${{secrets.AZURE_SIGNING_OPTS}}
         if: env.AZURE_CLIENT_ID != '' && steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
-          {
-            echo "AZURE_SIGNING_ENDPOINT=$AZURE_SIGNING_ENDPOINT"
-            echo "AZURE_SIGNING_ACCOUNT=$AZURE_SIGNING_ACCOUNT"
-            echo "AZURE_SIGNING_CERTIFICATE_PROFILE=$AZURE_SIGNING_CERTIFICATE_PROFILE"
-          } >>$GITHUB_ENV &&
+          echo "AZURE_SIGNING_OPTS=$AZURE_SIGNING_OPTS" >>$GITHUB_ENV &&
           git config --global alias.signtool "!sh \"$PWD/azure-signtool.sh\""
       - name: Prepare home directory for GPG signing
         timeout-minutes: 5
@@ -477,16 +471,10 @@ jobs:
       - name: Set up code-signing with Azure Artifact Signing
         env:
           AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
-          AZURE_SIGNING_ENDPOINT: ${{secrets.AZURE_SIGNING_ENDPOINT}}
-          AZURE_SIGNING_ACCOUNT: ${{secrets.AZURE_SIGNING_ACCOUNT}}
-          AZURE_SIGNING_CERTIFICATE_PROFILE: ${{secrets.AZURE_SIGNING_CERTIFICATE_PROFILE}}
+          AZURE_SIGNING_OPTS: ${{secrets.AZURE_SIGNING_OPTS}}
         if: (matrix.artifact.name == 'installer' || matrix.artifact.name == 'portable') && env.AZURE_CLIENT_ID != ''
         run: |
-          {
-            echo "AZURE_SIGNING_ENDPOINT=$AZURE_SIGNING_ENDPOINT"
-            echo "AZURE_SIGNING_ACCOUNT=$AZURE_SIGNING_ACCOUNT"
-            echo "AZURE_SIGNING_CERTIFICATE_PROFILE=$AZURE_SIGNING_CERTIFICATE_PROFILE"
-          } >>$GITHUB_ENV &&
+          echo "AZURE_SIGNING_OPTS=$AZURE_SIGNING_OPTS" >>$GITHUB_ENV &&
           git config --global alias.signtool "!sh \"$PWD/azure-signtool.sh\""
       - name: Build ${{env.ARCHITECTURE}} ${{matrix.artifact.name}}-mingit
         if: matrix.artifact.name == 'nuget'
