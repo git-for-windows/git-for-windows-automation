@@ -325,7 +325,7 @@ jobs:
             git worktree add -b "$msys2_sync_branch" --no-checkout msys2-sync FETCH_HEAD &&
             git -C msys2-sync sparse-checkout set mingw-w64-git &&
             git -C msys2-sync checkout main -- mingw-w64-git &&
-            git -C msys2-sync commit -F - <<COMMIT_MSG &&
+            git -C msys2-sync commit -F - -- mingw-w64-git <<COMMIT_MSG &&
           mingw-w64-git: upgrade to Git for Windows $version
 
           This commit was created by:
@@ -334,7 +334,7 @@ jobs:
           See https://github.com/git-for-windows/git/releases/tag/$version for details.
           COMMIT_MSG
             echo "::notice::Created MSYS2 sync branch $msys2_sync_branch at $(git -C msys2-sync rev-parse HEAD)" &&
-            git worktree remove msys2-sync &&
+            git worktree remove -f msys2-sync &&
 
             git bundle create "$b"/MINGW-packages.bundle origin/main..main FETCH_HEAD.."$msys2_sync_branch"
           elif ! git update-index --ignore-submodules --refresh ||
