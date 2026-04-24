@@ -77,6 +77,15 @@ git --git-dir=msys2-runtime reset --soft "$revision" && {
 	git --git-dir=msys2-runtime worktree add --no-checkout src/msys2-runtime
 } &&
 
+# update-patches.sh needs the revision and base tag in src/msys2-runtime;
+# set up alternates so it can borrow objects from the bare repo
+echo "../../../../msys2-runtime/objects" \
+	>src/msys2-runtime/.git/objects/info/alternates &&
+git -C src/msys2-runtime update-ref HEAD "$revision" &&
+git -C src/msys2-runtime update-ref \
+	"refs/tags/cygwin-$pkgver" \
+	"$(git --git-dir=msys2-runtime rev-parse "refs/tags/cygwin-$pkgver")" &&
+
 sh -x ./update-patches.sh &&
 if test -n "$update_pkgver"
 then
