@@ -68,8 +68,10 @@ git --git-dir=msys2-runtime -c fetch.negotiationAlgorithm=noop fetch g4w \
         sort |
         uniq) &&
 
-git --git-dir=msys2-runtime reset --soft "$revision" &&
-git --git-dir=msys2-runtime worktree add --no-checkout src/msys2-runtime &&
+git --git-dir=msys2-runtime reset --soft "$revision" && {
+	test -d src/msys2-runtime ||
+	git --git-dir=msys2-runtime worktree add --no-checkout src/msys2-runtime
+} &&
 
 sh -x ./update-patches.sh &&
 if test -n "$update_pkgver"
