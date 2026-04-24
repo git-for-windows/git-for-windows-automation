@@ -122,7 +122,7 @@ runs:
         info="$(gpg --list-keys --with-colons "${GPGKEY%% *}" | cut -d : -f 1,10 | sed -n '/^uid/{s|uid:||p;q}')" &&
         git config --global user.name "${info% <*}" &&
         git config --global user.email "<${info#*<}"
-    - uses: actions/create-github-app-token@v1
+    - uses: actions/create-github-app-token@v3
       id: pacman-repo-token
       with:
         app-id: ${{ inputs.app-id }}
