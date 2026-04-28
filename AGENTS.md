@@ -23,6 +23,16 @@ Slash command (e.g., /deploy) → GitForWindowsHelper (Azure Function)
 
 This "mirror back" technique allows versioning source code independently of workflow definitions.
 
+## The MSYS2 Runtime and Git Bash
+
+Git for Windows ships a subset of an [MSYS2](https://www.msys2.org/) installation. At the core of that subset is the **msys2-runtime** (`msys-2.0.dll`). The [Cygwin project](https://cygwin.com/) maintains the original POSIX emulation runtime (`cygwin1.dll`). [MSYS2 forks Cygwin's runtime](https://github.com/msys2/msys2-runtime), and [Git for Windows in turn forks MSYS2's fork](https://github.com/git-for-windows/msys2-runtime). There is healthy cross-pollination between all three projects: fixes flow upstream and downstream regularly.
+
+This runtime provides a POSIX emulation layer on top of Win32: it translates POSIX paths, fork/exec semantics, signal handling, and pseudo-terminal I/O into Windows API calls. Programs that are difficult or impractical to port to pure Win32 (like Bash) run on top of this layer.
+
+What users know as "Git Bash" is not Bash itself. It is a launcher that opens [mintty](https://mintty.github.io/) (a terminal emulator), which in turn runs Bash, which links against the msys2-runtime. When users report problems in "Git Bash", the root cause is most often in the msys2-runtime rather than in Bash or mintty. In recent years, the most common class of bugs has been in the **pseudo-console emulation** layer of the msys2-runtime, where insufficient mutex guarding of input events can cause keystroke reordering under fast typing, among other race conditions.
+
+The Git for Windows installer packages this MSYS2 subset (runtime, Bash, coreutils, and other POSIX tools) together with the native Win32 Git executables (which do not depend on the MSYS2 runtime). This way users get a working POSIX shell environment without having to maintain a full MSYS2 installation.
+
 ## Critical Contracts with GitForWindowsHelper
 
 The GitForWindowsHelper GitHub App dispatches workflows **by filename**. Renaming any of these workflows requires a coordinated change in `gfw-helper-github-app`:
@@ -240,6 +250,26 @@ The `azure-signtool.sh` wrapper auto-downloads a [pre-built x64 `sign.exe`](http
 
 The `git-artifacts.yml` workflow's `pkg` and `artifacts` jobs declare explicit `permissions: id-token: write` to request the OIDC token.
 
+## Maintainer Development Environment
+
+Git for Windows maintainers work inside a [Git for Windows SDK](https://github.com/git-for-windows/build-extra/releases) (essentially a full MSYS2 installation plus build toolchains). The SDK is typically installed on a [Dev Drive](https://learn.microsoft.com/en-us/windows/dev-drive/) (usually `D:\`) for significantly better I/O performance. Repositories are checked out under `/usr/src/` inside the SDK, e.g. `D:\git-sdk-64\usr\src\git`, `D:\git-sdk-64\usr\src\MINGW-packages`, etc.
+
+The core repositories typically present in `/usr/src/` are:
+- `git` (the main Git for Windows fork)
+- `MINGW-packages` (MINGW package definitions, including `mingw-w64-git`)
+- `MSYS2-packages` (MSYS package definitions, including `msys2-runtime`)
+- `build-extra` (installer scripts, release notes, supplementary tools)
+- `git-for-windows-automation` (this repository)
+
+Less obviously, maintainers also often have these checked out there:
+- `7-Zip` (custom 7-Zip build used by the installer's self-extracting archive)
+- `setup-git-for-windows-sdk` (the GitHub Action for CI SDK setup)
+- `rss-to-issues` (monitors RSS/Atom feeds to create component-update issues)
+- `track-website-changes` (monitors website changes, usually component version updates)
+- `MSYS2-packages/msys2-runtime/src/msys2-runtime` (the Cygwin runtime fork, for debugging POSIX layer issues; this nested path is where `sdk cd msys2-runtime` lands, because `makepkg` extracts the source into `src/` inside the package directory)
+
+When an AI agent operates inside a Git SDK, it should expect this layout and can navigate between sibling repositories under `/usr/src/` to cross-reference package definitions, build scripts, and automation workflows.
+
 ## Development Tips
 
 1. **Test JavaScript locally**: Most modules can be tested via `node` on the command line before deploying to workflows.
@@ -252,15 +282,17 @@ The `git-artifacts.yml` workflow's `pkg` and `artifacts` jobs declare explicit `
 
 ## Known Pitfalls
 
-### MSYS2 sync branch and sparse checkout
+### Sparse checkout and `--no-checkout` worktrees
 
-The `git-artifacts.yml` workflow creates an MSYS2 sync branch (for upstreaming `mingw-w64-git/` changes to `msys2/MINGW-packages`). The worktree is created with `--no-checkout` and a sparse-checkout cone. Because `--no-checkout` leaves the index empty, any `git commit` without a pathspec will treat every path outside the cone as deleted relative to the parent. Always use `-- mingw-w64-git` (or the appropriate pathspec) with `git commit` in such worktrees.
+When a worktree is created with `--no-checkout`, its index starts empty. Even after `sparse-checkout set <cone>` and `checkout <ref> -- <path>`, only the explicitly checked-out paths are staged. A bare `git commit` (without a pathspec) will compare this sparse index against the parent and treat every path outside the cone as a deletion. Always pass a pathspec to `git commit` in such worktrees to limit the commit to the intended paths.
 
-### msys2-runtime version detection
+### `git describe` in merging-rebase topologies
 
-The `update-scripts/version/msys2-runtime` script determines the Cygwin version by finding the closest ancestor `cygwin-*` tag to the target revision. It uses `for-each-ref --format='%(ahead-behind:<rev>)'` sorted by distance rather than `git describe`, because `describe` picks the wrong tag in the msys2-runtime's merging-rebase topology (it follows first-parent chains and can select a more distant tag). Only clean release tags (`cygwin-X.Y.Z`, no `-dev` suffixes) are considered.
+In repositories that use merging-rebases (like msys2-runtime), `git describe --match='tag-pattern-*'` can select the wrong tag. The describe algorithm walks first-parent chains and counts depth, which does not correspond to the actual closest ancestor in a rebase-heavy DAG. Prefer `git for-each-ref --format='%(ahead-behind:<rev>)'` sorted by distance when you need the nearest ancestor tag in such topologies.
 
-The script also sets up an alternates file so the `src/msys2-runtime` worktree can borrow objects from the bare `msys2-runtime` clone. Without this, `update-patches.sh` cannot find the target revision or base tag because the worktree is an independent clone, not a Git worktree sharing the same object store.
+### Version update scripts
+
+Package-specific version update scripts in `update-scripts/version/` run during the `/open pr` workflow. They can be difficult to debug because they execute in a CI environment with a specific working-tree layout (bare clones, worktrees, alternates files for object sharing). When modifying these scripts, pay attention to which Git directory each command targets (`--git-dir=`, `-C`, alternates) and whether objects fetched into one clone are visible to another. A worktree created from a bare clone shares objects automatically, but an independent `git init` does not unless you set up `.git/objects/info/alternates`.
 
 ## Validating Changes
 
