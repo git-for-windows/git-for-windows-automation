@@ -126,6 +126,7 @@ update-scripts/
 | `apply-stash-with-conflicts.sh` | Restores conflict state from a commit created by `stash-with-conflicts.sh` |
 | `gh-cli-auth-as-app.sh` | Authenticates the `gh` CLI as the GitForWindowsHelper GitHub App |
 | `prepare-embargoed-branches.sh` | Prepares branches for embargoed security releases |
+| `azure-signtool.sh` | Drop-in replacement for build-extra's `signtool.sh`, using Azure Artifact Signing via `dotnet/sign` CLI |
 
 ## Check Run Mirroring
 
@@ -153,8 +154,9 @@ The check run state is encrypted and stored between job steps using the GitHub A
 | `GH_APP_PRIVATE_KEY` | Private key for the GitHub App |
 | `GPGKEY` | GPG key ID for signing packages |
 | `PRIVGPGKEY` | Private GPG key (newlines replaced with `%`) |
-| `CODESIGN_P12` | Code signing certificate (base64, newlines replaced with `%`) |
-| `CODESIGN_PASS` | Password for code signing certificate |
+| `AZURE_CLIENT_ID` | Azure AD app registration client ID for OIDC code signing |
+| `AZURE_TENANT_ID` | Azure AD tenant ID for OIDC code signing |
+| `AZURE_SIGNING_OPTS` | Sign tool arguments (endpoint, account, certificate profile) |
 | `AZURE_BLOBS_TOKEN` | Token for Azure Blob Storage (Pacman repository) |
 | `NUGET_API_KEY` | API key for NuGet package publishing |
 
@@ -228,6 +230,16 @@ Preserve these conventions when editing:
 
 The `release-git.yml` workflow expects the `release` branch to fast-forward to `main` when started. It uses composite actions referenced at `@release` (e.g., `.github/actions/github-release@release`). This allows modifying action code and re-running failed jobs without affecting in-flight releases.
 
+## Code Signing
+
+Code signing uses [Azure Artifact Signing](https://learn.microsoft.com/en-us/azure/trusted-signing/overview) (formerly "Trusted Signing") via the [`dotnet/sign`](https://github.com/dotnet/sign) CLI. This replaced the previous `osslsigncode`-based approach in April 2026 when the PKCS#12 certificate expired and renewal became prohibitively expensive (price hike plus mandatory hardware dongle incompatible with cloud CI).
+
+Authentication uses OIDC workload identity federation: `azure/login@v3` obtains a short-lived token from GitHub, exchanges it with Azure AD, and the sign tool picks up the session via `--azure-credential-type azure-cli`. No long-lived credentials are stored in GitHub secrets; Azure only trusts tokens from this specific repository's `main` branch.
+
+The `azure-signtool.sh` wrapper auto-downloads a [pre-built x64 `sign.exe`](https://github.com/dscho/prebuilt-dotnet-sign-tool/releases) (bundled with .NET runtime) on first use. The x64 build runs under emulation on ARM64 runners because `dotnet/sign` lacks native ARM64 support ([dotnet/sign#852](https://github.com/dotnet/sign/issues/852)). The `.sign-tool/` directory is git-ignored.
+
+The `git-artifacts.yml` workflow's `pkg` and `artifacts` jobs declare explicit `permissions: id-token: write` to request the OIDC token.
+
 ## Development Tips
 
 1. **Test JavaScript locally**: Most modules can be tested via `node` on the command line before deploying to workflows.
@@ -236,7 +248,19 @@ The `release-git.yml` workflow expects the `release` branch to fast-forward to `
 
 3. **Check run state**: When debugging check run mirroring issues, the state file at `$RUNNER_TEMP/check-run.state` contains encrypted state.
 
-4. **Setup Git for Windows SDK**: Workflows use [setup-git-for-windows-sdk](https://github.com/git-for-windows/setup-git-for-windows-sdk) action to get the build environment.
+4. **Setup Git for Windows SDK**: Workflows use [setup-git-for-windows-sdk](https://github.com/git-for-windows/setup-git-for-windows-sdk) action to get the build environment. As of v2, caching is disabled by default due to cache-poisoning risks ([documented rationale](https://adnanthekhan.com/2024/05/06/the-monsters-in-your-build-cache-github-actions-cache-poisoning/)). To mitigate the performance impact for the `build-installers` flavor, the git-sdk-* repositories now provide pre-built `.tar.zst` CI artifacts that are used directly on Windows Server 2025 runners.
+
+## Known Pitfalls
+
+### MSYS2 sync branch and sparse checkout
+
+The `git-artifacts.yml` workflow creates an MSYS2 sync branch (for upstreaming `mingw-w64-git/` changes to `msys2/MINGW-packages`). The worktree is created with `--no-checkout` and a sparse-checkout cone. Because `--no-checkout` leaves the index empty, any `git commit` without a pathspec will treat every path outside the cone as deleted relative to the parent. Always use `-- mingw-w64-git` (or the appropriate pathspec) with `git commit` in such worktrees.
+
+### msys2-runtime version detection
+
+The `update-scripts/version/msys2-runtime` script determines the Cygwin version by finding the closest ancestor `cygwin-*` tag to the target revision. It uses `for-each-ref --format='%(ahead-behind:<rev>)'` sorted by distance rather than `git describe`, because `describe` picks the wrong tag in the msys2-runtime's merging-rebase topology (it follows first-parent chains and can select a more distant tag). Only clean release tags (`cygwin-X.Y.Z`, no `-dev` suffixes) are considered.
+
+The script also sets up an alternates file so the `src/msys2-runtime` worktree can borrow objects from the bare `msys2-runtime` clone. Without this, `update-patches.sh` cannot find the target revision or base tag because the worktree is an independent clone, not a Git worktree sharing the same object store.
 
 ## Validating Changes
 
