@@ -98,7 +98,7 @@ jobs:
           fi
 
       - name: Download Git for Windows SDK
-        uses: git-for-windows/setup-git-for-windows-sdk@v1
+        uses: git-for-windows/setup-git-for-windows-sdk@v2
         id: setup-sdk
         with:
           flavor: ${{ env.PACKAGE_TO_BUILD == 'mingw-w64-git' && 'build-installers' || 'full' }}
