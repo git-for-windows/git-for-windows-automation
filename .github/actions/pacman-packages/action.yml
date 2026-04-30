@@ -97,7 +97,7 @@ runs:
             'pkg-aarch64'
           )
     - name: Download Git for Windows SDK
-      uses: git-for-windows/setup-git-for-windows-sdk@v1
+      uses: git-for-windows/setup-git-for-windows-sdk@v2
       with:
         flavor: build-installers
         architecture: x86_64

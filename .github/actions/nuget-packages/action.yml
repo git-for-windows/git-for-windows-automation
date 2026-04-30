@@ -66,7 +66,7 @@ runs:
             ${{ inputs.git_artifacts_x86_64_workflow_run_id }},
             'nuget-x86_64'
           )
-    - uses: nuget/setup-nuget@v3
+    - uses: nuget/setup-nuget@v4
     - name: Upload NuGet packages
       shell: bash
       run: |
