@@ -120,6 +120,10 @@ jobs:
           unzip bundle-artifacts.zip -d bundle-artifacts
           echo "GIT_VERSION=$(cat bundle-artifacts/next_version)" >> $GITHUB_ENV
           echo "GIT_REV=$(cat bundle-artifacts/git-commit-oid)" >>$GITHUB_ENV
+          if test -f bundle-artifacts/snapshot
+          then
+            echo "IS_SNAPSHOT=$(cat bundle-artifacts/snapshot)" >>$GITHUB_ENV
+          fi
       - name: Mirror Check Run to ${{ env.OWNER }}/${{ env.REPO }}
         uses: ./.github/actions/check-run-action
         with:
@@ -532,7 +536,7 @@ jobs:
           name: ${{matrix.artifact.name}}-${{env.ARCHITECTURE}}
           path: artifacts
       - uses: actions/create-github-app-token@v3
-        if: matrix.artifact.name == 'installer' && github.event.inputs.architecture == 'x86_64'
+        if: (matrix.artifact.name == 'installer' || (matrix.artifact.name == 'portable' && env.IS_SNAPSHOT == 'true')) && github.event.inputs.architecture != 'i686'
         id: pr-comment-token
         with:
           app-id: ${{ secrets.GH_APP_ID }}
@@ -540,7 +544,7 @@ jobs:
           owner: ${{ env.OWNER }}
           repositories: ${{ env.REPO }}
       - name: Add a PR comment suggesting to validate the installer manually
-        if: matrix.artifact.name == 'installer' && github.event.inputs.architecture == 'x86_64'
+        if: matrix.artifact.name == 'installer' && github.event.inputs.architecture == 'x86_64' && env.IS_SNAPSHOT != 'true'
         uses: actions/github-script@v9
         with:
           github-token: ${{ steps.pr-comment-token.outputs.token }}
@@ -567,6 +571,61 @@ jobs:
               }
 
               await github.rest.issues.createComment(req)
+            }
+      - name: Add a PR comment with snapshot artifact links
+        if: (matrix.artifact.name == 'installer' || matrix.artifact.name == 'portable') && github.event.inputs.architecture != 'i686' && env.IS_SNAPSHOT == 'true'
+        uses: actions/github-script@v9
+        with:
+          github-token: ${{ steps.pr-comment-token.outputs.token }}
+          script: |
+            const artifactName = '${{ matrix.artifact.name }}'
+            const artifactURL = ${{ toJSON(steps.upload-artifact.outputs.artifact-url) }}
+            const arch = process.env.ARCHITECTURE
+            const version = process.env.GIT_VERSION
+            const label = artifactName === 'installer' ? 'Installer' : 'Portable Git'
+            const line = `[${label}](${artifactURL}) (${version}, ${arch})`
+
+            const fs = require('fs')
+            const gitSHA = fs.readFileSync('bundle-artifacts/git-commit-oid').toString().trim()
+            const q = `repo:${process.env.OWNER}/${process.env.REPO}+is:pr+is:open+${gitSHA}`
+            const { data } = await github.rest.search.issuesAndPullRequests({ q })
+            if (data.items.length !== 1) {
+              core.warning(`${data.items.length} PRs found for ${gitSHA}, skipping PR comment`)
+              return
+            }
+
+            const prNumber = data.items[0].number
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: process.env.OWNER,
+              repo: process.env.REPO,
+              issue_number: prNumber,
+            })
+
+            const appLogin = (await github.rest.apps.getAuthenticated()).data.slug + '[bot]'
+            let existing = null
+            comments.forEach(c => {
+              if (c.body.startsWith('/snapshot')) {
+                existing = null
+              } else if (c.user.login === appLogin &&
+                         c.body.includes('## Snapshot artifacts')) {
+                existing = c
+              }
+            })
+
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: process.env.OWNER,
+                repo: process.env.REPO,
+                comment_id: existing.id,
+                body: `${existing.body}\n${line}`,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner: process.env.OWNER,
+                repo: process.env.REPO,
+                issue_number: prNumber,
+                body: `## Snapshot artifacts\n\n${line}`,
+              })
             }
       - name: restore check-run state
         if: needs.pkg.outputs.check-run-state != '' && always()

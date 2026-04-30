@@ -102,6 +102,7 @@ jobs:
             --artifacts-dir="$GITHUB_WORKSPACE/bundle-artifacts" \
             "$REV" &&
 
+          echo "$SNAPSHOT" >bundle-artifacts/snapshot &&
           echo "tag-name=$(cat bundle-artifacts/next_version)" >>$GITHUB_OUTPUT &&
           echo "Tag name: \`$(cat bundle-artifacts/next_version)\`" >>$GITHUB_STEP_SUMMARY
       - name: update check-run
