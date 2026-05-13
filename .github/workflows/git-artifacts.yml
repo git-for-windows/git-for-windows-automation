@@ -517,6 +517,8 @@ jobs:
           echo EOF >>$GITHUB_OUTPUT
       - name: Copy package-versions and pdbs (installer)
         if: matrix.artifact.name == 'installer'
+        env:
+          GITHUB_TOKEN: ${{secrets.GITHUB_TOKEN}}
         run: |
           cp /usr/src/build-extra/installer/package-versions.txt artifacts/ &&
           a=$PWD/artifacts &&
