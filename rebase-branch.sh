@@ -256,9 +256,12 @@ Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue -- <summ
 	# Extract the decision from the last meaningful line.
 	# Copilot appends a stats trailer after the actual output, separated
 	# by blank lines. The format may be "key: value" (colon-separated)
-	# or "Key   value" (space-aligned). The sed script finds the last
-	# decision keyword (continue/skip/fail) that is followed only by
-	# blank lines and stats-like lines until EOF.
+	# or "Key   value" (space-aligned). One known trailer line, "AI
+	# Credits<value>", has a space in its key and no separator before
+	# the value, so it is matched explicitly rather than by widening the
+	# generic stats-line pattern (which would risk matching prose).
+	# The sed script finds the last decision keyword (continue/skip/fail)
+	# that is followed only by blank lines and stats-like lines until EOF.
 	decision=$(echo "$ai_output" | sed -n '
 		/^continue$/b found
 		/^continue -- /b found
@@ -279,6 +282,7 @@ Your FINAL line must be exactly: skip <oid>, skip -- <reason>, continue -- <summ
 		/[A-Za-z][^:]\{0,30\}:$/{ n; /^ /!b; :ind; ${ g; p; q }; n; /^ /b ind; b stats }
 		/^[^:]\{1,30\}: /b stats_line
 		/^[A-Za-z][A-Za-z]*  /b stats_line
+		/^AI Credits/b stats_line
 		b
 		:stats_line
 		${ g; p; q }
