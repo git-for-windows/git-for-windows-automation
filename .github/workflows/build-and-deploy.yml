@@ -249,12 +249,12 @@ jobs:
           MINGW_ARCHS_TO_BUILD=$(
                     case "$ARCHITECTURE,$PACKAGE_TO_BUILD" in
                     aarch64,*) echo "clangarm64";;
-                    x86_64,*) echo "mingw64";;
+                    x86_64,*) echo "mingw64 ucrt64";;
                     i686,*) echo "mingw32";;
-                    ,mingw-w64-wintoast) echo "mingw32 mingw64 clangarm64";; # We're (cross-)compiling via Visual Studio
-                    ,mingw-w64-git-credential-manager) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built artifacts for all three platforms
-                    ,mingw-w64-git-lfs) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built artifacts from Git LFS' official release page
-                    ,*) echo "mingw32 mingw64";;
+                    ,mingw-w64-wintoast) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're (cross-)compiling via Visual Studio
+                    ,mingw-w64-git-credential-manager) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're downloading the pre-built artifacts for all three platforms
+                    ,mingw-w64-git-lfs) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're downloading the pre-built artifacts from Git LFS' official release page
+                    ,*) echo "mingw32 mingw64 ucrt64";;
                     esac
           )
 
