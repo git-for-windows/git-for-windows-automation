@@ -26,6 +26,9 @@ jobs:
         sdk:
           - name: git-sdk-64
             mingw-package-prefix: mingw-w64-x86_64
+          - name: git-sdk-64
+            ref: ucrt64
+            mingw-package-prefix: mingw-w64-ucrt-x86_64
           - name: git-sdk-arm64
             mingw-package-prefix: mingw-w64-clang-aarch64
           - name: git-sdk-32
@@ -51,6 +54,7 @@ jobs:
           persist-credentials: true
           repository: ${{ github.repository_owner }}/${{ matrix.sdk.name }}
           token: ${{ steps.sdk-repo-token.outputs.token }}
+          ref: ${{ matrix.sdk.ref }}
       - name: use the SDK's Bash and git.exe
         run: "usr\\bin\\bash.exe -lc 'cygpath -aw /usr/bin >>$GITHUB_PATH && cygpath -aw /cmd >>$GITHUB_PATH'"
       - name: Remove ${{ env.PACKAGE }}
@@ -93,7 +97,7 @@ jobs:
             gh pr create \
               --fill \
               --head "$branch" \
-              --base main 2>&1;
+              --base ${{ matrix.sdk.ref || 'main' }} 2>&1;
             echo $? >/tmp/exit.status
           ) |
           tee -a /tmp/pr-create-output.txt &&
