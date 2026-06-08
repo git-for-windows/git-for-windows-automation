@@ -23,9 +23,20 @@ jobs:
   drop-pacman-package:
     strategy:
       matrix:
-        sdk: [git-sdk-64, git-sdk-arm64, git-sdk-32]
-    runs-on: ${{ matrix.sdk == 'git-sdk-arm64' && 'windows-11-arm' || 'windows-latest' }}
+        sdk:
+          - name: git-sdk-64
+            mingw-package-prefix: mingw-w64-x86_64
+          - name: git-sdk-arm64
+            mingw-package-prefix: mingw-w64-clang-aarch64
+          - name: git-sdk-32
+            mingw-package-prefix: mingw-w64-i686
+    runs-on: ${{ matrix.sdk.name == 'git-sdk-arm64' && 'windows-11-arm' || 'windows-latest' }}
     steps:
+      - name: Special-case MINGW packages
+        if: startsWith(env.PACKAGE, 'mingw-w64-')
+        shell: bash
+        run:
+          echo "PACKAGE=${{ matrix.sdk.mingw-package-prefix }}-${PACKAGE#mingw-w64-}" >>$GITHUB_ENV
       - name: obtain installation access token
         uses: actions/create-github-app-token@v3
         id: sdk-repo-token
@@ -33,12 +44,12 @@ jobs:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          repositories: ${{ matrix.sdk }}
-      - name: clone ${{ matrix.sdk }}
+          repositories: ${{ matrix.sdk.name }}
+      - name: clone ${{ matrix.sdk.name }}
         uses: actions/checkout@v6
         with:
           persist-credentials: true
-          repository: ${{ github.repository_owner }}/${{ matrix.sdk }}
+          repository: ${{ github.repository_owner }}/${{ matrix.sdk.name }}
           token: ${{ steps.sdk-repo-token.outputs.token }}
       - name: use the SDK's Bash and git.exe
         run: "usr\\bin\\bash.exe -lc 'cygpath -aw /usr/bin >>$GITHUB_PATH && cygpath -aw /cmd >>$GITHUB_PATH'"
@@ -64,7 +75,7 @@ jobs:
           git switch -c "$branch" &&
           git add -A . &&
           if git diff --cached --quiet; then
-            echo "::warning::${{ matrix.sdk }}: no changes to commit!"
+            echo "::warning::${{ matrix.sdk.name }}: no changes to commit!"
             exit 0
           fi &&
           commit_message="Drop package '$PACKAGE'
