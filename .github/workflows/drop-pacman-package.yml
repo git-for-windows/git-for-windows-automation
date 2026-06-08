@@ -1,4 +1,5 @@
-name: Drop Pacman package from SDKs
+name: Drop (uninstall) Pacman package from SDKs
+run-name: Drop (uninstall) Pacman package ${{ inputs.package }} from SDKs
 
 on:
   workflow_dispatch:
