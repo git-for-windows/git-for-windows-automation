@@ -55,10 +55,6 @@ esac &&
 # correspond to the architecture. For i686/x86_64 MINGW packages (i.e. when
 # `--architecture` specifies an empty value), we assume that this script is run
 # in an x86_64 setup and therefore use that subdirectory.
-#
-# Note: The Pacman repository is hosted in an Azure Blobs container where
-# directory names cannot contain underscores, hence we needed to replace that
-# character with a dash.
 
 subdir="${architecture:-$arch}" &&
 case "$subdir" in
