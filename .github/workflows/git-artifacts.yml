@@ -36,6 +36,15 @@ env:
   TAG_GIT_WORKFLOW_RUN_ID: "${{github.event.inputs.tag_git_workflow_run_id}}"
   EXISTING_GIT_TAG: "${{github.event.inputs.existing_git_tag}}"
   BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG: "${{github.event.inputs.build_extra_rev_for_existing_git_tag}}"
+  # Rust became opt-out (NO_RUST) in Git's Makefile as of v2.55.0-rc0
+  # (git.git commit 32d5b905909e, "Enable Rust by default"), and the
+  # Git for Windows SDK does not yet ship a default Rust toolchain
+  # that `make` can drive. Match upstream's own Windows CI (see
+  # `ci/lib.sh`'s `windows-*) export NO_RUST=UnfortunatelyYes`) and
+  # opt out here until cargo is wired into the SDK. The variable is
+  # consumed directly by GNU make's `ifdef NO_RUST`, so exporting it
+  # in the workflow environment suffices; no `config.mak` is needed.
+  NO_RUST: UnfortunatelyYes
 
 defaults:
   run:
