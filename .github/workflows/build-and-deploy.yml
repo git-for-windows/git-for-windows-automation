@@ -17,7 +17,7 @@ on:
         description: 'The ref containing the package definition'
         required: true
       architecture:
-        description: 'The architecture to build for (only for MSYS packages and all arm64 builds)'
+        description: 'The architecture to build for (only for MSYS packages, ucrt64 builds, and all arm64 builds)'
         required: false
       actor:
         description: The GitHub user on whose behalf this workflow is run
@@ -232,6 +232,10 @@ jobs:
               GIT_EXE="/mingw32/bin/git.exe"
               BUILD_SRC=
               ;;
+            ucrt64)
+              GIT_EXE="/ucrt64/bin/git.exe"
+              BUILD_SRC=
+              ;;
             *)
               GIT_EXE="/mingw64/bin/git.exe"
               BUILD_SRC="YesPlease"
@@ -251,6 +255,7 @@ jobs:
                     aarch64,*) echo "clangarm64";;
                     x86_64,*) echo "mingw64";;
                     i686,*) echo "mingw32";;
+                    ucrt64,*) echo "ucrt64";;
                     ,mingw-w64-wintoast) echo "mingw32 mingw64 clangarm64";; # We're (cross-)compiling via Visual Studio
                     ,mingw-w64-git-credential-manager) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built artifacts for all three platforms
                     ,mingw-w64-git-lfs) echo "mingw32 mingw64 clangarm64";; # We're downloading the pre-built artifacts from Git LFS' official release page
