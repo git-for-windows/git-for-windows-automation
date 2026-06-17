@@ -10,12 +10,11 @@ architecture=
 while case "$1" in
 --architecture=*)
 	architecture=${1#*=}
-	if test aarch64 = "$architecture"
-	then
-		MINGW_PACKAGE_PREFIX=mingw-w64-clang-aarch64
-	else
-		MINGW_PACKAGE_PREFIX=mingw-w64-$architecture
-	fi
+	case "$architecture" in
+	aarch64) MINGW_PACKAGE_PREFIX=mingw-w64-clang-aarch64;;
+	ucrt64)  MINGW_PACKAGE_PREFIX=mingw-w64-ucrt-x86_64;;
+	*)       MINGW_PACKAGE_PREFIX=mingw-w64-$architecture;;
+	esac
 	;;
 -*) die "Unhandled option: '$1'";;
 *) break;
@@ -26,6 +25,16 @@ die "Usage: $0 <directory-containing-PKGBUILD>"
 
 cd "$1" ||
 die "Could not switch to '$1'"
+
+# Some PKGBUILDs use $CARCH at top level (outside functions). Set it before
+# sourcing so that architecture-dependent logic (case statements, variable
+# assignments) works correctly even though we are not running under makepkg.
+case "$architecture" in
+aarch64)  CARCH=aarch64;;
+i686)     CARCH=i686;;
+*)        CARCH=x86_64;;
+esac &&
+export CARCH &&
 
 . ./PKGBUILD ||
 die "No/invalid PKGBUILD in '$1'?"
@@ -58,7 +67,7 @@ esac &&
 
 subdir="${architecture:-$arch}" &&
 case "$subdir" in
-any) subdir=x86_64;;
+any|ucrt64) subdir=x86_64;;
 esac &&
 
 case "$pkgname" in
