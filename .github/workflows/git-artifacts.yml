@@ -76,6 +76,7 @@ jobs:
             exit 1
           }
 
+          set -x
           test -z "$TAG_GIT_WORKFLOW_RUN_ID" ||
           die 'existing_git_tag cannot be used with tag_git_workflow_run_id!'
 
@@ -87,9 +88,11 @@ jobs:
           mkdir -p bundle-artifacts &&
           echo "$EXISTING_GIT_TAG" >bundle-artifacts/next_version &&
           echo "$EXISTING_GIT_TAG" |
-          sed -n '/^v[0-9]\+\.[0-9]\+\.[0-9]\+\.windows\.[0-9]\+$/{s/^v//;s/\.windows\.1//;s/\.windows\.\(.*\)/(\1)/;p}' \
+          sed -n '/^v[0-9]\+\.[0-9]\+\.[0-9]\+\(-rc[0-9]\+\)\?\.windows\.[0-9]\+$/{s/^v//;s/\.windows\.1//;s/\.windows\.\(.*\)/(\1)/;p}' \
             >bundle-artifacts/display_version &&
           sed 's/(\(.*\))$/.\1/' <bundle-artifacts/display_version >bundle-artifacts/ver &&
+          ver="$(cat bundle-artifacts/ver)" &&
+          test -n "$ver" &&
           echo "GIT_VERSION=$EXISTING_GIT_TAG" >> $GITHUB_ENV &&
           git fetch --depth 1 --filter blob:none https://github.com/$OWNER/$REPO "refs/tags/$EXISTING_GIT_TAG:refs/tags/$EXISTING_GIT_TAG" &&
           echo "GIT_REV=$(git rev-parse --verify "refs/tags/$EXISTING_GIT_TAG"^0)" >>$GITHUB_ENV
