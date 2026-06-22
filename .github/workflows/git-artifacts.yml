@@ -67,7 +67,7 @@ jobs:
       check-run-state: ${{steps.check-run-state.outputs.check-run-state}}
     steps:
       - name: clone git-for-windows-automation
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Construct bundle-artifacts from existing tag
         if: env.EXISTING_GIT_TAG != ''
         run: |
@@ -433,7 +433,7 @@ jobs:
     steps:
       - name: clone git-for-windows-automation
         if: needs.pkg.outputs.check-run-state != '' && always()
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: Download pkg-${{env.ARCHITECTURE}}
         uses: actions/download-artifact@v8
         with:
@@ -729,7 +729,7 @@ jobs:
           path: sha256sums
       - name: clone git-for-windows-automation
         if: needs.pkg.outputs.check-run-state != '' && always()
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
       - name: restore check-run state
         if: needs.pkg.outputs.check-run-state != '' && always()
         id: check-run-state
