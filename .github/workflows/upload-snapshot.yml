@@ -13,6 +13,9 @@ on:
       git_artifacts_aarch64_workflow_run_id:
         description: 'ID of the git-artifacts (aarch64) workflow run'
         required: true
+      git_artifacts_ucrt64_workflow_run_id:
+        description: 'ID of the git-artifacts (ucrt64) workflow run (optional; UCRT64 is only included in snapshots)'
+        required: false
 
 env:
   OWNER: "${{ github.repository_owner }}"
@@ -22,6 +25,7 @@ env:
   I686_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_i686_workflow_run_id }}"
   X86_64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_x86_64_workflow_run_id }}"
   AARCH64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_aarch64_workflow_run_id }}"
+  UCRT64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_ucrt64_workflow_run_id }}"
   CREATE_CHECK_RUN: "true"
   NODEJS_VERSION: 16
 
@@ -105,10 +109,14 @@ jobs:
             } = require('./github-release')
 
             const token = ${{ toJSON(secrets.GITHUB_TOKEN) }}
-            const directories = ['bundle-artifacts-x86_64']
-            for (const arch of architectures) {
-              const architecture = arch.name
+            // UCRT64 is built only for snapshots, not for full releases. Pick
+            // it up leniently: only when a workflow run ID was provided, and
+            // only for the artifacts that are actually present in that run.
+            const architectureNames = architectures.map(arch => arch.name)
+            if (process.env.UCRT64_WORKFLOW_RUN_ID) architectureNames.push('ucrt64')
 
+            const directories = ['bundle-artifacts-x86_64']
+            for (const architecture of architectureNames) {
               const urls = architecture === 'x86_64'
                 ? ${{ steps.bundle-artifacts.outputs.x86_64-urls }}
                 : await getWorkflowRunArtifactsURLs(
