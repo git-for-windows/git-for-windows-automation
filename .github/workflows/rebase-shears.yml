@@ -225,6 +225,16 @@ jobs:
           # Fail the step if any rebase failed
           test -z "$failed_worktrees"
 
+      - name: Obtain installation access token
+        if: always() && env.PUSH == 'true' && steps.precheck.outputs.skip != 'true'
+        uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: git,shears-builds
+
       - name: Create bundles and archives
         if: always() && steps.precheck.outputs.skip != 'true'
         working-directory: git
@@ -264,23 +274,22 @@ jobs:
           path: git/upload/
           if-no-files-found: warn
 
-      - name: Obtain installation access token
-        if: always() && env.PUSH == 'true' && steps.precheck.outputs.skip != 'true'
-        uses: actions/create-github-app-token@v3
-        id: app-token
-        with:
-          app-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: git,shears-builds
-
       - name: Push results
         if: always() && env.PUSH == 'true' && steps.app-token.outputs.token && (steps.rebase-single.outputs.to_push || steps.rebase-all.outputs.to_push)
         working-directory: git
         run: |
           AUTH="$(echo -n 'x-access-token:${{ steps.app-token.outputs.token }}' | base64)"
-          GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
+          # A freshly minted installation token is sometimes not honoured yet
+          # by the time we push (HTTP 403); retry with a short backoff.
+          n=0
+          until GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
             git push --force origin ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}
+          do
+            n=$((n + 1))
+            test "$n" -lt 4 || exit 1
+            echo "::warning::Push to origin failed (attempt $n); retrying after $((n * 15))s"
+            sleep $((n * 15))
+          done
 
       - name: Create check runs
         if: always() && env.PUSH == 'true' && steps.app-token.outputs.token
@@ -356,8 +365,16 @@ jobs:
           }
 
           push_to_builds () {
-            GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
+            # Retry with a short backoff
+            n=0
+            until GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
               git push "https://github.com/$builds_repo" "$@"
+            do
+              n=$((n + 1))
+              test "$n" -lt 4 || return 1
+              echo "::warning::Push to $builds_repo failed (attempt $n); retrying after $((n * 15))s"
+              sleep $((n * 15))
+            done
           }
 
           # Successful rebases: create regular PRs
