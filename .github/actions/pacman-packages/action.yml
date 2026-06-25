@@ -36,6 +36,9 @@ inputs:
   git_artifacts_aarch64_workflow_run_id:
     description: 'ID of the git-artifacts (aarch64) workflow run'
     required: true
+  git_artifacts_ucrt64_workflow_run_id:
+    description: 'ID of the git-artifacts (ucrt64) workflow run (optional; UCRT64 is only included when it was built)'
+    required: false
   gpg-key:
     description: 'The GPG key to use to sign the updated Pacman database'
     required: true
@@ -61,7 +64,7 @@ runs:
         rev: ${{ inputs.rev }}
         check-run-name: "pacman-packages"
         title: "Deploy the mingw-w64-git packages ${{ inputs.display-version }}"
-        summary: "Downloading the Pacman packages from ${{ inputs.git_artifacts_x86_64_workflow_run_id }}, ${{ inputs.git_artifacts_i686_workflow_run_id }}, and ${{ inputs.git_artifacts_aarch64_workflow_run_id }} and deploying them to the Pacman Repository"
+        summary: "Downloading the Pacman packages from ${{ inputs.git_artifacts_x86_64_workflow_run_id }}, ${{ inputs.git_artifacts_i686_workflow_run_id }}, and ${{ inputs.git_artifacts_aarch64_workflow_run_id }}${{ inputs.git_artifacts_ucrt64_workflow_run_id && format(' (and UCRT64 from {0})', inputs.git_artifacts_ucrt64_workflow_run_id) || '' }} and deploying them to the Pacman Repository"
         text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
         details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
     - name: Download artifacts
@@ -95,6 +98,17 @@ runs:
             artifactsRepo,
             ${{ inputs.git_artifacts_aarch64_workflow_run_id }},
             'pkg-aarch64'
+          )
+
+          // Include the UCRT64 packages when a run ID was provided
+          const ucrt64WorkflowRunId = '${{ inputs.git_artifacts_ucrt64_workflow_run_id }}'
+          if (ucrt64WorkflowRunId) await getWorkflowRunArtifact(
+            console,
+            ${{ toJSON(inputs.artifacts-token) }},
+            artifactsOwner,
+            artifactsRepo,
+            ucrt64WorkflowRunId,
+            'pkg-ucrt64'
           )
     - name: Download Git for Windows SDK
       uses: git-for-windows/setup-git-for-windows-sdk@v2
@@ -137,7 +151,12 @@ runs:
         azure_blobs_token: ${{ inputs.azure-blobs-token }}
         GITHUB_TOKEN: ${{ steps.pacman-repo-token.outputs.token }}
       run: |
-        "$RUNNER_TEMP"/build-extra/pacman-helper.sh quick_add pkg-x86_64/*.tar.* pkg-i686/*.tar.* pkg-aarch64/*.tar.*
+        set -- pkg-x86_64/*.tar.* pkg-i686/*.tar.* pkg-aarch64/*.tar.*
+        if test -n '${{ inputs.git_artifacts_ucrt64_workflow_run_id }}'
+        then
+          set -- "$@" pkg-ucrt64/*.tar.*
+        fi
+        "$RUNNER_TEMP"/build-extra/pacman-helper.sh quick_add "$@"
     - name: update check-run
       if: always()
       uses: ./.github/actions/check-run-action
