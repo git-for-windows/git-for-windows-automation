@@ -1,0 +1,59 @@
+name: TEST UCRT64-only pacman deploy
+run-name: "TEST: deploy UCRT64 -rc2 Pacman packages"
+
+# Throwaway, push-triggered workflow to validate the UCRT64 discovery script
+# and to deploy ONLY the UCRT64 Pacman packages for v2.55.0-rc2.windows.1,
+# reusing the (to-drop) UCRT64-only pacman-packages composite action exactly as
+# the real release would. Drop before this branch could ever merge.
+
+on: push
+
+env:
+  OWNER: git-for-windows
+  REPO: git
+  # v2.55.0-rc2.windows.1
+  REV: 7bdfd4f8bce9765767b85d45f5ce9120ba8a6f1c
+  DISPLAY_VERSION: 2.55.0-rc2
+
+jobs:
+  test-deploy:
+    if: github.event.repository.owner.login == 'git-for-windows'
+    runs-on: windows-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+      - name: Find the UCRT64 git-artifacts run
+        id: discover
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const findUCRT64GitArtifactsRun = require('./find-ucrt64-git-artifacts-run')
+            const workflowRunId = await findUCRT64GitArtifactsRun(
+              console,
+              '${{ secrets.GITHUB_TOKEN }}',
+              process.env.OWNER,
+              process.env.REPO,
+              process.env.REV
+            )
+            if (!workflowRunId) {
+              core.setFailed(`No UCRT64 git-artifacts run found for ${process.env.OWNER}/${process.env.REPO}@${process.env.REV}`)
+              return
+            }
+            core.setOutput('workflow-run-id', workflowRunId)
+      - name: Pacman packages (UCRT64 only)
+        uses: ./.github/actions/pacman-packages
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ env.OWNER }}
+          repo: ${{ env.REPO }}
+          display-version: ${{ env.DISPLAY_VERSION }}
+          rev: ${{ env.REV }}
+          artifacts-repository: ${{ github.repository }}
+          artifacts-token: ${{ secrets.GITHUB_TOKEN }}
+          git_artifacts_ucrt64_workflow_run_id: ${{ steps.discover.outputs.workflow-run-id }}
+          gpg-key: ${{ secrets.GPGKEY }}
+          priv-gpg-key: ${{ secrets.PRIVGPGKEY }}
+          azure-blobs-token: ${{ secrets.AZURE_BLOBS_TOKEN }}
