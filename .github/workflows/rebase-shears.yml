@@ -232,10 +232,14 @@ jobs:
           set -x
           mkdir -p upload
 
-          # Bundles for successful branches
+          # Bundles for successful branches, skipping empty ones.
           for branch in ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}; do
             name=${branch##*/}
-            git bundle create "upload/$name.bundle" "$branch" ^origin/main
+            if test 0 -lt "$(git rev-list --count "$branch" ^origin/main)"; then
+              git bundle create "upload/$name.bundle" "$branch" ^origin/main
+            else
+              echo "::notice::Skipping empty bundle for $branch (no commits beyond origin/main)"
+            fi
           done
 
           # Bundles and archives for failed branches
