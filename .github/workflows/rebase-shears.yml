@@ -225,6 +225,16 @@ jobs:
           # Fail the step if any rebase failed
           test -z "$failed_worktrees"
 
+      - name: Obtain installation access token
+        if: always() && env.PUSH == 'true' && steps.precheck.outputs.skip != 'true'
+        uses: actions/create-github-app-token@v3
+        id: app-token
+        with:
+          app-id: ${{ secrets.GH_APP_ID }}
+          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: git,shears-builds
+
       - name: Create bundles and archives
         if: always() && steps.precheck.outputs.skip != 'true'
         working-directory: git
@@ -232,10 +242,14 @@ jobs:
           set -x
           mkdir -p upload
 
-          # Bundles for successful branches
+          # Bundles for successful branches, skipping empty ones.
           for branch in ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}; do
             name=${branch##*/}
-            git bundle create "upload/$name.bundle" "$branch" ^origin/main
+            if test 0 -lt "$(git rev-list --count "$branch" ^origin/main)"; then
+              git bundle create "upload/$name.bundle" "$branch" ^origin/main
+            else
+              echo "::notice::Skipping empty bundle for $branch (no commits beyond origin/main)"
+            fi
           done
 
           # Bundles and archives for failed branches
@@ -260,23 +274,22 @@ jobs:
           path: git/upload/
           if-no-files-found: warn
 
-      - name: Obtain installation access token
-        if: always() && env.PUSH == 'true' && steps.precheck.outputs.skip != 'true'
-        uses: actions/create-github-app-token@v3
-        id: app-token
-        with:
-          app-id: ${{ secrets.GH_APP_ID }}
-          private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
-          repositories: git,shears-builds
-
       - name: Push results
         if: always() && env.PUSH == 'true' && steps.app-token.outputs.token && (steps.rebase-single.outputs.to_push || steps.rebase-all.outputs.to_push)
         working-directory: git
         run: |
           AUTH="$(echo -n 'x-access-token:${{ steps.app-token.outputs.token }}' | base64)"
-          GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
+          # A freshly minted installation token is sometimes not honoured yet
+          # by the time we push (HTTP 403); retry with a short backoff.
+          n=0
+          until GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
             git push --force origin ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}
+          do
+            n=$((n + 1))
+            test "$n" -lt 4 || exit 1
+            echo "::warning::Push to origin failed (attempt $n); retrying after $((n * 15))s"
+            sleep $((n * 15))
+          done
 
       - name: Create check runs
         if: always() && env.PUSH == 'true' && steps.app-token.outputs.token
@@ -287,10 +300,22 @@ jobs:
           head_sha="${{ steps.fetch.outputs.main_sha }}"
           run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
 
+          # GitHub rejects check-run summaries longer than 65535 characters
+          summary="$RUNNER_TEMP/check-summary.md"
+          cap_body () {
+            if test "$(wc -c "$1")" -le 65000; then
+              cat "$1"
+            else
+              head -c 65000 "$1"
+              printf '\n\n_Truncated; see the full conflict report in the workflow run summary._\n'
+            fi
+          }
+
           for branch in ${{ steps.rebase-single.outputs.to_push }} ${{ steps.rebase-all.outputs.to_push }}; do
             name=${branch##*/}
             report="rebase-worktree-$name/conflict-report.md"
             test -f "$report" || continue
+            cap_body "$report" >"$summary"
             gh api "repos/${{ github.repository_owner }}/git/check-runs" \
               -f "name=shears-$name" \
               -f "head_sha=$head_sha" \
@@ -298,7 +323,7 @@ jobs:
               -f "conclusion=success" \
               -f "details_url=$run_url" \
               -f "output[title]=shears/$name rebased successfully" \
-              -F "output[summary]=@$report"
+              -F "output[summary]=@$summary"
           done
 
           for worktree in ${{ steps.rebase-single.outputs.failed_worktrees }} ${{ steps.rebase-all.outputs.failed_worktrees }}; do
@@ -306,6 +331,7 @@ jobs:
             name=${worktree##*rebase-worktree-}
             report="$worktree/conflict-report.md"
             test -f "$report" || report=/dev/null
+            cap_body "$report" >"$summary"
             gh api "repos/${{ github.repository_owner }}/git/check-runs" \
               -f "name=shears-$name" \
               -f "head_sha=$head_sha" \
@@ -313,7 +339,7 @@ jobs:
               -f "conclusion=failure" \
               -f "details_url=$run_url" \
               -f "output[title]=shears/$name rebase failed" \
-              -F "output[summary]=@$report"
+              -F "output[summary]=@$summary"
           done
 
       - name: Mirror results to PRs
@@ -328,9 +354,27 @@ jobs:
           AUTH="$(echo -n 'x-access-token:${{ steps.app-token.outputs.token }}' | base64)"
           errors=0
 
+          # GitHub rejects pull-request bodies longer than 65536 characters
+          cap_body () {
+            if test "$(wc -c "$1")" -le 65000; then
+              cat "$1"
+            else
+              head -c 65000 "$1"
+              printf '\n\n_Truncated; see the full conflict report in the workflow run summary._\n'
+            fi
+          }
+
           push_to_builds () {
-            GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
+            # Retry with a short backoff
+            n=0
+            until GIT_CONFIG_PARAMETERS="'http.https://github.com/.extraHeader=' 'http.https://github.com/.extraHeader=Authorization: basic $AUTH'" \
               git push "https://github.com/$builds_repo" "$@"
+            do
+              n=$((n + 1))
+              test "$n" -lt 4 || return 1
+              echo "::warning::Push to $builds_repo failed (attempt $n); retrying after $((n * 15))s"
+              sleep $((n * 15))
+            done
           }
 
           # Successful rebases: create regular PRs
@@ -368,7 +412,8 @@ jobs:
               echo "[Workflow run]($run_url)"
               echo
               cat "$report"
-            } >"$worktree/pr-body.md"
+            } >"$worktree/pr-body.full.md"
+            cap_body "$worktree/pr-body.full.md" >"$worktree/pr-body.md"
 
             pr_url=$(gh api "repos/$builds_repo/pulls" \
               -f "title=$title" \
@@ -415,7 +460,8 @@ jobs:
               echo "[Workflow run]($run_url) failed to rebase shears/$name."
               echo
               test -f "$report" && cat "$report"
-            } >"$worktree/pr-body.md"
+            } >"$worktree/pr-body.full.md"
+            cap_body "$worktree/pr-body.full.md" >"$worktree/pr-body.md"
 
             pr_url=$(gh api "repos/$builds_repo/pulls" \
               -f "title=$title" \
