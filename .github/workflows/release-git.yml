@@ -12,6 +12,9 @@ on:
       git_artifacts_aarch64_workflow_run_id:
         description: 'ID of the git-artifacts (aarch64) workflow run'
         required: true
+      git_artifacts_ucrt64_workflow_run_id:
+        description: 'ID of the git-artifacts (ucrt64) workflow run (optional; auto-detected from the tagged commit''s check-runs if omitted)'
+        required: false
 
 env:
   HOME: "${{github.workspace}}\\home"
@@ -21,6 +24,7 @@ env:
   I686_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_i686_workflow_run_id}}"
   X86_64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_x86_64_workflow_run_id}}"
   AARCH64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_aarch64_workflow_run_id}}"
+  UCRT64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_ucrt64_workflow_run_id}}"
 
 jobs:
   setup:
@@ -32,6 +36,7 @@ jobs:
       ver: ${{ steps.bundle-artifacts.outputs.ver }}
       git-rev: ${{ steps.bundle-artifacts.outputs.git-rev }}
       release-notes: ${{ steps.bundle-artifacts.outputs.release-notes }}
+      ucrt64-workflow-run-id: ${{ steps.ucrt64.outputs.workflow-run-id }}
       pull-request-number: ${{ steps.announcement.outputs.pull-request-number }}
       pull-request-comment: ${{ steps.announcement.outputs.pull-request-comment }}
     steps:
@@ -106,6 +111,24 @@ jobs:
             core.endGroup()
 
             core.setOutput('release-notes', result.releaseNotes)
+      - name: Look for a UCRT64 git-artifacts run
+        id: ucrt64
+        uses: actions/github-script@v9
+        with:
+          script: |
+            // Honor an explicit override, otherwise discover the run.
+            let workflowRunId = process.env.UCRT64_WORKFLOW_RUN_ID
+            if (!workflowRunId) {
+              const findUCRT64GitArtifactsRun = require('./find-ucrt64-git-artifacts-run')
+              workflowRunId = await findUCRT64GitArtifactsRun(
+                console,
+                '${{ secrets.GITHUB_TOKEN }}',
+                process.env.OWNER,
+                process.env.REPO,
+                ${{ toJSON(steps.bundle-artifacts.outputs.git-rev) }}
+              )
+            }
+            core.setOutput('workflow-run-id', workflowRunId || '')
       - name: Re-publish bundle-artifacts so the next job can easily use it
         uses: actions/upload-artifact@v7
         with:
@@ -238,6 +261,7 @@ jobs:
           git_artifacts_i686_workflow_run_id: ${{ env.I686_WORKFLOW_RUN_ID }}
           git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
           git_artifacts_aarch64_workflow_run_id: ${{ env.AARCH64_WORKFLOW_RUN_ID }}
+          git_artifacts_ucrt64_workflow_run_id: ${{ needs.setup.outputs.ucrt64-workflow-run-id }}
           gpg-key: ${{ secrets.GPGKEY }}
           priv-gpg-key: ${{ secrets.PRIVGPGKEY }}
           azure-blobs-token: ${{ secrets.AZURE_BLOBS_TOKEN }}
