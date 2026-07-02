@@ -48,7 +48,8 @@ const mergeBundle = (gitDir, worktree, bundlePath, refName) => {
       callGit(['sparse-checkout', 'set'], worktree)
       callGit(['switch', '-d', refName], worktree)
       // Perform the merge
-      callGit(['fetch', bundlePath, refName], worktree)
+      const { resolve } = require('path')
+      callGit(['fetch', resolve(bundlePath), refName], worktree)
       callGit(['merge', '--no-edit', 'FETCH_HEAD'], worktree)
       callGit(['update-ref', `refs/heads/${refName}`, 'HEAD'], worktree)
     }
