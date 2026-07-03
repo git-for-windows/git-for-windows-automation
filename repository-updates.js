@@ -167,23 +167,14 @@ const pushRepositoryUpdate = async (context, setSecret, appId, privateKey, owner
       .map(line => line.slice(1).split(' ')[0])
 
     if (prerequisites.length > 0) {
-      // Check which prerequisites are missing locally using cat-file --batch-check
-      const { spawnSync } = require('child_process')
-      const catFile = spawnSync('git', ['--git-dir', gitDir, 'cat-file', '--batch-check'], {
-        input: prerequisites.join('\n'),
-        encoding: 'utf-8'
-      })
-      const missing = catFile.stdout
-        .split('\n')
-        .filter(line => line.endsWith(' missing'))
-        .map(line => line.split(' ')[0])
-
-      if (missing.length > 0) {
-        context.log(`Fetching ${missing.length} prerequisite(s) from msys2/MINGW-packages`)
-        callGit(['--git-dir', gitDir, 'fetch', '--depth', '1',
-          'https://github.com/msys2/MINGW-packages', ...missing
-        ])
-      }
+      // Fetch prerequisites shallowly, whether or not the commit objects are
+      // already present locally: only a shallow fetch records the shallow
+      // boundary that stops `git push` from walking (and, via the promisor,
+      // re-uploading) the full msys2/master history.
+      context.log(`Fetching ${prerequisites.length} prerequisite(s) from msys2/MINGW-packages`)
+      callGit(['--git-dir', gitDir, 'fetch', '--depth', '1',
+        'https://github.com/msys2/MINGW-packages', ...prerequisites
+      ])
     }
 
     callGit(['--git-dir', gitDir, 'fetch', bundlePath, msys2SyncBranch])
