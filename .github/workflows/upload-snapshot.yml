@@ -1,5 +1,5 @@
 name: upload-snapshot
-run-name: "Upload Git for Windows snapshot"
+run-name: "${{ inputs.dry_run && 'DRY RUN: ' || '' }}${{ inputs.backfill && 'Backfill' || 'Upload' }} Git for Windows snapshot"
 
 on:
   workflow_dispatch:
@@ -16,6 +16,14 @@ on:
       git_artifacts_ucrt64_workflow_run_id:
         description: 'ID of the git-artifacts (ucrt64) workflow run (optional; UCRT64 is only included in snapshots)'
         required: false
+      backfill:
+        description: 'Backfill a snapshot that is not the latest (skip fast-forwarding main; insert entry by date; do not mark release as latest)'
+        type: boolean
+        default: false
+      dry_run:
+        description: 'Dry run: create a draft release and open a PR against gh-pages instead of publishing/pushing directly'
+        type: boolean
+        default: false
 
 env:
   OWNER: "${{ github.repository_owner }}"
@@ -26,6 +34,8 @@ env:
   X86_64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_x86_64_workflow_run_id }}"
   AARCH64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_aarch64_workflow_run_id }}"
   UCRT64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_ucrt64_workflow_run_id }}"
+  BACKFILL: "${{ inputs.backfill }}"
+  DRY_RUN: "${{ inputs.dry_run }}"
   CREATE_CHECK_RUN: "true"
   NODEJS_VERSION: 16
 
@@ -219,36 +229,56 @@ jobs:
               'GET',
               `/repos/${process.env.OWNER}/${process.env.SNAPSHOTS_REPO}/compare/${sha}...HEAD`
             )
-            if (ahead_by > 0) throw new Error(`The snapshots repository is ahead of ${sha}!`)
-            if (behind_by > 0) {
-              await githubApiRequest(
-                console,
-                token,
-                'PATCH',
-                `/repos/${process.env.OWNER}/${process.env.SNAPSHOTS_REPO}/git/refs/heads/main`, {
-                  sha,
-                  force: false // require fast-forward
-                }
-              )
+            if (process.env.BACKFILL === 'true') {
+              // For a backfill, the snapshot commit must already be reachable
+              // from `main` (i.e. `main` is a fast-forward of the snapshot
+              // commit); do not modify `main`.
+              if (behind_by > 0) throw new Error(`The snapshot commit ${sha} is not reachable from ${process.env.SNAPSHOTS_REPO}'s default branch (behind by ${behind_by})!`)
+            } else {
+              if (ahead_by > 0) throw new Error(`The snapshots repository is ahead of ${sha}!`)
+              if (behind_by > 0) {
+                await githubApiRequest(
+                  console,
+                  token,
+                  'PATCH',
+                  `/repos/${process.env.OWNER}/${process.env.SNAPSHOTS_REPO}/git/refs/heads/main`, {
+                    sha,
+                    force: false // require fast-forward
+                  }
+                )
+              }
             }
       - name: upload snapshots to ${{ env.SNAPSHOTS_REPO }}
         env:
           GH_TOKEN: ${{ steps.snapshots-token.outputs.result }}
         run: |
+          extra_args= &&
+          if test "true" = "$BACKFILL"; then
+            extra_args="$extra_args --latest=false"
+          fi &&
+          if test "true" = "$DRY_RUN"; then
+            extra_args="$extra_args --draft"
+          fi &&
           gh release create \
             -R "$OWNER/$SNAPSHOTS_REPO" \
             --target "${{ steps.bundle-artifacts.outputs.git-commit-oid }}" \
             --title "${{ steps.bundle-artifacts.outputs.date }}" \
+            $extra_args \
             ${{ steps.bundle-artifacts.outputs.ver }} \
             ${{ steps.download-artifacts.outputs.paths }} &&
-          echo "::notice::Uploaded snapshot artifacts to ${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}"
+          release_url="${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}" &&
+          if test "true" != "$DRY_RUN"; then
+            echo "::notice::Uploaded snapshot artifacts to $release_url"
+          else
+            echo "::notice::Uploaded draft snapshot artifacts; publish at $release_url"
+          fi
       - name: update check-run
         if: env.CREATE_CHECK_RUN != 'false'
         uses: ./.github/actions/check-run-action
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          append-text: 'Created release at ${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}'
+          append-text: "${{ inputs.dry_run && 'Created draft release at' || 'Created release at' }} ${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}"
       - name: clone gh-pages
         uses: actions/checkout@v7
         with:
@@ -263,27 +293,52 @@ jobs:
             const urlPrefix = `${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/download/${{ steps.bundle-artifacts.outputs.ver }}/`
             process.chdir('gh-pages')
             const main = require('./add-entry')
-            await main(
+            const args = []
+            if (process.env.BACKFILL === 'true') args.push('--insert-by-date')
+            args.push(
               '--date=${{ steps.bundle-artifacts.outputs.date }}',
               '--commit=${{ steps.bundle-artifacts.outputs.git-commit-oid }}',
               ...${{ steps.download-artifacts.outputs.result }}
                 .map(path => `${urlPrefix}${path.replace(/.*\//, '')}`)
             )
+            await main(...args)
       - name: push gh-pages
+        id: push-gh-pages
+        env:
+          GH_TOKEN: ${{ steps.snapshots-token.outputs.result }}
         run: |
+          commit_message="${{ inputs.backfill && 'Backfill' || 'Add' }} snapshot: ${{ steps.bundle-artifacts.outputs.ver }}" &&
           git -C gh-pages \
             -c user.name="${{ github.actor }}" \
             -c user.email="${{ github.actor }}@noreply.github.com" \
-            commit -sm "Add snapshot: ${{ steps.bundle-artifacts.outputs.ver }}" index.html &&
-          git -C gh-pages push &&
-          echo "::notice::Updated https://gitforwindows.org/git-snapshots (pending GitHub Pages deployment)"
+            commit -sm "$commit_message" index.html &&
+          if test "true" != "$DRY_RUN"; then
+            git -C gh-pages push &&
+            echo "::notice::Updated https://gitforwindows.org/git-snapshots (pending GitHub Pages deployment)"
+          else
+            branch="add-entry-${{ steps.bundle-artifacts.outputs.ver }}-${{ github.run_id }}" &&
+            git -C gh-pages push origin "HEAD:refs/heads/$branch" &&
+            printf '%s\n\n' \
+              "Adds the \`${{ steps.bundle-artifacts.outputs.ver }}\` snapshot entry to the gh-pages index." \
+              "Companion to the draft release at ${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}." \
+              "Prepared by [this workflow run](${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }})." \
+              >/tmp/pr-body.md &&
+            pr_url=$(gh api "repos/$OWNER/$SNAPSHOTS_REPO/pulls" \
+              -f "title=$commit_message" \
+              -f "head=$branch" \
+              -f "base=gh-pages" \
+              -F "body=@/tmp/pr-body.md" \
+              --jq '.html_url') &&
+            echo "pr-url=$pr_url" >>"$GITHUB_OUTPUT" &&
+            echo "::notice::Opened PR $pr_url to update https://gitforwindows.org/git-snapshots"
+          fi
       - name: update check-run
         if: env.CREATE_CHECK_RUN != 'false'
         uses: ./.github/actions/check-run-action
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          append-text: 'Updated https://gitforwindows.org/git-snapshots (pending GitHub Pages deployment)'
+          append-text: "${{ inputs.dry_run && format('Opened gh-pages PR {0}', steps.push-gh-pages.outputs.pr-url) || 'Updated https://gitforwindows.org/git-snapshots (pending GitHub Pages deployment)' }}"
       - name: mark check run as completed
         if: env.CREATE_CHECK_RUN != 'false' && always()
         uses: ./.github/actions/check-run-action
