@@ -188,7 +188,7 @@ Similarly, package-specific checksum update scripts in `update-scripts/checksums
 Git for Windows builds for three architectures:
 - `x86_64` (64-bit) - Full support: installer, portable, archive, MinGit, NuGet
 - `i686` (32-bit) - MinGit only
-- `aarch64` (ARM64) - All artifacts except MinGit-BusyBox
+- `aarch64` (ARM64) - All artifacts except NuGet
 
 ## Relationship with Other Repositories
 
