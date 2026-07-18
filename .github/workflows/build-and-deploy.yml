@@ -1,43 +1,26 @@
 name: build-and-deploy
-run-name: Build${{ inputs.build_only == '' && ' and deploy' || '' }} ${{ !startsWith(inputs.package, 'mingw-w64-') && inputs.repo != 'MSYS2-packages' && inputs.package != 'git-extra' && inputs.package != 'git-for-windows-keyring' && 'mingw-w64-' || '' }}${{ inputs.package }}${{ inputs.architecture && format(' ({0})', inputs.architecture) || '' }}
+run-name: Deploy saved mingw-w64-llvm artifacts (aarch64)
 
 on:
-  workflow_dispatch:
-    inputs:
-      package:
-        description: 'The package to build'
-        required: true
-      build_only:
-        description: 'Skip deployment (if "true")'
-        required: false
-      repo:
-        description: 'The repo containing the package definition'
-        required: true
-      ref:
-        description: 'The ref containing the package definition'
-        required: true
-      architecture:
-        description: 'The architecture to build for (only for MSYS packages, ucrt64 builds, and all arm64 builds)'
-        required: false
-      actor:
-        description: The GitHub user on whose behalf this workflow is run
-        required: false
+  push:
+    branches:
+      - replay-llvm-deployment
 
 env:
-  PACKAGE_TO_BUILD: "${{ github.event.inputs.package }}"
-  BUILD_ONLY: "${{ github.event.inputs.build_only }}"
+  PACKAGE_TO_BUILD: "mingw-w64-llvm"
+  BUILD_ONLY: ""
   OWNER: "git-for-windows"
-  REPO: "${{ github.event.inputs.repo }}"
-  REF: "${{ github.event.inputs.ref }}"
-  ARCHITECTURE: "${{ github.event.inputs.architecture }}"
+  REPO: "MINGW-packages"
+  REF: "396c125848f847be9dd34a4fc41d4b7c914c07d9"
+  ARCHITECTURE: "aarch64"
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
-  ACTOR: "${{ github.event.inputs.actor || github.triggering_actor }}"
+  ACTOR: "dscho"
   CREATE_CHECK_RUN: true
 
 jobs:
-  build:
+  deploy:
     if: github.event.repository.owner.login == 'git-for-windows'
-    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && 'windows-11-arm' || 'windows-latest' }}
+    runs-on: windows-11-arm
     steps:
       - uses: actions/checkout@v7
 
@@ -57,9 +40,9 @@ jobs:
           owner: ${{ env.OWNER }}
           repo: ${{ env.REPO }}
           rev: ${{ env.REF }}
-          check-run-name: "${{ env.BUILD_ONLY && 'build' || 'deploy' }}${{ env.ARCHITECTURE && format('_{0}', env.ARCHITECTURE) || '' }}"
-          title: "Build${{ !env.BUILD_ONLY && ' and deploy' || '' }} ${{ env.PACKAGE_TO_BUILD }}"
-          summary: "${{ env.BUILD_ONLY && 'Building' || 'Deploying' }} ${{ env.PACKAGE_TO_BUILD }}"
+          check-run-name: "deploy_aarch64"
+          title: "Deploy mingw-w64-llvm"
+          summary: "Deploying mingw-w64-llvm from workflow run 29616469313"
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
 
@@ -78,7 +61,7 @@ jobs:
             core.setOutput('name', answer.name)
             core.setOutput('email', answer.email || `${process.env.ACTOR}@users.noreply.github.com`)
 
-      - name: Configure build
+      - name: Configure deployment
         shell: bash
         run: |
           USER_NAME="${{ steps.actor.outputs.name }}" &&
@@ -120,10 +103,14 @@ jobs:
         run: |
           ./update-scripts/ensure-not-yet-deployed.sh${{ env.ARCHITECTURE != '' && format(' --architecture={0}', env.ARCHITECTURE) || '' }} "/usr/src/$REPO/$PACKAGE_TO_BUILD"
 
-      - name: Clone build-extra (unless cloned already)
+      - name: Clone build-extra helper branch
         if: env.REPO != 'build-extra'
         shell: bash
-        run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra /usr/src/build-extra
+        run: |
+          git clone --depth 1 --single-branch \
+            -b handle-stateless-app-token \
+            https://github.com/git-for-windows/build-extra \
+            /usr/src/build-extra
 
       - name: update the SDK ("pacman -Syyu")
         if: env.PACKAGE_TO_BUILD != 'mingw-w64-git'
@@ -207,83 +194,22 @@ jobs:
           git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
           echo "SIGNTOOL=git signtool" >>$GITHUB_ENV
 
-      - name: Build ${{env.PACKAGE_TO_BUILD}}
-        timeout-minutes: ${{ env.PACKAGE_TO_BUILD== 'mingw-w64-llvm' && 360 || 150 }}
-        env:
-          GPGKEY: ${{secrets.GPGKEY}}
-          MAKEPKG: ${{ env.REPO != 'MSYS2-packages' && env.PACKAGE_TO_BUILD != 'git-for-windows-keyring' && 'makepkg-mingw' || 'makepkg' }}
+      - name: Download artifacts from run 29616469313
+        uses: actions/download-artifact@v8
+        with:
+          name: artifacts
+          path: artifacts
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 29616469313
+          skip-decompress: false
+
+      - name: Verify downloaded artifacts
         shell: bash
         run: |
-          set -x &&
-
-          # Restrict `PATH` to MSYS2
-          MSYS2_PATH_TYPE=minimal &&
-          . /etc/profile &&
-
-          dir="$(cygpath -au artifacts)" &&
-          mkdir -p "$dir" &&
-
-          case "$ARCHITECTURE" in
-            aarch64)
-              GIT_EXE="/clangarm64/bin/git.exe"
-              BUILD_SRC=
-              ;;
-            i686)
-              GIT_EXE="/mingw32/bin/git.exe"
-              BUILD_SRC=
-              ;;
-            ucrt64)
-              GIT_EXE="/ucrt64/bin/git.exe"
-              BUILD_SRC=
-              ;;
-            *)
-              GIT_EXE="/mingw64/bin/git.exe"
-              BUILD_SRC="YesPlease"
-              ;;
-          esac &&
-
-          {
-            test ! -f /usr/bin/git.exe || rm /usr/bin/git.exe
-            printf '#!/bin/sh\n\nexport GIT_EXEC_PATH=%s\nPATH=%s:$GIT_EXEC_PATH:$PATH\nexec %s "$@"\n' \
-              "${GIT_EXE%/bin/git.exe}/libexec/git-core" \
-              "${GIT_EXE%/git.exe}" \
-              "$GIT_EXE" >/usr/bin/git
-          } &&
-
-          MINGW_ARCHS_TO_BUILD=$(
-                    case "$ARCHITECTURE,$PACKAGE_TO_BUILD" in
-                    aarch64,*) echo "clangarm64";;
-                    x86_64,*) echo "mingw64";;
-                    i686,*) echo "mingw32";;
-                    ucrt64,*) echo "ucrt64";;
-                    ,mingw-w64-wintoast) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're (cross-)compiling via Visual Studio
-                    ,mingw-w64-git-credential-manager) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're downloading the pre-built artifacts for all three platforms
-                    ,mingw-w64-git-lfs) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're downloading the pre-built artifacts from Git LFS' official release page
-                    ,*) echo "mingw32 mingw64 ucrt64";;
-                    esac
-          )
-
-          cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
-          case "$PACKAGE_TO_BUILD" in mingw-w64-git) DASH_S=;; *) DASH_S=-s;; esac &&
-          MAKEFLAGS=-j6 PKGEXT='.pkg.tar.xz' MINGW_ARCH=$MINGW_ARCHS_TO_BUILD $MAKEPKG $DASH_S --noconfirm &&
-          cp *.pkg.tar* "$dir/" &&
-
-          if test -n "$BUILD_SRC"
-          then
-            MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=mingw64 $MAKEPKG --allsource &&
-            cp *.src.tar* "$dir/"
-          fi &&
-
-          # Ensure that the Git worktree is still clean
-          ls -la &&
-          if ! git update-index --ignore-submodules --refresh ||
-            ! git diff-files --ignore-submodules ||
-            ! git diff-index --cached --ignore-submodules HEAD
-          then
-            echo "::error::Uncommitted changes after build!" >&2
-            git diff
-            exit 1
-          fi
+          set -- artifacts/*.pkg.tar.xz &&
+          test "$#" = 10 &&
+          test -f \
+            artifacts/mingw-w64-clang-aarch64-llvm-22.1.8-3-any.pkg.tar.xz
 
       - name: update check-run
         if: env.CREATE_CHECK_RUN != 'false'
@@ -291,13 +217,9 @@ jobs:
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
-          append-text: 'The build was successful!'
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: artifacts
-          path: artifacts
+          append-text: >-
+            Reusing artifacts built successfully in workflow run
+            29616469313.
 
       - uses: actions/create-github-app-token@v3
         id: pacman-repo-token
