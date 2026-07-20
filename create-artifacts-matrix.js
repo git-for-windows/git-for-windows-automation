@@ -29,7 +29,7 @@ module.exports = (artifactsString, architecture) => {
         fileExtension: 'tar.bz2'
     })
 
-    if (architecture !== 'aarch64') validArtifacts.push({
+    validArtifacts.push({
         name: 'mingit-busybox',
         filePrefix: 'MinGit',
         fileExtension: 'zip'

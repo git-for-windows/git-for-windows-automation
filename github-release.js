@@ -208,7 +208,6 @@ const getGitArtifacts = async (
 
     const urls = await getWorkflowRunArtifactsURLs(context, token, owner, repo, workflowRunId)
     for (const artifact of artifacts) {
-      if (architecture.name === 'aarch64' && artifact.name === 'mingit-busybox') continue
       if (architecture.name === 'i686' && !artifact.name.startsWith('mingit')) continue
       const name = `${artifact.name}-${architecture.name}`
       context.log(`Downloading ${name}`)
