@@ -264,7 +264,6 @@ jobs:
           git_artifacts_ucrt64_workflow_run_id: ${{ needs.setup.outputs.ucrt64-workflow-run-id }}
           gpg-key: ${{ secrets.GPGKEY }}
           priv-gpg-key: ${{ secrets.PRIVGPGKEY }}
-          azure-blobs-token: ${{ secrets.AZURE_BLOBS_TOKEN }}
   nuget-packages:
     needs: ['setup']
     runs-on: windows-latest

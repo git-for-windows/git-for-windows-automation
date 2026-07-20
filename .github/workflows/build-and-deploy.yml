@@ -194,19 +194,6 @@ jobs:
         env:
           GPGKEY: ${{secrets.GPGKEY}}
 
-      - name: Prepare home directory for code-signing
-        if: env.CODESIGN_P12 != '' && env.CODESIGN_PASS != ''
-        env:
-          CODESIGN_P12: ${{secrets.CODESIGN_P12}}
-          CODESIGN_PASS: ${{secrets.CODESIGN_PASS}}
-        shell: bash
-        run: |
-          mkdir -p "$HOME"/.sig &&
-          echo "$CODESIGN_P12" | tr % '\n' | base64 -d >"$HOME"/.sig/codesign.p12 &&
-          echo "$CODESIGN_PASS" >"$HOME"/.sig/codesign.pass
-          git config --global alias.signtool '!sh "/usr/src/build-extra/signtool.sh"'
-          echo "SIGNTOOL=git signtool" >>$GITHUB_ENV
-
       - name: Build ${{env.PACKAGE_TO_BUILD}}
         timeout-minutes: ${{ env.PACKAGE_TO_BUILD== 'mingw-w64-llvm' && 360 || 150 }}
         env:
@@ -308,12 +295,10 @@ jobs:
           repositories: pacman-repo
 
       - name: ${{ env.BUILD_ONLY == 'true' && 'Test-deploy' || 'Deploy' }} Pacman packages
-        if: env.BUILD_ONLY == 'true' || env.azure_blobs_token != ''
         shell: bash
         env:
           GPGKEY: ${{secrets.GPGKEY}}
           PACMANDRYRUN: ${{env.BUILD_ONLY}}
-          azure_blobs_token: ${{secrets.AZURE_BLOBS_TOKEN}}
           GITHUB_TOKEN: ${{ steps.pacman-repo-token.outputs.token }}
         run: /usr/src/build-extra/pacman-helper.sh quick_add artifacts/*
 

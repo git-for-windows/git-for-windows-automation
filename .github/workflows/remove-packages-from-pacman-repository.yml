@@ -73,11 +73,10 @@ jobs:
           repositories: pacman-repo
 
       - name: Remove Pacman packages
-        if: env.PACMANDRYRUN == 'true' || env.azure_blobs_token != ''
+        if: env.PACMANDRYRUN == 'true'
         shell: bash
         env:
           GPGKEY: ${{secrets.GPGKEY}}
-          azure_blobs_token: ${{secrets.AZURE_BLOBS_TOKEN}}
           GITHUB_TOKEN: ${{ steps.pacman-repo-token.outputs.token }}
         run: /usr/src/build-extra/pacman-helper.sh quick_remove ${PACKAGES_TO_REMOVE}
 

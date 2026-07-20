@@ -191,7 +191,7 @@ jobs:
         if: steps.update.outputs.modified == 'true'
         shell: bash
         run: |
-          auth="$(printf '%s:%s' '${{ steps.actor.outputs.login }}' '${{ steps.setup.outputs.token }}' | base64)" &&
+          auth="$(printf '%s:%s' '${{ steps.actor.outputs.login }}' '${{ steps.setup.outputs.token }}' | base64 -w0)" &&
           echo "::add-mask::$auth" &&
           cd "/usr/src/$REPO/$PACKAGE_TO_UPGRADE" &&
           git -c http.extraHeader="Authorization: Basic $auth" push --force '${{ steps.determine-repository.outputs.url }}' HEAD:refs/heads/'${{ steps.determine-repository.outputs.ref }}'
