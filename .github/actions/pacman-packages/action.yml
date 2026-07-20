@@ -45,9 +45,6 @@ inputs:
   priv-gpg-key:
     description: 'The base64-encoded private GPG key to use to sign the updated Pacman database'
     required: true
-  azure-blobs-token:
-    description: 'The token needed to upload the files to the Pacman repository'
-    required: true
 runs:
   using: "composite"
   steps:
@@ -115,12 +112,6 @@ runs:
       with:
         flavor: build-installers
         architecture: x86_64
-    - name: Prepare home directory for deploying to the Pacman repository
-      shell: bash
-      run: |
-        # Mask the form of the access key in which `openssl` requires it to generate the HMAC signature,
-        # to avoid leaking the key inadvertently e.g. when debugging via `set -x`
-        echo "::add-mask::$(echo "${{ inputs.azure-blobs-token }}" | base64 -d -w0 | xxd -p -c256)"
     - name: Clone build-extra
       shell: bash
       run: git clone --depth 1 --single-branch -b main https://github.com/git-for-windows/build-extra "$RUNNER_TEMP"/build-extra
@@ -148,7 +139,6 @@ runs:
       env:
         GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
         GPGKEY: ${{ inputs.gpg-key }}
-        azure_blobs_token: ${{ inputs.azure-blobs-token }}
         GITHUB_TOKEN: ${{ steps.pacman-repo-token.outputs.token }}
       run: |
         set -- pkg-x86_64/*.tar.* pkg-i686/*.tar.* pkg-aarch64/*.tar.*
