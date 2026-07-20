@@ -159,7 +159,7 @@ jobs:
         if: steps.update.outputs.modified == 'true'
         shell: bash
         run: |
-          auth="$(printf '%s:%s' '${{ steps.actor.outputs.login }}' '${{ steps.setup.outputs.token }}' | base64)" &&
+          auth="$(printf '%s:%s' '${{ steps.actor.outputs.login }}' '${{ steps.setup.outputs.token }}' | base64 -w0)" &&
           echo "::add-mask::$auth" &&
           cd "/usr/src/$REPO/${package_path-$PACKAGE_TO_UPGRADE}" &&
           git -c http.extraHeader="Authorization: Basic $auth" push --force origin HEAD:refs/heads/$PACKAGE_TO_UPGRADE-$UPGRADE_TO_VERSION
