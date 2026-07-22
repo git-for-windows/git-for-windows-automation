@@ -2,10 +2,12 @@
 
 set -x &&
 version_underscores="$(echo "$1" | tr . _)" &&
-url="https://github.com/jrsoftware/issrc/releases/download/is-$version_underscores/innosetup-$1.exe" &&
+url="https://github.com/jrsoftware/issrc/releases/download" &&
+url="$url/is-$version_underscores/innosetup-$1-x64.exe" &&
 curl -# -LR -D curl.log -o is.exe "$url" &&
 cat curl.log &&
 grep 'HTTP/.* 200' curl.log &&
+rm -r InnoSetup/ &&
 ./is.exe //verysilent //dir=InnoSetup //noicons //tasks= //portable=1 //lang=english \
   //SP- //SUPPRESSMSGBOXES //NORESTART //LOG=is.log &&
 cat is.log &&
