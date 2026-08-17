@@ -65,6 +65,7 @@ jobs:
       mingw_package_prefix: ${{steps.configure-environment.outputs.MINGW_PACKAGE_PREFIX}}
       sdk_repo_arch: ${{steps.configure-environment.outputs.SDK_REPO_ARCH}}
       check-run-state: ${{steps.check-run-state.outputs.check-run-state}}
+      source_date_epoch: ${{steps.prepare-git-clone.outputs.source_date_epoch}}
     steps:
       - name: clone git-for-windows-automation
         uses: actions/checkout@v7
@@ -253,6 +254,7 @@ jobs:
             git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
           fi
       - name: Prepare git-for-windows/git clone with the tag
+        id: prepare-git-clone
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         run: |
           set -x
@@ -281,6 +283,14 @@ jobs:
               $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)
           fi &&
           git reset --hard $(cat "$GITHUB_WORKSPACE"/bundle-artifacts/next_version)
+          # Reproducible builds: pin the build timestamp to the commit time of
+          # the Git revision being built, so repeated builds of the same tag
+          # produce byte-identical artifacts. The release scripts in build-extra
+          # honor SOURCE_DATE_EPOCH when it is set (see git-for-windows/git#6367).
+          SOURCE_DATE_EPOCH=$(git show -s --format=%ct "${GIT_REV:-HEAD}") &&
+          echo "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >>"$GITHUB_ENV" &&
+          echo "source_date_epoch=$SOURCE_DATE_EPOCH" >>"$GITHUB_OUTPUT" &&
+          echo "Pinning SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" >&2
       - name: Azure Login (OIDC)
         env:
           AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
@@ -419,6 +429,10 @@ jobs:
       MINGW_PREFIX: ${{ needs.pkg.outputs.mingw-prefix }}
       MINGW_PACKAGE_PREFIX: ${{ needs.pkg.outputs.mingw_package_prefix }}
       SDK_REPO_ARCH: ${{ needs.pkg.outputs.sdk_repo_arch }}
+      # Reproducible builds: reuse the epoch computed in the pkg job so the
+      # installer/portable/mingit/archive scripts (build-extra) produce
+      # byte-identical artifacts for a given tag.
+      SOURCE_DATE_EPOCH: ${{ needs.pkg.outputs.source_date_epoch }}
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.pkg.outputs.artifact_matrix) }}
