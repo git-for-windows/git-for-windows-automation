@@ -13,8 +13,8 @@ on:
       git_artifacts_aarch64_workflow_run_id:
         description: 'ID of the git-artifacts (aarch64) workflow run'
         required: true
-      git_artifacts_ucrt64_workflow_run_id:
-        description: 'ID of the git-artifacts (ucrt64) workflow run (optional; UCRT64 is only included in snapshots)'
+      git_artifacts_mingw64_workflow_run_id:
+        description: 'ID of the git-artifacts (mingw64) workflow run (optional; MINGW64 is only included in snapshots)'
         required: false
       backfill:
         description: 'Backfill a snapshot that is not the latest (skip fast-forwarding main; insert entry by date; do not mark release as latest)'
@@ -33,7 +33,7 @@ env:
   I686_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_i686_workflow_run_id }}"
   X86_64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_x86_64_workflow_run_id }}"
   AARCH64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_aarch64_workflow_run_id }}"
-  UCRT64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_ucrt64_workflow_run_id }}"
+  MINGW64_WORKFLOW_RUN_ID: "${{ github.event.inputs.git_artifacts_mingw64_workflow_run_id }}"
   BACKFILL: "${{ inputs.backfill }}"
   DRY_RUN: "${{ inputs.dry_run }}"
   CREATE_CHECK_RUN: "true"
@@ -119,11 +119,11 @@ jobs:
             } = require('./github-release')
 
             const token = ${{ toJSON(secrets.GITHUB_TOKEN) }}
-            // UCRT64 is built only for snapshots, not for full releases. Pick
+            // MINGW64 is built only for a transitional period. Pick
             // it up leniently: only when a workflow run ID was provided, and
             // only for the artifacts that are actually present in that run.
             const architectureNames = architectures.map(arch => arch.name)
-            if (process.env.UCRT64_WORKFLOW_RUN_ID) architectureNames.push('ucrt64')
+            if (process.env.MINGW64_WORKFLOW_RUN_ID) architectureNames.push('mingw64')
 
             const directories = ['bundle-artifacts-x86_64']
             for (const architecture of architectureNames) {
