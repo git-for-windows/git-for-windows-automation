@@ -16,6 +16,7 @@ on:
         - i686
         - aarch64
         - ucrt64
+        - mingw64
       tag_git_workflow_run_id:
         description: 'Workflow run ID of the tag-git pipeline'
         required: false
