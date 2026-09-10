@@ -12,8 +12,8 @@ on:
       git_artifacts_aarch64_workflow_run_id:
         description: 'ID of the git-artifacts (aarch64) workflow run'
         required: true
-      git_artifacts_ucrt64_workflow_run_id:
-        description: 'ID of the git-artifacts (ucrt64) workflow run (optional; auto-detected from the tagged commit''s check-runs if omitted)'
+      git_artifacts_mingw64_workflow_run_id:
+        description: 'ID of the git-artifacts (mingw64) workflow run (optional; auto-detected from the tagged commit''s check-runs if omitted)'
         required: false
 
 env:
@@ -24,7 +24,7 @@ env:
   I686_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_i686_workflow_run_id}}"
   X86_64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_x86_64_workflow_run_id}}"
   AARCH64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_aarch64_workflow_run_id}}"
-  UCRT64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_ucrt64_workflow_run_id}}"
+  MINGW64_WORKFLOW_RUN_ID: "${{github.event.inputs.git_artifacts_mingw64_workflow_run_id}}"
 
 jobs:
   setup:
@@ -36,7 +36,7 @@ jobs:
       ver: ${{ steps.bundle-artifacts.outputs.ver }}
       git-rev: ${{ steps.bundle-artifacts.outputs.git-rev }}
       release-notes: ${{ steps.bundle-artifacts.outputs.release-notes }}
-      ucrt64-workflow-run-id: ${{ steps.ucrt64.outputs.workflow-run-id }}
+      mingw64-workflow-run-id: ${{ steps.mingw64.outputs.workflow-run-id }}
       pull-request-number: ${{ steps.announcement.outputs.pull-request-number }}
       pull-request-comment: ${{ steps.announcement.outputs.pull-request-comment }}
     steps:
@@ -111,16 +111,16 @@ jobs:
             core.endGroup()
 
             core.setOutput('release-notes', result.releaseNotes)
-      - name: Look for a UCRT64 git-artifacts run
-        id: ucrt64
+      - name: Look for a MINGW64 git-artifacts run
+        id: mingw64
         uses: actions/github-script@v9
         with:
           script: |
             // Honor an explicit override, otherwise discover the run.
-            let workflowRunId = process.env.UCRT64_WORKFLOW_RUN_ID
+            let workflowRunId = process.env.MINGW64_WORKFLOW_RUN_ID
             if (!workflowRunId) {
-              const findUCRT64GitArtifactsRun = require('./find-ucrt64-git-artifacts-run')
-              workflowRunId = await findUCRT64GitArtifactsRun(
+              const findMINGW64GitArtifactsRun = require('./find-mingw64-git-artifacts-run')
+              workflowRunId = await findMINGW64GitArtifactsRun(
                 console,
                 '${{ secrets.GITHUB_TOKEN }}',
                 process.env.OWNER,
@@ -261,7 +261,7 @@ jobs:
           git_artifacts_i686_workflow_run_id: ${{ env.I686_WORKFLOW_RUN_ID }}
           git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
           git_artifacts_aarch64_workflow_run_id: ${{ env.AARCH64_WORKFLOW_RUN_ID }}
-          git_artifacts_ucrt64_workflow_run_id: ${{ needs.setup.outputs.ucrt64-workflow-run-id }}
+          git_artifacts_mingw64_workflow_run_id: ${{ needs.setup.outputs.mingw64-workflow-run-id }}
           gpg-key: ${{ secrets.GPGKEY }}
           priv-gpg-key: ${{ secrets.PRIVGPGKEY }}
   nuget-packages:

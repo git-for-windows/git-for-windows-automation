@@ -53,7 +53,7 @@ runs:
         /usr/bin/sha256sum.exe
         /usr/bin/updpkgsums
         /usr/share/makepkg/
-        /mingw64/bin/curl.exe
+        /ucrt64/bin/curl.exe
         EOF
         if test false != '${{ inputs.include-makepkg }}'
         then
@@ -86,11 +86,11 @@ runs:
         git checkout -- &&
 
         # makepkg/updpkgsums expect `curl` to be present in `/usr/bin/`
-        printf '#!/bin/sh\n\nexec /mingw64/bin/curl.exe "$@"' >usr/bin/curl &&
+        printf '#!/bin/sh\n\nexec /ucrt64/bin/curl.exe "$@"' >usr/bin/curl &&
         {
           # makepkg expects `git` to be present in `/usr/bin/`
-          test ! -x mingw64/bin/git.exe ||
-          printf '#!/bin/sh\n\nexec /mingw64/bin/git.exe "$@"' >usr/bin/git
+          test ! -x ucrt64/bin/git.exe ||
+          printf '#!/bin/sh\n\nexec /ucrt64/bin/git.exe "$@"' >usr/bin/git
         }
     - name: cache git-sdk-64 subset
       if: ${{ steps.restore-g4w-sdk.outputs.cache-hit != 'true' }}
@@ -111,5 +111,5 @@ runs:
         # add the SDK directories to the `PATH`
         cygpath -aw "usr/bin/core_perl" >>$GITHUB_PATH &&
         cygpath -aw "usr/bin" >>$GITHUB_PATH &&
-        cygpath -aw "mingw64/bin" >>$GITHUB_PATH &&
-        echo "MSYSTEM=MINGW64" >>$GITHUB_ENV
+        cygpath -aw "ucrt64/bin" >>$GITHUB_PATH &&
+        echo "MSYSTEM=UCRT64" >>$GITHUB_ENV
