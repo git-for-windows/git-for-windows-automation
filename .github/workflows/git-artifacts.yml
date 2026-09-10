@@ -160,9 +160,9 @@ jobs:
         run: |
           case "$ARCHITECTURE" in
             x86_64)
-              MSYSTEM=MINGW64
-              MINGW_PREFIX=/mingw64
-              MINGW_PACKAGE_PREFIX=mingw-w64-x86_64
+              MSYSTEM=UCRT64
+              MINGW_PREFIX=/ucrt64
+              MINGW_PACKAGE_PREFIX=mingw-w64-ucrt-x86_64
               SDK_REPO_ARCH=64
               ;;
             i686)
@@ -181,6 +181,12 @@ jobs:
               MSYSTEM=UCRT64
               MINGW_PREFIX=/ucrt64
               MINGW_PACKAGE_PREFIX=mingw-w64-ucrt-x86_64
+              SDK_REPO_ARCH=64
+              ;;
+            mingw64)
+              MSYSTEM=MINGW64
+              MINGW_PREFIX=/mingw64
+              MINGW_PACKAGE_PREFIX=mingw-w64-x86_64
               SDK_REPO_ARCH=64
               ;;
             *)

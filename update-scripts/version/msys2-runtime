@@ -89,7 +89,7 @@ git --git-dir=msys2-runtime reset --soft "$revision" && {
 # object database is independent of the bare repo, and its refs are not
 # shared. To let update-patches.sh find the target revision and the
 # base tag, borrow the objects via an alternates file (using a relative
-# path so both `/usr/bin/git.exe` and `/mingw64/bin/git.exe` can resolve
+# path so both `/usr/bin/git.exe` and `/ucrt64/bin/git.exe` can resolve
 # it) and sync HEAD and the base tag from the bare repo.
 if test -d src/msys2-runtime/.git
 then
