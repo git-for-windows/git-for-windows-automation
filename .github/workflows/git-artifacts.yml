@@ -83,9 +83,10 @@ jobs:
           d=/usr/src/build-extra &&
           if test ! -d $d/.git
           then
-            git clone --single-branch -b main https://github.com/git-for-windows/build-extra $d
+            git clone --single-branch -b fix-ExecAndCaptureOutput-invocation https://github.com/git-for-windows/build-extra $d &&
+            git -C $d switch -C main
           else
-            git -C $d fetch https://github.com/git-for-windows/build-extra main &&
+            git -C $d fetch https://github.com/git-for-windows/build-extra fix-ExecAndCaptureOutput-invocation &&
             git -C $d switch -C main FETCH_HEAD
           fi &&
           echo "result=$(cygpath -am "$d")" >> $GITHUB_OUTPUT &&
