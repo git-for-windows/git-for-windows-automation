@@ -61,11 +61,17 @@ jobs:
         with:
           name: pkg-${{env.ARCHITECTURE}}
           path: pkg-${{env.ARCHITECTURE}}
+          repository: ${{ github.repository }}
+          run-id: 34619692758
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - name: Download bundle-artifacts
         uses: actions/download-artifact@v8
         with:
           name: bundle-artifacts
           path: bundle-artifacts
+          repository: ${{ github.repository }}
+          run-id: 34619692758
+          github-token: ${{ secrets.GITHUB_TOKEN }}
       - uses: git-for-windows/setup-git-for-windows-sdk@v2
         with:
           flavor: build-installers
