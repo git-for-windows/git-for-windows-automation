@@ -1,43 +1,20 @@
 name: git-artifacts
-run-name: Build git-artifacts (${{ inputs.artifacts != '' && format('{0} ', inputs.artifacts) || '' }}${{ inputs.architecture }})
+run-name: Build git-artifacts (v2.56.0-rc0 installer x86_64)
 
 on:
-  workflow_dispatch:
-    inputs:
-      artifacts:
-        description: 'Optionally restrict what artifacts to build (portable, installer, etc.). Separate artifacts with spaces'
-        required: false
-      architecture:
-        type: choice
-        description: 'Architecture to build'
-        required: true
-        options:
-        - x86_64
-        - i686
-        - aarch64
-        - ucrt64
-        - mingw64
-      tag_git_workflow_run_id:
-        description: 'Workflow run ID of the tag-git pipeline'
-        required: false
-      existing_git_tag:
-        description: 'Existing tag to build from. Requires tag_git_workflow_run_id to be empty'
-        required: false
-      build_extra_rev_for_existing_git_tag:
-        description: 'build-extra revision to use if building from an existing Git tag. Required if existing_git_tag is non-empty'
-        required: false
+  push:
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
   HOME: "${{github.workspace}}\\home"
   USERPROFILE: "${{github.workspace}}\\home"
-  ARTIFACTS_TO_BUILD: "${{github.event.inputs.artifacts}}"
-  ARCHITECTURE: "${{github.event.inputs.architecture}}"
+  ARTIFACTS_TO_BUILD: "installer"
+  ARCHITECTURE: "x86_64"
   OWNER: git-for-windows
   REPO: git
-  TAG_GIT_WORKFLOW_RUN_ID: "${{github.event.inputs.tag_git_workflow_run_id}}"
-  EXISTING_GIT_TAG: "${{github.event.inputs.existing_git_tag}}"
-  BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG: "${{github.event.inputs.build_extra_rev_for_existing_git_tag}}"
+  TAG_GIT_WORKFLOW_RUN_ID: "34619595450"
+  EXISTING_GIT_TAG: ""
+  BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG: ""
   # Rust became opt-out (NO_RUST) in Git's Makefile as of v2.55.0-rc0
   # (git.git commit 32d5b905909e, "Enable Rust by default"), and the
   # Git for Windows SDK does not yet ship a default Rust toolchain
@@ -415,7 +392,7 @@ jobs:
           append-text: "${{ format('Completed: {0}', job.status) }}."
           conclusion: ${{ job.status }}
   artifacts:
-    runs-on: ${{ github.event.inputs.architecture == 'aarch64' && 'windows-11-arm' || 'windows-latest' }}
+    runs-on: 'windows-latest'
     needs: pkg
     permissions:
       id-token: write
@@ -563,7 +540,7 @@ jobs:
           name: ${{matrix.artifact.name}}-${{env.ARCHITECTURE}}
           path: artifacts
       - uses: actions/create-github-app-token@v3
-        if: (matrix.artifact.name == 'installer' || (matrix.artifact.name == 'portable' && env.IS_SNAPSHOT == 'true')) && github.event.inputs.architecture != 'i686'
+        if: (matrix.artifact.name == 'installer' || (matrix.artifact.name == 'portable' && env.IS_SNAPSHOT == 'true'))
         id: pr-comment-token
         with:
           app-id: ${{ secrets.GH_APP_ID }}
@@ -571,7 +548,7 @@ jobs:
           owner: ${{ env.OWNER }}
           repositories: ${{ env.REPO }}
       - name: Add a PR comment suggesting to validate the installer manually
-        if: matrix.artifact.name == 'installer' && github.event.inputs.architecture == 'x86_64' && env.IS_SNAPSHOT != 'true'
+        if: matrix.artifact.name == 'installer'
         uses: actions/github-script@v9
         with:
           github-token: ${{ steps.pr-comment-token.outputs.token }}
@@ -600,7 +577,7 @@ jobs:
               await github.rest.issues.createComment(req)
             }
       - name: Add a PR comment with snapshot artifact links
-        if: (matrix.artifact.name == 'installer' || matrix.artifact.name == 'portable') && github.event.inputs.architecture != 'i686' && env.IS_SNAPSHOT == 'true'
+        if: (matrix.artifact.name == 'installer' || matrix.artifact.name == 'portable') && env.IS_SNAPSHOT == 'true'
         uses: actions/github-script@v9
         with:
           github-token: ${{ steps.pr-comment-token.outputs.token }}
