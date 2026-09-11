@@ -259,6 +259,12 @@ jobs:
           if test "true" = "$DRY_RUN"; then
             extra_args="$extra_args --draft"
           fi &&
+          release_url="${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}" &&
+          if gh release view -R "$OWNER/$SNAPSHOTS_REPO" ${{ steps.bundle-artifacts.outputs.ver }}
+          then
+            echo "::notice::Snapshot already exists at $release_url"
+            exit 0
+          fi &&
           gh release create \
             -R "$OWNER/$SNAPSHOTS_REPO" \
             --target "${{ steps.bundle-artifacts.outputs.git-commit-oid }}" \
@@ -266,7 +272,6 @@ jobs:
             $extra_args \
             ${{ steps.bundle-artifacts.outputs.ver }} \
             ${{ steps.download-artifacts.outputs.paths }} &&
-          release_url="${{ github.server_url }}/${{ env.OWNER }}/${{ env.SNAPSHOTS_REPO }}/releases/tag/${{ steps.bundle-artifacts.outputs.ver }}" &&
           if test "true" != "$DRY_RUN"; then
             echo "::notice::Uploaded snapshot artifacts to $release_url"
           else
