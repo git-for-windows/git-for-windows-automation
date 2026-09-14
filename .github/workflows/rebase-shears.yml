@@ -25,7 +25,7 @@ on:
 env:
   BRANCH: ${{ inputs.branch || 'all' }}
   PUSH: ${{ github.event_name == 'schedule' && 'true' || inputs.push || 'true' }}
-  COPILOT_MODEL: claude-opus-4.6
+  COPILOT_MODEL: gpt-5.6-sol
 
 jobs:
   rebase:
