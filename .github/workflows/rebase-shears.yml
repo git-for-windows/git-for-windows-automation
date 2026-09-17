@@ -303,7 +303,7 @@ jobs:
           # GitHub rejects check-run summaries longer than 65535 characters
           summary="$RUNNER_TEMP/check-summary.md"
           cap_body () {
-            if test "$(wc -c "$1")" -le 65000; then
+            if test "$(wc -c <"$1")" -le 65000; then
               cat "$1"
             else
               head -c 65000 "$1"
@@ -356,7 +356,7 @@ jobs:
 
           # GitHub rejects pull-request bodies longer than 65536 characters
           cap_body () {
-            if test "$(wc -c "$1")" -le 65000; then
+            if test "$(wc -c <"$1")" -le 65000; then
               cat "$1"
             else
               head -c 65000 "$1"
