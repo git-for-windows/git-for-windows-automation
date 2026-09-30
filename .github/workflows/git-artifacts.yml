@@ -484,14 +484,7 @@ jobs:
             git -C $d fetch https://github.com/git-for-windows/build-extra main &&
             git -C $d switch -C main FETCH_HEAD
           fi &&
-          echo "result=$(cygpath -am "$d")" >> $GITHUB_OUTPUT &&
-          if test -z "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
-          then
-            git -C $d -c pull.rebase=false pull "$PWD"/bundle-artifacts/build-extra.bundle main
-          else
-            git -C $d fetch origin "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG" &&
-            git -C $d reset --hard "$BUILD_EXTRA_REV_FOR_EXISTING_GIT_TAG"
-          fi
+          echo "result=$(cygpath -am "$d")" >> $GITHUB_OUTPUT
       - name: Prepare some command-line options
         run: |
           # Build the `--pkg=<pkg>` list
