@@ -268,8 +268,9 @@ jobs:
           git -C /usr/src/MINGW-packages fetch \
             https://github.com/git-for-windows/MINGW-packages \
             refs/heads/restrict-i686-git-artifacts-to-mingits-needs &&
-          test "$(git -C /usr/src/MINGW-packages rev-parse FETCH_HEAD)" = \
-            1d186f4558b976cd6f78532c4dceefff450e3dc2 &&
+          test "$(git -C /usr/src/MINGW-packages rev-parse \
+            FETCH_HEAD:mingw-w64-git/PKGBUILD)" = \
+            c8d3b5e3350dc8fbbde1d5c5daf7bddb86edff42 &&
           git -C /usr/src/MINGW-packages show \
             FETCH_HEAD:mingw-w64-git/PKGBUILD \
             >/usr/src/MINGW-packages/mingw-w64-git/PKGBUILD &&
