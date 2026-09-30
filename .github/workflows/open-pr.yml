@@ -19,11 +19,16 @@ on:
         description: Prepare a PR against upstream MSYS2 instead of our fork
         type: boolean
         default: false
+      issue_number:
+        description: Git for Windows issue to report the upstream update on
+        type: number
+        required: false
 
 env:
   PACKAGE_TO_UPGRADE: ${{ github.event.inputs.package }}
   UPGRADE_TO_VERSION: ${{ github.event.inputs.version }}
   UPSTREAM: ${{ inputs.upstream }}
+  ISSUE_NUMBER: ${{ github.event.inputs.issue_number }}
   OWNER: 'git-for-windows'
   ACTOR: "${{ github.event.inputs.actor || github.triggering_actor }}"
 
@@ -36,6 +41,13 @@ jobs:
         id: repo
         shell: bash
         run: |
+          if test -n "$ISSUE_NUMBER" &&
+             { test "$UPSTREAM" != true ||
+               ! [[ "$ISSUE_NUMBER" =~ ^[1-9][0-9]*$ ]]; }
+          then
+            echo "::error::Invalid issue_number for upstream update" >&2
+            exit 1
+          fi &&
           case "$PACKAGE_TO_UPGRADE" in
           mingw-w64-cv2pdb|mingw-w64-git-credential-manager|\
           mingw-w64-git-lfs|mingw-w64-git-sizer|mingw-w64-wintoast|\
@@ -132,6 +144,8 @@ jobs:
       - name: update PKGBUILD
         id: update
         shell: bash
+        env:
+          GH_TOKEN: ${{ steps.setup.outputs.token }}
         run: |
           cd "/usr/src/$REPO/${package_path-$PACKAGE_TO_UPGRADE}" &&
           if test "$UPSTREAM" = true
@@ -150,6 +164,12 @@ jobs:
             then
               echo "::notice::Upstream $PACKAGE_TO_UPGRADE is already at" \
                 "$upstream_version"
+              if test -n "$ISSUE_NUMBER"
+              then
+                gh issue comment "$ISSUE_NUMBER" -R "$OWNER/git" \
+                  -b "msys2/$REPO has $PACKAGE_TO_UPGRADE $upstream_version." ||
+                  exit 1
+              fi
               exit 0
             fi
           fi &&
@@ -195,6 +215,8 @@ jobs:
       - name: push
         if: steps.update.outputs.modified == 'true'
         shell: bash
+        env:
+          GH_TOKEN: ${{ steps.setup.outputs.token }}
         run: |
           auth="$(printf '%s:%s' '${{ steps.actor.outputs.login }}' '${{ steps.setup.outputs.token }}' | base64 -w0)" &&
           echo "::add-mask::$auth" &&
@@ -205,9 +227,16 @@ jobs:
             git -c http.extraHeader="Authorization: Basic $auth" push \
               "https://github.com/$OWNER/$REPO" \
               "HEAD:refs/heads/$branch" &&
-            printf '::notice::Open an upstream PR: %s%s\n' \
+            printf -v pr_url '%s%s' \
               "https://github.com/msys2/$REPO/compare/master..." \
-              "git-for-windows:$REPO:$branch?expand=1"
+              "git-for-windows:$REPO:$branch?expand=1" &&
+            echo "::notice::Open an upstream PR: $pr_url" &&
+            if test -n "$ISSUE_NUMBER"
+            then
+              gh issue comment "$ISSUE_NUMBER" -R "$OWNER/git" \
+                -b "[$PACKAGE_TO_UPGRADE: open upstream PR]($pr_url)" ||
+              exit 1
+            fi
           else
             git -c http.extraHeader="Authorization: Basic $auth" push \
               --force origin "HEAD:refs/heads/$branch"

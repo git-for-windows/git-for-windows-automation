@@ -66,6 +66,8 @@ Changing any of these without updating `gfw-helper-github-app` will break the au
 With `upstream: true`, `open-pr.yml` prepares the usual version branch
 against MSYS2's `master` in the Git for Windows fork, skipping deployment
 and the Git for Windows PR. The workflow run links to the upstream PR.
+With `issue_number`, it also comments on the original Git for Windows
+issue when the upstream version is current or the branch is ready.
 
 ### Git for Windows Releases
 
