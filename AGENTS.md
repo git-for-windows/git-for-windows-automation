@@ -63,6 +63,10 @@ Changing any of these without updating `gfw-helper-github-app` will break the au
 | `build-and-deploy.yml` | `/deploy` command on PRs | Builds Pacman packages and deploys to Azure Blob Storage |
 | `updpkgsums.yml` | `/updpkgsums` command on PRs | Updates checksums in PKGBUILD files |
 
+With `upstream: true`, `open-pr.yml` prepares the usual version branch
+against MSYS2's `master` in the Git for Windows fork, skipping deployment
+and the Git for Windows PR. The workflow run links to the upstream PR.
+
 ### Git for Windows Releases
 
 | Workflow | Trigger | Purpose |
