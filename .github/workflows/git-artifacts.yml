@@ -487,7 +487,11 @@ jobs:
             "$(ls pkg-$ARCHITECTURE/$MINGW_PACKAGE_PREFIX-*.tar.* |
               sed '/\.sig$/d;/archimport/d;/cvs/d;/p4/d;/gitweb/d;s/^/--pkg=/' |
               tr '\n' ' ')" >>$GITHUB_ENV &&
-          echo "VERSION_OPT=--version=$(cat pkg-"$ARCHITECTURE"/ver)" >>$GITHUB_ENV
+          echo "VERSION_OPT=--version=$(cat pkg-"$ARCHITECTURE"/ver)" >>$GITHUB_ENV &&
+          if test -f bundle-artifacts/snapshot
+          then
+            echo "IS_SNAPSHOT=$(cat bundle-artifacts/snapshot)" >>$GITHUB_ENV
+          fi
       - name: Azure Login (OIDC)
         env:
           AZURE_CLIENT_ID: ${{secrets.AZURE_CLIENT_ID}}
@@ -700,6 +704,25 @@ jobs:
           # cannot test SSH keys in read-only mode, skip test for now
           sed -i 's|git@ssh.dev.azure.com:v3/git-for-windows/git/git|https://github.com/git/git|' $checklist &&
           sh -x $checklist
+      - name: Validate Git code signatures
+        if: >-
+          matrix.artifact.name == 'installer' &&
+          github.repository_owner == 'git-for-windows' &&
+          env.IS_SNAPSHOT != 'true'
+        shell: pwsh
+        run: |
+          $root = "$env:ProgramFiles/Git"
+          $execPath = & "$root$env:MINGW_PREFIX/bin/git.exe" --exec-path
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          $invalid = @(Get-Item "$root$env:MINGW_PREFIX/bin/git*.exe",
+            "$root/cmd/git*.exe", "$execPath/git*.exe" |
+            ForEach-Object {
+              Get-AuthenticodeSignature -LiteralPath $_.FullName
+            } | Where-Object Status -ne 'Valid')
+          if ($invalid.Count -gt 0) {
+            $invalid | Format-List Path, Status
+            exit 1
+          }
       - name: update check-run
         if: needs.pkg.outputs.check-run-state != '' && matrix.artifact.name == 'installer'
         uses: ./.github/actions/check-run-action
