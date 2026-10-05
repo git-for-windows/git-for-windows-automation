@@ -217,6 +217,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ steps.setup.outputs.token }}
+          PR_TITLE: ${{ steps.update.outputs.msg }}
         run: |
           auth="$(printf '%s:%s' '${{ steps.actor.outputs.login }}' '${{ steps.setup.outputs.token }}' | base64 -w0)" &&
           echo "::add-mask::$auth" &&
@@ -227,9 +228,24 @@ jobs:
             git -c http.extraHeader="Authorization: Basic $auth" push \
               "https://github.com/$OWNER/$REPO" \
               "HEAD:refs/heads/$branch" &&
+            workflow_run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY" &&
+            workflow_run_url="$workflow_run_url/actions/runs/$GITHUB_RUN_ID" &&
+            printf -v pr_body \
+              'This PR updates the `%s` package definition.\n\n%s %s' \
+              "$PACKAGE_TO_UPGRADE" \
+              "This branch was pushed by" "$workflow_run_url" &&
+            pr_params="$(
+              node -p \
+                'new URLSearchParams({
+                  expand: 1,
+                  title: process.argv[1],
+                  body: process.argv[2]
+                }).toString()' \
+                "$PR_TITLE" "$pr_body"
+            )" &&
             printf -v pr_url '%s%s' \
               "https://github.com/msys2/$REPO/compare/master..." \
-              "git-for-windows:$REPO:$branch?expand=1" &&
+              "git-for-windows:$REPO:$branch?$pr_params" &&
             echo "::notice::Open an upstream PR: $pr_url" &&
             if test -n "$ISSUE_NUMBER"
             then
