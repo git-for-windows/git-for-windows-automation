@@ -714,7 +714,10 @@ jobs:
           $root = "$env:ProgramFiles/Git"
           $execPath = & "$root$env:MINGW_PREFIX/bin/git.exe" --exec-path
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
-          $invalid = @(Get-Item "$root$env:MINGW_PREFIX/bin/git*.exe",
+          $invalid = @(Get-Item `
+            -Exclude 'git-askpass.exe', 'git-askyesno.exe',
+              'git-credential-helper-selector.exe' `
+            "$root$env:MINGW_PREFIX/bin/git*.exe",
             "$root/cmd/git*.exe", "$execPath/git*.exe" |
             ForEach-Object {
               Get-AuthenticodeSignature -LiteralPath $_.FullName
