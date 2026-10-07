@@ -20,6 +20,9 @@ on:
         description: 'A flag indicating whether this is a snapshot or a full Git for Windows release'
         required: true
         default: "true"
+      pr_comment_url:
+        description: 'URL of the PR comment that requested the artifacts'
+        required: false
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
@@ -61,7 +64,12 @@ jobs:
           check-run-name: "tag-git"
           title: "Tag Git @${{ env.REV }}"
           summary: "Tag Git @${{ env.REV }}"
-          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          text: >-
+            For details, see [this run](https://github.com/${{
+            github.repository }}/actions/runs/${{ github.run_id }}).${{
+            inputs.pr_comment_url && format(
+            ' Requested in [this PR comment]({0}).',
+            inputs.pr_comment_url) || '' }}
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: Configure user
         run:
