@@ -26,6 +26,9 @@ on:
       build_extra_rev_for_existing_git_tag:
         description: 'build-extra revision to use if building from an existing Git tag. Required if existing_git_tag is non-empty'
         required: false
+      pr_comment_url:
+        description: 'URL of the PR comment that requested the artifacts'
+        required: false
 
 env:
   GPG_OPTIONS: "--batch --yes --no-tty --list-options no-show-photos --verify-options no-show-photos --pinentry-mode loopback"
@@ -149,7 +152,12 @@ jobs:
           check-run-name: "git-artifacts-${{ env.ARCHITECTURE }}"
           title: "Build Git ${{ env.GIT_VERSION }} artifacts"
           summary: "Build Git ${{ env.GIT_VERSION }} artifacts from commit ${{ env.GIT_REV }}${{ env.TAG_GIT_WORKFLOW_RUN_ID && format(' (tag-git run #{0})', env.TAG_GIT_WORKFLOW_RUN_ID) || '' }}"
-          text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
+          text: >-
+            For details, see [this run](https://github.com/${{
+            github.repository }}/actions/runs/${{ github.run_id }}).${{
+            inputs.pr_comment_url && format(
+            ' Requested in [this PR comment]({0}).',
+            inputs.pr_comment_url) || '' }}
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
       - name: Re-publish bundle-artifacts so the next job can easily use it
         uses: actions/upload-artifact@v7
