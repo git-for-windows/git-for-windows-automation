@@ -336,6 +336,7 @@ jobs:
         if: steps.restore-cached-git-pkg.outputs.cache-hit != 'true'
         env:
           GPGKEY: "${{secrets.GPGKEY}}"
+          WITH_MINGW64_GCM_WRAPPER: "1"
         run: |
           set -x
           BUILD_SRC=$(test x86_64 != "$ARCHITECTURE" || echo "--build-src-pkg")
