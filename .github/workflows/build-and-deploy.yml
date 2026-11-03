@@ -17,7 +17,7 @@ on:
         description: 'The ref containing the package definition'
         required: true
       architecture:
-        description: 'The architecture to build for (only for MSYS packages, ucrt64 builds, and all arm64 builds)'
+        description: 'i686, x86_64/ucrt64, mingw64, or aarch64 (omit only for GCM/git-lfs/wintoast)'
         required: false
       actor:
         description: The GitHub user on whose behalf this workflow is run
@@ -63,6 +63,28 @@ jobs:
           text: "For details, see [this run](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}})."
           details-url: "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id}}"
 
+      - name: Validate build inputs
+        shell: bash
+        run: |
+          if test MSYS2-packages != "$REPO" &&
+            test git-extra != "$PACKAGE_TO_BUILD" &&
+            test git-for-windows-keyring != "$PACKAGE_TO_BUILD" &&
+            test "z${PACKAGE_TO_BUILD#mingw-w64-}" = "z$PACKAGE_TO_BUILD"
+          then
+            PACKAGE_TO_BUILD="mingw-w64-$PACKAGE_TO_BUILD" &&
+            echo "PACKAGE_TO_BUILD=$PACKAGE_TO_BUILD" >>"$GITHUB_ENV" ||
+            exit 1
+          fi &&
+
+          case "$ARCHITECTURE,$PACKAGE_TO_BUILD" in
+          ,mingw-w64-git-credential-manager|,mingw-w64-git-lfs|,mingw-w64-wintoast) ;;
+          i686,*|x86_64,*|ucrt64,*|mingw64,*|aarch64,*) ;;
+          *)
+            echo "::error::Specify i686, x86_64/ucrt64, mingw64, or aarch64; only GCM, git-lfs and wintoast may omit architecture." >&2
+            exit 1
+            ;;
+          esac
+
       - name: Identify actor
         id: actor
         uses: actions/github-script@v9
@@ -88,14 +110,7 @@ jobs:
           mkdir -p "$HOME" &&
           git config --global user.name "$USER_NAME" &&
           git config --global user.email "$USER_EMAIL" &&
-          echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >>$GITHUB_ENV &&
-          if test MSYS2-packages != "$REPO" &&
-            test git-extra != "$PACKAGE_TO_BUILD" &&
-            test git-for-windows-keyring != "$PACKAGE_TO_BUILD" &&
-            test "z${PACKAGE_TO_BUILD#mingw-w64-}" = "z$PACKAGE_TO_BUILD"
-          then
-            echo "PACKAGE_TO_BUILD=mingw-w64-$PACKAGE_TO_BUILD" >>$GITHUB_ENV
-          fi
+          echo "PACKAGER=$USER_NAME <$USER_EMAIL>" >>$GITHUB_ENV
 
       - name: Download Git for Windows SDK
         uses: git-for-windows/setup-git-for-windows-sdk@v2
@@ -219,17 +234,17 @@ jobs:
               GIT_EXE="/mingw32/bin/git.exe"
               BUILD_SRC=
               ;;
-            ucrt64)
+            x86_64|ucrt64|'')
               GIT_EXE="/ucrt64/bin/git.exe"
-              BUILD_SRC=
+              BUILD_SRC="YesPlease"
               ;;
             mingw64)
               GIT_EXE="/mingw64/bin/git.exe"
               BUILD_SRC=
               ;;
             *)
-              GIT_EXE="/ucrt64/bin/git.exe"
-              BUILD_SRC="YesPlease"
+              echo "::error::Unsupported architecture: $ARCHITECTURE" >&2
+              exit 1
               ;;
           esac &&
 
@@ -251,9 +266,9 @@ jobs:
                     ,mingw-w64-wintoast) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're (cross-)compiling via Visual Studio
                     ,mingw-w64-git-credential-manager) echo "mingw64 ucrt64 clangarm64";; # We're downloading the pre-built artifacts for all platforms
                     ,mingw-w64-git-lfs) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're downloading the pre-built artifacts from Git LFS' official release page
-                    ,*) echo "mingw32 mingw64 ucrt64";;
+                    *) echo "::error::Unsupported architecture: $ARCHITECTURE" >&2; exit 1;;
                     esac
-          )
+          ) &&
 
           cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
           case "$PACKAGE_TO_BUILD" in mingw-w64-git) DASH_S=;; *) DASH_S=-s;; esac &&
@@ -262,7 +277,7 @@ jobs:
 
           if test -n "$BUILD_SRC"
           then
-            MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=ucrt64 $MAKEPKG --allsource &&
+            MAKEFLAGS=-j6 SRCEXT='.src.tar.gz' MINGW_ARCH=${MINGW_ARCHS_TO_BUILD%% *} $MAKEPKG --allsource &&
             cp *.src.tar* "$dir/"
           fi &&
 
