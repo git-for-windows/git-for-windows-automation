@@ -83,6 +83,14 @@ jobs:
             echo "::error::Specify i686, x86_64/ucrt64, mingw64, or aarch64; only GCM, git-lfs and wintoast may omit architecture." >&2
             exit 1
             ;;
+          esac &&
+
+          case "$PACKAGE_TO_BUILD,$ARCHITECTURE" in
+          openssl,i686|mingw-w64-openssl,i686) ;;
+          openssl,*|mingw-w64-openssl,*)
+            echo "::error::Downstream OpenSSL builds are restricted to i686." >&2
+            exit 1
+            ;;
           esac
 
       - name: Identify actor
@@ -128,6 +136,23 @@ jobs:
           git -C /usr/src/$REPO remote add origin "https://github.com/$OWNER/$REPO" &&
           git -C /usr/src/$REPO fetch --depth 1 origin $REF &&
           git -C /usr/src/$REPO reset --hard FETCH_HEAD
+
+      - name: Check downstream OpenSSL version
+        if: env.PACKAGE_TO_BUILD == 'openssl' || env.PACKAGE_TO_BUILD == 'mingw-w64-openssl'
+        shell: bash
+        env:
+          CARCH: ${{ env.ARCHITECTURE == 'i686' && 'i686' || env.ARCHITECTURE == 'aarch64' && 'aarch64' || 'x86_64' }}
+          MINGW_PACKAGE_PREFIX: mingw-w64-i686
+        run: |
+          cd "/usr/src/$REPO/$PACKAGE_TO_BUILD" &&
+          . ./PKGBUILD &&
+          case "$pkgver" in
+          3.5.*) ;;
+          *)
+            echo "::error::Only OpenSSL 3.5.* is maintained downstream; update newer release trains in upstream MSYS2." >&2
+            exit 1
+            ;;
+          esac
 
       - name: check if the package was already deployed
         if: env.BUILD_ONLY != 'true'
@@ -233,6 +258,8 @@ jobs:
             i686)
               GIT_EXE="/mingw32/bin/git.exe"
               BUILD_SRC=
+              test openssl != "${PACKAGE_TO_BUILD#mingw-w64-}" ||
+              BUILD_SRC="YesPlease"
               ;;
             x86_64|ucrt64|'')
               GIT_EXE="/ucrt64/bin/git.exe"
