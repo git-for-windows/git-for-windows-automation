@@ -66,6 +66,7 @@ jobs:
 
       - uses: actions/create-github-app-token@v3
         id: pacman-repo-token
+        if: env.PACMANDRYRUN != 'true'
         with:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
@@ -73,7 +74,7 @@ jobs:
           repositories: pacman-repo
 
       - name: Remove Pacman packages
-        if: env.PACMANDRYRUN == 'true'
+        if: env.PACMANDRYRUN == 'true' || steps.pacman-repo-token.outputs.token != ''
         shell: bash
         env:
           GPGKEY: ${{secrets.GPGKEY}}
