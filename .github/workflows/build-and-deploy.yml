@@ -276,6 +276,17 @@ jobs:
               ;;
           esac &&
 
+          # Rust became opt-out (NO_RUST) in Git's Makefile as of v2.55.0-rc0
+          # (git.git commit 32d5b905909e, "Enable Rust by default"), and the
+          # Git for Windows SDK does not yet ship a default Rust toolchain that
+          # `make` can drive. Match upstream's own Windows CI (see
+          # `ci/lib.sh`'s `windows-*) export NO_RUST=UnfortunatelyYes`) and opt
+          # out here until cargo is wired into the SDK. The variable is
+          # consumed directly by the Makefile's `ifdef NO_RUST`, so exporting
+          # it in the workflow environment suffices; no `config.mak` edit is
+          # needed.
+          { test mingw-w64-git != "$PACKAGE_TO_BUILD" || export NO_RUST=UnfortunatelyYes; } &&
+
           {
             test ! -f /usr/bin/git.exe || rm /usr/bin/git.exe
             printf '#!/bin/sh\n\nexport GIT_EXEC_PATH=%s\nPATH=%s:$GIT_EXEC_PATH:$PATH\nexec %s "$@"\n' \
