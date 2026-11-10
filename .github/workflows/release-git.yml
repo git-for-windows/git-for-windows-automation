@@ -267,6 +267,11 @@ jobs:
   nuget-packages:
     needs: ['setup']
     runs-on: windows-latest
+    environment: nuget
+    permissions:
+      id-token: write  # enable GitHub OIDC token issuance for this job
+      contents: read
+      actions: read
     steps:
       - name: NuGet packages
         uses: git-for-windows/git-for-windows-automation/.github/actions/nuget-packages@release
@@ -280,4 +285,4 @@ jobs:
           artifacts-repository: ${{ github.repository }}
           artifacts-token: ${{ secrets.GITHUB_TOKEN }}
           git_artifacts_x86_64_workflow_run_id: ${{ env.X86_64_WORKFLOW_RUN_ID }}
-          nuget-api-key: ${{ secrets.NUGET_API_KEY }}
+          nuget-user: ${{ secrets.NUGET_USER }}
