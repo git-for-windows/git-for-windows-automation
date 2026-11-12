@@ -177,11 +177,7 @@ jobs:
         if: env.ARCHITECTURE == 'i686'
         shell: powershell
         run: |
-          if (Test-Path D:\git-sdk-32-full -PathType Container) {
-            cd D:\git-sdk-32-full
-          } else {
-            cd C:\git-sdk-32-full
-          }
+          cd "${{ steps.setup-sdk.outputs.result }}"
           if (!$?) { exit(1); }
 
           $env:MSYSTEM = "MINGW32"
