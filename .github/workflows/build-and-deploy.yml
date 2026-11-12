@@ -87,9 +87,10 @@ jobs:
           esac &&
 
           case "$PACKAGE_TO_BUILD,$ARCHITECTURE" in
-          openssl,i686|mingw-w64-openssl,i686) ;;
-          openssl,*|mingw-w64-openssl,*)
-            echo "::error::Downstream OpenSSL builds are restricted to i686." >&2
+          openssl,i686|mingw-w64-openssl,i686|\
+          openssh,i686|libfido2,i686|heimdal,i686) ;;
+          openssl,*|mingw-w64-openssl,*|openssh,*|libfido2,*|heimdal,*)
+            echo "::error::Downstream builds are restricted to i686." >&2
             exit 1
             ;;
           esac
