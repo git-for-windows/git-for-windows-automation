@@ -107,6 +107,10 @@ The release flow has cascading triggers: `/git-artifacts` → `tag-git.yml` → 
 | `prepare-embargoed-branches.yml` | Prepare embargoed security fix branches |
 | `rebase-shears.yml` | Automated merging-rebase of `shears/*` branches onto upstream; runs on a schedule and via `workflow_dispatch` |
 
+When removing packages from the Pacman repository, preserve each package's
+`.versions.json` file; it is the historical version record, not a stale
+artifact.
+
 ## Directory Structure
 
 ```
