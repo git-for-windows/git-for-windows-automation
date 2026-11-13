@@ -88,8 +88,9 @@ jobs:
 
           case "$PACKAGE_TO_BUILD,$ARCHITECTURE" in
           openssl,i686|mingw-w64-openssl,i686|\
-          openssh,i686|libfido2,i686|heimdal,i686) ;;
-          openssl,*|mingw-w64-openssl,*|openssh,*|libfido2,*|heimdal,*)
+          openssh,i686|libfido2,i686|heimdal,i686|libcbor,i686) ;;
+          openssl,*|mingw-w64-openssl,*|\
+          openssh,*|libfido2,*|heimdal,*|libcbor,*)
             echo "::error::Downstream builds are restricted to i686." >&2
             exit 1
             ;;
