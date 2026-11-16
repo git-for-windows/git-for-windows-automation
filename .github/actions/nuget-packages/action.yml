@@ -30,8 +30,8 @@ inputs:
   git_artifacts_x86_64_workflow_run_id:
     description: 'ID of the git-artifacts (x86_64) workflow run'
     required: true
-  nuget-api-key:
-    description: 'The API key needed to publish NuGet packages'
+  nuget-user:
+    description: 'The account name to publish NuGet packages'
     required: true
 runs:
   using: "composite"
@@ -67,6 +67,10 @@ runs:
             'nuget-x86_64'
           )
     - uses: nuget/setup-nuget@v4
+    - uses: NuGet/login@v1
+      id: login
+      with:
+        user: ${{ secrets.NUGET_USER }}
     - name: Upload NuGet packages
       shell: bash
       run: |
@@ -76,7 +80,7 @@ runs:
             -NonInteractive \
             -Verbosity detailed \
             -Source https://api.nuget.org/v3/index.json \
-            -ApiKey '${{ inputs.nuget-api-key }}' \
+            -ApiKey '${{ steps.login.outputs.NUGET_API_KEY }}' \
             -Timeout 3000 \
             "$nupkg" || exit 1
         done
