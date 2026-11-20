@@ -284,7 +284,11 @@ jobs:
           # consumed directly by the Makefile's `ifdef NO_RUST`, so exporting
           # it in the workflow environment suffices; no `config.mak` edit is
           # needed.
-          { test mingw-w64-git != "$PACKAGE_TO_BUILD" || export NO_RUST=UnfortunatelyYes; } &&
+          if test mingw-w64-git = "$PACKAGE_TO_BUILD"
+          then
+            export NO_RUST=UnfortunatelyYes
+            export _DEFAULT_EDITOR=vim
+          fi &&
 
           {
             test ! -f /usr/bin/git.exe || rm /usr/bin/git.exe
