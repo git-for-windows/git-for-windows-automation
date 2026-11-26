@@ -277,6 +277,10 @@ jobs:
 
           if test mingw-w64-git = "$PACKAGE_TO_BUILD"
           then
+            # Keep the MSVCRT builds compatible with Windows 8.1.
+            case "$ARCHITECTURE" in
+            i686|mingw64) export NO_RUST=YesPlease ;;
+            esac &&
             export _DEFAULT_EDITOR=vim
           fi &&
 
