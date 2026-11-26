@@ -674,6 +674,27 @@ jobs:
           app-id: ${{ secrets.GH_APP_ID }}
           private-key: ${{ secrets.GH_APP_PRIVATE_KEY }}
           append-text: 'Built ${{ matrix.artifact.name }}'
+      - name: Prepare a clean install for UI tests
+        id: ui-tests
+        if: matrix.artifact.name == 'installer'
+        shell: pwsh
+        env:
+          BUILD_EXTRA: ${{ steps.build-extra.outputs.result }}
+        run: |
+          # Older build-extra revisions still use the non-UI checklist.
+          $checklist = "$env:BUILD_EXTRA/installer/run-checklist.sh"
+          if (-not (Select-String -Path $checklist -SimpleMatch REQUIRE_UI_TESTS -Quiet)) {
+            exit 0
+          }
+          $uninstaller = "$env:ProgramFiles\Git\unins000.exe"
+          if (Test-Path $uninstaller) {
+            $process = Start-Process -PassThru -Wait -FilePath $uninstaller -ArgumentList '/VERYSILENT /SUPPRESSMSGBOXES'
+            if ($process.ExitCode -ne 0) { exit $process.ExitCode }
+          }
+          # Start menu shortcuts launch with the signed-in user's profile.
+          $profile = [Environment]::GetFolderPath('UserProfile')
+          if (-not $profile) { throw 'Could not find the Windows user profile' }
+          "profile=$profile" >> $env:GITHUB_OUTPUT
       - name: Run the installer
         if: matrix.artifact.name == 'installer'
         shell: pwsh
@@ -693,9 +714,20 @@ jobs:
         with:
           name: installer.log
           path: installer.log
+      - name: Prepare installer UI tests
+        if: steps.ui-tests.outputs.profile != ''
+        uses: git-for-windows/build-extra/installer/ui-tests@fdce41ecd3af6a48cb4dc9e972282b640d47fa7b
+        env:
+          HOME: ${{ steps.ui-tests.outputs.profile }}
+          USERPROFILE: ${{ steps.ui-tests.outputs.profile }}
       - name: Validate installer
         if: matrix.artifact.name == 'installer'
+        timeout-minutes: 20
         shell: bash
+        env:
+          HOME: ${{ steps.ui-tests.outputs.profile || env.HOME }}
+          USERPROFILE: ${{ steps.ui-tests.outputs.profile || env.USERPROFILE }}
+          REQUIRE_UI_TESTS: ${{ steps.ui-tests.outputs.profile != '' && 'true' || '' }}
         run: |
           set -x &&
           grep 'Installation process succeeded' installer.log &&
@@ -706,8 +738,14 @@ jobs:
           grep "$(sed -e 's|^v||' -e 's|-|.|g' <bundle-artifacts/next_version)" version &&
           checklist=${{ toJSON(steps.build-extra.outputs.result) }}/installer/run-checklist.sh &&
           # cannot test SSH keys in read-only mode, skip test for now
-          sed -i 's|git@ssh.dev.azure.com:v3/git-for-windows/git/git|https://github.com/git/git|' $checklist &&
-          sh -x $checklist
+          sed -i 's|git@ssh.dev.azure.com:v3/git-for-windows/git/git|https://github.com/git/git|' "$checklist" &&
+          sh -x "$checklist"
+      - name: Upload installer UI test artifacts
+        if: always() && steps.ui-tests.outputs.profile != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: ui-tests-${{ env.ARCHITECTURE }}
+          path: ${{ steps.build-extra.outputs.result }}/installer/ui-tests/
       - name: Validate Git code signatures
         if: >-
           matrix.artifact.name == 'installer' &&
