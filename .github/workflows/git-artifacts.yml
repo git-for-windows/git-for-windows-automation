@@ -330,6 +330,10 @@ jobs:
           WITH_MINGW64_GCM_WRAPPER: "1"
         run: |
           set -x
+          # Keep the MSVCRT builds compatible with Windows 8.1.
+          case "$ARCHITECTURE" in
+          i686|mingw64) export NO_RUST=YesPlease ;;
+          esac
           BUILD_SRC=$(test x86_64 != "$ARCHITECTURE" || echo "--build-src-pkg")
           # Make sure that there is a `/usr/bin/git` that can be used by `makepkg-mingw`
           if test ! -x /usr/bin/git
