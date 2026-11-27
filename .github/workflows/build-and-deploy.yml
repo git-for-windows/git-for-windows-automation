@@ -17,7 +17,9 @@ on:
         description: 'The ref containing the package definition'
         required: true
       architecture:
-        description: 'i686, x86_64/ucrt64, mingw64, or aarch64 (omit only for GCM/git-lfs/wintoast)'
+        description: >-
+          i686, x86_64/ucrt64, or aarch64
+          (omit only for GCM/git-lfs/wintoast)
         required: false
       actor:
         description: The GitHub user on whose behalf this workflow is run
@@ -79,9 +81,10 @@ jobs:
 
           case "$ARCHITECTURE,$PACKAGE_TO_BUILD" in
           ,mingw-w64-git-credential-manager|,mingw-w64-git-lfs|,mingw-w64-wintoast) ;;
-          i686,*|x86_64,*|ucrt64,*|mingw64,*|aarch64,*) ;;
+          i686,*|x86_64,*|ucrt64,*|aarch64,*) ;;
           *)
-            echo "::error::Specify i686, x86_64/ucrt64, mingw64, or aarch64; only GCM, git-lfs and wintoast may omit architecture." >&2
+            echo "::error::Specify i686, x86_64/ucrt64, or aarch64;" \
+              "only GCM, git-lfs and wintoast may omit architecture." >&2
             exit 1
             ;;
           esac &&
@@ -265,10 +268,6 @@ jobs:
               GIT_EXE="/ucrt64/bin/git.exe"
               BUILD_SRC="YesPlease"
               ;;
-            mingw64)
-              GIT_EXE="/mingw64/bin/git.exe"
-              BUILD_SRC=
-              ;;
             *)
               echo "::error::Unsupported architecture: $ARCHITECTURE" >&2
               exit 1
@@ -277,9 +276,9 @@ jobs:
 
           if test mingw-w64-git = "$PACKAGE_TO_BUILD"
           then
-            # Keep the MSVCRT builds compatible with Windows 8.1.
+            # Keep the 32-bit builds compatible with Windows 8.1.
             case "$ARCHITECTURE" in
-            i686|mingw64) export NO_RUST=YesPlease ;;
+            i686) export NO_RUST=YesPlease ;;
             esac &&
             export _DEFAULT_EDITOR=vim
           fi &&
@@ -298,10 +297,14 @@ jobs:
                     x86_64,*) echo "ucrt64";;
                     i686,*) echo "mingw32";;
                     ucrt64,*) echo "ucrt64";;
-                    mingw64,*) echo "mingw64";;
-                    ,mingw-w64-wintoast) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're (cross-)compiling via Visual Studio
-                    ,mingw-w64-git-credential-manager) echo "mingw64 ucrt64 clangarm64";; # We're downloading the pre-built artifacts for all platforms
-                    ,mingw-w64-git-lfs) echo "mingw32 mingw64 ucrt64 clangarm64";; # We're downloading the pre-built artifacts from Git LFS' official release page
+                    # Cross-compile via Visual Studio.
+                    ,mingw-w64-wintoast)
+                      echo "mingw32 ucrt64 clangarm64";;
+                    # Download the pre-built artifacts.
+                    ,mingw-w64-git-credential-manager)
+                      echo "ucrt64 clangarm64";;
+                    ,mingw-w64-git-lfs)
+                      echo "mingw32 ucrt64 clangarm64";;
                     *) echo "::error::Unsupported architecture: $ARCHITECTURE" >&2; exit 1;;
                     esac
           ) &&

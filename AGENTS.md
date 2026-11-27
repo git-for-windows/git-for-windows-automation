@@ -70,7 +70,7 @@ With `issue_number`, it also comments on the original Git for Windows
 issue when the upstream version is current or the branch is ready.
 
 `build-and-deploy.yml` requires an explicit `architecture` for ordinary
-packages: `i686`, `x86_64`/`ucrt64`, `mingw64`, or `aarch64`. GCM and
+packages: `i686`, `x86_64`/`ucrt64`, or `aarch64`. GCM and
 git-lfs may omit it for combined repackaging runs. Wintoast retains
 its existing combined Visual Studio cross-compilation run.
 
