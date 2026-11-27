@@ -16,7 +16,6 @@ on:
         - i686
         - aarch64
         - ucrt64
-        - mingw64
       tag_git_workflow_run_id:
         description: 'Workflow run ID of the tag-git pipeline'
         required: false
@@ -183,12 +182,6 @@ jobs:
               MINGW_PACKAGE_PREFIX=mingw-w64-ucrt-x86_64
               SDK_REPO_ARCH=64
               ;;
-            mingw64)
-              MSYSTEM=MINGW64
-              MINGW_PREFIX=/mingw64
-              MINGW_PACKAGE_PREFIX=mingw-w64-x86_64
-              SDK_REPO_ARCH=64
-              ;;
             *)
               echo "Unhandled architecture: $ARCHITECTURE"
               exit 1
@@ -330,9 +323,9 @@ jobs:
           WITH_MINGW64_GCM_WRAPPER: "1"
         run: |
           set -x
-          # Keep the MSVCRT builds compatible with Windows 8.1.
+          # Keep the 32-bit builds compatible with Windows 8.1.
           case "$ARCHITECTURE" in
-          i686|mingw64) export NO_RUST=YesPlease ;;
+          i686) export NO_RUST=YesPlease ;;
           esac
           BUILD_SRC=$(test x86_64 != "$ARCHITECTURE" || echo "--build-src-pkg")
           # Make sure that there is a `/usr/bin/git` that can be used by `makepkg-mingw`
