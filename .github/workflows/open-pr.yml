@@ -67,6 +67,12 @@ jobs:
           echo "REPO=$repo" >>$GITHUB_ENV &&
           echo "repo=$repo" >>$GITHUB_OUTPUT
       - uses: actions/checkout@v7
+      - name: Check downstream package maintenance
+        if: ${{ !inputs.upstream && inputs.package != 'innosetup' }}
+        shell: bash
+        run: |
+          sh ./update-scripts/ensure-package-is-maintained.sh \
+            "$PACKAGE_TO_UPGRADE"
         # Since we want to operate on _another_ repository, we sadly cannot use:
         #
         # permissions:

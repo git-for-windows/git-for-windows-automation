@@ -77,6 +77,9 @@ jobs:
             exit 1
           fi &&
 
+          sh ./update-scripts/ensure-package-is-maintained.sh \
+            "$PACKAGE_TO_BUILD" &&
+
           case "$ARCHITECTURE,$PACKAGE_TO_BUILD" in
           ,mingw-w64-git-credential-manager|,mingw-w64-git-lfs|,mingw-w64-wintoast) ;;
           i686,*|x86_64,*|ucrt64,*|mingw64,*|aarch64,*) ;;
@@ -235,7 +238,7 @@ jobs:
           GPGKEY: ${{secrets.GPGKEY}}
 
       - name: Build ${{env.PACKAGE_TO_BUILD}}
-        timeout-minutes: ${{ env.PACKAGE_TO_BUILD== 'mingw-w64-llvm' && 360 || 150 }}
+        timeout-minutes: 150
         env:
           GPGKEY: ${{secrets.GPGKEY}}
           MAKEPKG: ${{ env.REPO != 'MSYS2-packages' && env.PACKAGE_TO_BUILD != 'git-for-windows-keyring' && 'makepkg-mingw' || 'makepkg' }}
